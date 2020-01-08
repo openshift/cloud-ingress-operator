@@ -1,0 +1,7 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: ApiScheme
+metadata:
+  name: example-apischeme
+spec:
+  # Add fields here
+  size: 3

@@ -1,0 +1,11 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cloud-ingress-operator
+subjects:
+- kind: ServiceAccount
+  name: cloud-ingress-operator
+roleRef:
+  kind: Role
+  name: cloud-ingress-operator
+  apiGroup: rbac.authorization.k8s.io
