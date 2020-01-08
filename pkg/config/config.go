@@ -4,6 +4,11 @@ const (
 	// AdminAPIName is the name of the API endpoint for non-customer use (eg Hive)
 	AdminAPIName string = "rh-api"
 
+
+	// CloudAdminAPILoadBalancerName is the cloud provider identifier for the load
+// balancer for admin API endpoint
+	CloudAdminAPILoadBalancerName string = "rh-api"
+
 	// CustomerAPIName is the name of the API endpoint for customer use
 	CustomerAPIName string = "api"
 
