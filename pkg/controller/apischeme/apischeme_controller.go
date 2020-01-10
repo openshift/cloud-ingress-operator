@@ -2,8 +2,6 @@ package apischeme
 
 import (
 	"context"
-	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
@@ -18,8 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/aws/aws-sdk-go/service/elb"
 )
 
 var log = logf.Log.WithName("controller_apischeme")
@@ -96,7 +92,10 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	awsClient := awsclient.NewClient("access id", "secret", "token", "region")
+	awsClient, err := awsclient.NewClient("access id", "secret", "token", "region")
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	switch instance.Status.State {
 	case cloudingressv1alpha1.Pending:
@@ -107,7 +106,27 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, nil
 	case cloudingressv1alpha1.CreatingLoadBalancer:
 		// if the ELB is created already, go to next step
-		foundELB, error := detectELB(instance, awsClient)
+		if found, err := awsClient.DoesELBExist(config.CloudAdminAPILoadBalancerName); err != nil {
+			return reconcile.Result{}, err
+		} else if !found {
+			//create
+			// TODO: Detect the az and subnets
+
+			// subnet from config.openshift.io network/cluster object, need to get subnet ID
+			// az from machine record for master objects
+			// Lisa to ask apiserver folks for an in-cluster representation of subnet id and az
+			dnsName, err := awsClient.CreateClassicELB(config.CloudAdminAPILoadBalancerName, []string{}, []string{}, config.AdminAPIListenerPort)
+			if err != nil {
+				reqLogger.Error(err, "Error while creating Load Balancer", config.CloudAdminAPILoadBalancerName)
+				return reconcile.Result{}, err
+			}
+			reqLogger.Info("DNS Name for ELB from Amazon is %s", dnsName)
+			// Rogerio TODO: update dns name, state and status
+
+			return reconcile.Result{}, nil
+		} else {
+			//found
+		}
 
 	case cloudingressv1alpha1.UpdatingCIDRAllowances:
 		// if the CIDR list is synced, go to next step
@@ -119,31 +138,8 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		// idk!
 
 	}
-	// Ensure AWS ELB exists
-	//elbs,err := awsclient.DescribeLoadBalancers()
 
 	return reconcile.Result{}, nil
-}
-
-// Detect the ELB, if it exists. If it exists, return the name of the ELB,
-// otherwise an error (not found), or a proper AWS API error
-func detectELB(instance *cloudingressv1alpha1.ApiScheme, client awsclient.Client) (string, error) {
-	i := &elb.DescribeLoadBalancersInput{
-		LoadBalancerNames: []*string{aws.String(config.CloudAdminAPILoadBalancerName)},
-	}
-	res, err := client.DescribeLoadBalancers(i)
-	if err != nil {
-		return "", err
-	}
-	switch len(res.LoadBalancerDescriptions) {
-	case 0:
-		return "", fmt.Errorf("%s not found", config.CloudAdminAPILoadBalancerName)
-	case 1:
-		return *res.LoadBalancerDescriptions[0].LoadBalancerName, nil
-	default:
-		return "", fmt.Errorf("Found more than 1 resulting LoadBalancer named %s (found %d)", config.CloudAdminAPILoadBalancerName, len(res.LoadBalancerDescriptions))
-	}
-
 }
 
 func updateCondition(instance *cloudingressv1alpha1.ApiScheme, msg, reason string, nextState cloudingressv1alpha1.ManagementState) error {

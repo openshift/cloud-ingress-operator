@@ -48,7 +48,8 @@ type ApiSchemeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	HistoricConditions []HistoricCondition `json:",history"`
+	HistoricConditions       []HistoricCondition `json:",history"`
+	CloudLoadBalancerDNSName string              `json:",cloudLoadBalancerDNSName,omitempty"`
 
 	// State is the state machine
 	State ManagementState `json:",state"`

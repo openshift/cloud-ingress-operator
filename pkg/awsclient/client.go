@@ -57,6 +57,8 @@ type Client interface {
 	DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
 	// for removing a formerly approved CIDR block from the rh-api. security group
 	RevokeSecurityGroupIngress(*ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error)
+	// DescribeSubnets to find subnet for master nodes for incoming elb
+	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
 }
 
 type awsClient struct {
@@ -66,7 +68,7 @@ type awsClient struct {
 	elbv2Client   elbv2iface.ELBV2API
 }
 
-func NewClient(accessID, accessSecret, token, region string) (Client, error) {
+func NewClient(accessID, accessSecret, token, region string) (*awsClient, error) {
 	awsConfig := aws.Config{Region: aws.String(region)}
 	awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
 	s, err := session.NewSession(&awsConfig)
@@ -131,4 +133,7 @@ func (c *awsClient) DescribeSecurityGroups(i *ec2.DescribeSecurityGroupsInput) (
 }
 func (c *awsClient) RevokeSecurityGroupIngress(i *ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error) {
 	return c.ec2Client.RevokeSecurityGroupIngress(i)
+}
+func (c *awsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	return c.ec2Client.DescribeSubnets(i)
 }
