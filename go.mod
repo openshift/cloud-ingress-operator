@@ -3,10 +3,15 @@ module github.com/openshift/cloud-ingress-operator
 go 1.13
 
 require (
+	9fans.net/go v0.0.2 // indirect
 	github.com/aws/aws-sdk-go v1.16.26
 	github.com/go-openapi/spec v0.19.0
+	github.com/nsf/gocode v0.0.0-20190302080247-5bee97b48836 // indirect
 	github.com/operator-framework/operator-sdk v0.12.0
+	github.com/rogpeppe/godef v1.1.1 // indirect
 	github.com/spf13/pflag v1.0.3
+	github.com/zmb3/gogetdoc v0.0.0-20190228002656-b37376c5da6a // indirect
+	golang.org/x/tools v0.0.0-20200114191411-189207f339b7 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v11.0.0+incompatible

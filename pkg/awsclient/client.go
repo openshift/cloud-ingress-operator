@@ -24,6 +24,8 @@ import (
 
 // Client wraps for AWS SDK (for easier testing)
 type Client interface {
+	// Apply a SecurityGroup to a Load Balancer
+	ApplySecurityGroupsToLoadBalancer(*elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error)
 	// ELB - to make the api endpoint, and toggle the customer ones
 	CreateLoadBalancer(*elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error)
 	// for making api. public, and creation of rh-api.
@@ -81,6 +83,10 @@ func NewClient(accessID, accessSecret, token, region string) (*awsClient, error)
 		elbv2Client:   elbv2.New(s),
 		route53Client: route53.New(s),
 	}, nil
+}
+
+func (c *awsClient) ApplySecurityGroupsToLoadBalancer(i *elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error) {
+	return c.elbClient.ApplySecurityGroupsToLoadBalancer(i)
 }
 
 func (c *awsClient) CreateLoadBalancer(i *elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error) {
