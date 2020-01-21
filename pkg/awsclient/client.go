@@ -26,16 +26,22 @@ import (
 type Client interface {
 	// Apply a SecurityGroup to a Load Balancer
 	ApplySecurityGroupsToLoadBalancer(*elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error)
+	// Health check for the load balancer
+	ConfigureHealthCheck(*elb.ConfigureHealthCheckInput) (*elb.ConfigureHealthCheckOutput, error)
 	// ELB - to make the api endpoint, and toggle the customer ones
 	CreateLoadBalancer(*elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error)
 	// for making api. public, and creation of rh-api.
 	CreateLoadBalancerListeners(*elb.CreateLoadBalancerListenersInput) (*elb.CreateLoadBalancerListenersOutput, error)
+	// remove instances from an ELB (when the Node goes away)
+	DeregisterInstancesFromLoadBalancer(*elb.DeregisterInstancesFromLoadBalancerInput) (*elb.DeregisterInstancesFromLoadBalancerOutput, error)
 	// list all (or 1) load balancer to see if we need to create rh-api, and to identify api. AWS identifier
 	DescribeLoadBalancers(*elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error)
 	// to check if it's been annotated with a k8s ownership tag
 	DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error)
 	// for making the api. endpoint private (just delete the listeners so it doesn't need to be recreated)
 	DeleteLoadBalancerListeners(*elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error)
+	// add instances to an ELB (when the Node comes up)
+	RegisterInstancesWithLoadBalancer(*elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error)
 
 	// ELBv2 - to figure out which to assign back to the nlb
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
@@ -89,6 +95,10 @@ func (c *awsClient) ApplySecurityGroupsToLoadBalancer(i *elb.ApplySecurityGroups
 	return c.elbClient.ApplySecurityGroupsToLoadBalancer(i)
 }
 
+func (c *awsClient) ConfigureHealthCheck(i *elb.ConfigureHealthCheckInput) (*elb.ConfigureHealthCheckOutput, error) {
+	return c.elbClient.ConfigureHealthCheck(i)
+}
+
 func (c *awsClient) CreateLoadBalancer(i *elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error) {
 	return c.elbClient.CreateLoadBalancer(i)
 }
@@ -97,6 +107,13 @@ func (c *awsClient) CreateLoadBalancerListeners(i *elb.CreateLoadBalancerListene
 	return c.elbClient.CreateLoadBalancerListeners(i)
 }
 
+func (c *awsClient) DeleteLoadBalancerListeners(i *elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error) {
+	return c.elbClient.DeleteLoadBalancerListeners(i)
+}
+
+func (c *awsClient) DeregisterInstancesWithLoadBalancer(i *elb.DeregisterInstancesFromLoadBalancerInput) (*elb.DeregisterInstancesFromLoadBalancerOutput, error) {
+	return c.elbClient.DeregisterInstancesFromLoadBalancer(i)
+}
 func (c *awsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error) {
 	return c.elbClient.DescribeLoadBalancers(i)
 }
@@ -105,8 +122,8 @@ func (c *awsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOut
 	return c.elbClient.DescribeTags(i)
 }
 
-func (c *awsClient) DeleteLoadBalancerListeners(i *elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error) {
-	return c.elbClient.DeleteLoadBalancerListeners(i)
+func (c *awsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
+	return c.elbClient.RegisterInstancesWithLoadBalancer(i)
 }
 
 func (c *awsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
