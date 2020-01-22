@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
@@ -12,11 +13,12 @@ import (
 // ELB should attend, as well as the listener port.
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
-func (c *awsClient) CreateClassicELB(elbName string, availabilityZones, subnets []string, listenerPort int64) (string, error) {
+func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (string, error) {
+	fmt.Printf("  * CreateClassicELB(%s,%s,%d)\n", elbName, subnets, listenerPort)
 	i := &elb.CreateLoadBalancerInput{
-		LoadBalancerName:  aws.String(elbName),
-		Subnets:           aws.StringSlice(subnets),
-		AvailabilityZones: aws.StringSlice(availabilityZones),
+		LoadBalancerName: aws.String(elbName),
+		Subnets:          aws.StringSlice(subnets),
+		//AvailabilityZones: aws.StringSlice(availabilityZones),
 		Listeners: []*elb.Listener{
 			{
 				InstancePort:     aws.Int64(listenerPort),
@@ -30,6 +32,7 @@ func (c *awsClient) CreateClassicELB(elbName string, availabilityZones, subnets 
 	if err != nil {
 		return "", err
 	}
+	fmt.Printf("    * Adding health check (HTTP:6443/)\n")
 	err = c.addHealthCheck(elbName, "HTTP", "/", 6443)
 	if err != nil {
 		return "", err
@@ -121,18 +124,22 @@ func (c *awsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds 
 
 // DoesELBExist checks for the existence of an ELB by name. If there's an AWS
 // error it is returned.
-func (c *awsClient) DoesELBExist(elbName string) (bool, error) {
+func (c *awsClient) DoesELBExist(elbName string) (bool, string, error) {
 	i := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbName)},
 	}
 	res, err := c.DescribeLoadBalancers(i)
 	if err != nil {
-		return false, err
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case elb.ErrCodeAccessPointNotFoundException:
+				return false, "", nil
+			default:
+				return false, "", err
+			}
+		}
 	}
-	if len(res.LoadBalancerDescriptions) == 1 {
-		return true, nil
-	}
-	return false, nil
+	return true, *res.LoadBalancerDescriptions[0].DNSName, nil
 }
 
 func (c *awsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {

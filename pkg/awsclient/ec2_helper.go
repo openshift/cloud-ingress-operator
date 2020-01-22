@@ -12,7 +12,7 @@ import (
 // blocks, and only those blocks may access it.
 // cidrBlocks always goes from 6443/TCP to 6443/TCP and is IPv4 only
 // TODO: Expand to IPv6. This could be done by regular expression
-func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName string, cidrBlocks []string) error {
+func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcId string, cidrBlocks []string) error {
 	// first need to see if the SecurityGroup exists, and if it does not, create it and populate its ingressCIDR permissions
 	// If the SecurityGroup DOES exist, then make sure it only has the permissions we are receiving here.
 	securityGroup, err := c.findSecurityGroupByName(securityGroupName)
@@ -21,7 +21,7 @@ func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName string,
 	}
 	if securityGroup == nil {
 		// group does not exist, create it
-		securityGroup, err = c.createSecurityGroup(securityGroupName)
+		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcId)
 		if err != nil {
 			return err
 		}
@@ -41,13 +41,12 @@ func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName string,
 		seenExpectedRules[cidrBlock] = false
 	}
 	// For each ingress rule for the security group,
-
 Outer:
 	for _, ingressRule := range securityGroup.IpPermissions {
 		// Only care about 6443/TCP -> 6443/TCP
-		if ingressRule.FromPort != aws.Int64(6443) &&
-			ingressRule.ToPort != aws.Int64(6443) &&
-			ingressRule.IpProtocol != aws.String("tcp") {
+		if *ingressRule.FromPort != 6443 &&
+			*ingressRule.ToPort != 6443 &&
+			*ingressRule.IpProtocol != "tcp" {
 			continue
 		}
 		for _, cidrBlock := range cidrBlocks {
@@ -98,9 +97,6 @@ func (c *awsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGr
 		return nil
 	}
 	i := &ec2.AuthorizeSecurityGroupIngressInput{
-		FromPort:      aws.Int64(6443),
-		ToPort:        aws.Int64(6443),
-		IpProtocol:    aws.String("tcp"),
 		IpPermissions: ipPermissions,
 		GroupId:       securityGroup.GroupId,
 	}
@@ -126,10 +122,11 @@ func (c *awsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.Secur
 }
 
 // createSecurityGroup creates a SecurityGroup with the given name, and returns the EC2 object and/or any error
-func (c *awsClient) createSecurityGroup(securityGroupName string) (*ec2.SecurityGroup, error) {
+func (c *awsClient) createSecurityGroup(securityGroupName, vpcId string) (*ec2.SecurityGroup, error) {
 	createInput := &ec2.CreateSecurityGroupInput{
 		Description: aws.String("Admin API Security group"),
 		GroupName:   aws.String(securityGroupName),
+		VpcId:       aws.String(vpcId),
 	}
 	createResult, err := c.CreateSecurityGroup(createInput)
 	if err != nil {

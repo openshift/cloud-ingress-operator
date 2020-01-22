@@ -1,8 +1,10 @@
 package awsclient
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	//	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -24,6 +26,9 @@ import (
 
 // Client wraps for AWS SDK (for easier testing)
 type Client interface {
+	/*
+	 * ELB-related Functions
+	 */
 	// Apply a SecurityGroup to a Load Balancer
 	ApplySecurityGroupsToLoadBalancer(*elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error)
 	// Health check for the load balancer
@@ -43,17 +48,26 @@ type Client interface {
 	// add instances to an ELB (when the Node comes up)
 	RegisterInstancesWithLoadBalancer(*elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error)
 
+	/*
+	 * ELBv2-related Functions
+	 */
+
 	// ELBv2 - to figure out which to assign back to the nlb
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
+
+	/*
+	 * Route 53-related Functions
+	 */
 
 	// Route 53 - to update DNS for internal/external swap and to add rh-api
 	// for actually upserting the record
 	ChangeResourceRecordSets(*route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error)
 	// to turn baseDomain into a Route53 zone ID
-	ListHostedZones(*route53.ListHostedZonesInput) (*route53.ListHostedZonesOutput, error)
-	// does rh-api already exist? maybe a DNS lookup checking for NXDOMAIN is better/cheaper?
-	ListResourceRecordSets(*route53.ListResourceRecordSetsInput) (*route53.ListResourceRecordSetsOutput, error)
+	ListHostedZonesByName(*route53.ListHostedZonesByNameInput) (*route53.ListHostedZonesByNameOutput, error)
 
+	/*
+	 * EC2-related Functions
+	 */
 	// EC2 - to create the security group for the new admin api
 	// we can get the instance IDs from Node objects.
 	AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error)
@@ -76,9 +90,11 @@ type awsClient struct {
 	elbv2Client   elbv2iface.ELBV2API
 }
 
-func NewClient(accessID, accessSecret, token, region string) (*awsClient, error) {
-	awsConfig := aws.Config{Region: aws.String(region)}
-	awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
+func NewClient(accessID, accessSecret, region string) (*awsClient, error) {
+	// TODO: There has to be a better way to do this to avoid the token issues.
+	os.Setenv("AWS_ACCESS_KEY_ID", accessID)
+	os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
+	awsConfig := aws.Config{Region: aws.String(region), CredentialsChainVerboseErrors: aws.Bool(true)}
 	s, err := session.NewSession(&awsConfig)
 	if err != nil {
 		return nil, err
@@ -134,12 +150,8 @@ func (c *awsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSets
 	return c.route53Client.ChangeResourceRecordSets(i)
 }
 
-func (c *awsClient) ListHostedZones(i *route53.ListHostedZonesInput) (*route53.ListHostedZonesOutput, error) {
-	return c.route53Client.ListHostedZones(i)
-}
-
-func (c *awsClient) ListResourceRecordSets(i *route53.ListResourceRecordSetsInput) (*route53.ListResourceRecordSetsOutput, error) {
-	return c.route53Client.ListResourceRecordSets(i)
+func (c *awsClient) ListHostedZonesByName(i *route53.ListHostedZonesByNameInput) (*route53.ListHostedZonesByNameOutput, error) {
+	return c.route53Client.ListHostedZonesByName(i)
 }
 
 func (c *awsClient) AuthorizeSecurityGroupIngress(i *ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
