@@ -8,12 +8,19 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
+// AWSLoadBalancer a handy way to return information about an ELB
+type AWSLoadBalancer struct {
+	ELBName   string // Name of the ELB
+	DNSName   string // DNS Name
+	DNSZoneId string // Zone ID
+}
+
 // CreateClassicELB creates a classic ELB in Amazon, as in for management API endpoint.
 // inputs are the name of the ELB, the availability zone(s) and subnet(s) the
 // ELB should attend, as well as the listener port.
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
-func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (string, error) {
+func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (*AWSLoadBalancer, error) {
 	fmt.Printf("  * CreateClassicELB(%s,%s,%d)\n", elbName, subnets, listenerPort)
 	i := &elb.CreateLoadBalancerInput{
 		LoadBalancerName: aws.String(elbName),
@@ -28,16 +35,21 @@ func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 			},
 		},
 	}
-	o, err := c.CreateLoadBalancer(i)
+	_, err := c.CreateLoadBalancer(i)
 	if err != nil {
-		return "", err
+		return &AWSLoadBalancer{}, err
 	}
 	fmt.Printf("    * Adding health check (HTTP:6443/)\n")
 	err = c.addHealthCheck(elbName, "HTTP", "/", 6443)
 	if err != nil {
-		return "", err
+		return &AWSLoadBalancer{}, err
 	}
-	return *o.DNSName, nil
+	// Caller will need the DNS name and Zone ID for the ELB (for route53) so let's make a handy object to return, using the
+	_, awsELBObj, err := c.DoesELBExist(elbName)
+	if err != nil {
+		return &AWSLoadBalancer{}, err
+	}
+	return awsELBObj, nil
 }
 
 // SetLoadBalancerPrivate sets a load balancer private by removing its
@@ -124,7 +136,7 @@ func (c *awsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds 
 
 // DoesELBExist checks for the existence of an ELB by name. If there's an AWS
 // error it is returned.
-func (c *awsClient) DoesELBExist(elbName string) (bool, string, error) {
+func (c *awsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error) {
 	i := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbName)},
 	}
@@ -133,13 +145,13 @@ func (c *awsClient) DoesELBExist(elbName string) (bool, string, error) {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case elb.ErrCodeAccessPointNotFoundException:
-				return false, "", nil
+				return false, &AWSLoadBalancer{}, nil
 			default:
-				return false, "", err
+				return false, &AWSLoadBalancer{}, err
 			}
 		}
 	}
-	return true, *res.LoadBalancerDescriptions[0].DNSName, nil
+	return true, &AWSLoadBalancer{ELBName: elbName, DNSName: *res.LoadBalancerDescriptions[0].DNSName, DNSZoneId: *res.LoadBalancerDescriptions[0].CanonicalHostedZoneNameID}, nil
 }
 
 func (c *awsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {

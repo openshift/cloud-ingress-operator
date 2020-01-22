@@ -8,7 +8,7 @@ import (
 // AddManagementDNSRecord will add the admin API resource record
 // +adminAPIName+ (eg rh-api) as a CNAME alias to +elbFQDN+ in the
 // +clusterDomain+ Route 53 zone.
-func (c *awsClient) AddManagementDNSRecord(elbFQDN, clusterDomain, adminAPIName string, ttl int) error {
+func (c *awsClient) AddManagementDNSRecord(clusterDomain, adminAPIName string, awsELBObj *AWSLoadBalancer) error {
 	// Look up the clusterDomain to get ID
 	lookup := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(clusterDomain),
@@ -24,13 +24,12 @@ func (c *awsClient) AddManagementDNSRecord(elbFQDN, clusterDomain, adminAPIName 
 				{
 					Action: aws.String("UPSERT"),
 					ResourceRecordSet: &route53.ResourceRecordSet{
-						Name: aws.String(adminAPIName + "." + clusterDomain),
-						ResourceRecords: []*route53.ResourceRecord{
-							{
-								Value: aws.String(elbFQDN),
-							},
+						AliasTarget: &route53.AliasTarget{
+							DNSName:              aws.String(awsELBObj.DNSName),
+							EvaluateTargetHealth: aws.Bool(false),
+							HostedZoneId:         aws.String(awsELBObj.DNSZoneId),
 						},
-						TTL:  aws.Int64(60),
+						Name: aws.String(adminAPIName + "." + clusterDomain),
 						Type: aws.String("CNAME"),
 					},
 				},
