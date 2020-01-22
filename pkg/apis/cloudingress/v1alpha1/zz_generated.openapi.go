@@ -11,17 +11,17 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiScheme":       schema_pkg_apis_cloudingress_v1alpha1_ApiScheme(ref),
-		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeSpec":   schema_pkg_apis_cloudingress_v1alpha1_ApiSchemeSpec(ref),
-		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeStatus": schema_pkg_apis_cloudingress_v1alpha1_ApiSchemeStatus(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APIScheme":       schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec":   schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus": schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref),
 	}
 }
 
-func schema_pkg_apis_cloudingress_v1alpha1_ApiScheme(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ApiScheme is the Schema for the apischemes API",
+				Description: "APIScheme is the Schema for the APISchemes API",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -45,38 +45,38 @@ func schema_pkg_apis_cloudingress_v1alpha1_ApiScheme(ref common.ReferenceCallbac
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeSpec"),
+							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeStatus"),
+							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeSpec", "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ApiSchemeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec", "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
-func schema_pkg_apis_cloudingress_v1alpha1_ApiSchemeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ApiSchemeSpec defines the desired state of ApiScheme",
+				Description: "APISchemeSpec defines the desired state of APIScheme",
 				Type:        []string{"object"},
 			},
 		},
 	}
 }
 
-func schema_pkg_apis_cloudingress_v1alpha1_ApiSchemeStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ApiSchemeStatus defines the observed state of ApiScheme",
+				Description: "APISchemeStatus defines the observed state of APIScheme",
 				Type:        []string{"object"},
 			},
 		},
