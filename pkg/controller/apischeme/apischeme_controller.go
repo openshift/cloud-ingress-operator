@@ -7,8 +7,11 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 
+	configv1 "github.com/openshift/api"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -104,12 +107,12 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			return reconcile.Result{}, err
 		} else if !found {
 			//create
-			// TODO: Detect the az and subnets
+			// TODO: Detect the AZs for "master" nodes
 
 			// subnet from config.openshift.io network/cluster object, need to get subnet ID
 			// az from machine record for master objects
 			// Lisa to ask apiserver folks for an in-cluster representation of subnet id and az
-			dnsName, err := awsClient.CreateClassicELB(config.CloudAdminAPILoadBalancerName, []string{}, []string{}, config.AdminAPIListenerPort)
+			dnsName, err := awsClient.CreateClassicELB(config.CloudAdminAPILoadBalancerName, []string{"az1", "az2"}, config.AdminAPIListenerPort)
 			if err != nil {
 				reqLogger.Error(err, "Error while creating Load Balancer", config.CloudAdminAPILoadBalancerName)
 				return reconcile.Result{}, err
@@ -125,6 +128,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	case cloudingressv1alpha1.APISchemeCreatedLoadBalancer:
 		// if LB is in place update listeners here
+		//    awsClient.EnsureCIDRAccess
 	case cloudingressv1alpha1.APISchemeUpdatedLoadBalancerListeners:
 		// after updating listeners set up SGs allowing CIDRs
 	case cloudingressv1alpha1.APISchemeUpdatedCIDRAllowances:
@@ -133,7 +137,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		// update API endpoint
 	default:
 		// idk!
-
 	}
 
 	return reconcile.Result{}, nil
@@ -143,7 +146,6 @@ func updateCondition(instance *cloudingressv1alpha1.APIScheme, msg, reason strin
 	instance.Status.State = nextState
 	return nil
 }
-
 
 func setAPISchemeStatus(reqLogger logr.Logger, APIScheme *cloudingressv1alpha1.APIScheme, message string, ctype cloudingressv1alpha1.APISchemeConditionType, state string) {
 	APIScheme.Status.Conditions = controllerutils.SetAccountCondition(
@@ -155,4 +157,72 @@ func setAPISchemeStatus(reqLogger logr.Logger, APIScheme *cloudingressv1alpha1.A
 			controllerutils.UpdateConditionNever)
 	APIScheme.Status.State = state
 }
+*/
 
+// addAdminAPIToApiServerObject will add the +domainName+ to the
+// ApiServer/cluster object for the admin api endpoint
+// Two ways to do this:
+// 1. Re-use the existing certificate, but add a new hostname for the apiserver
+// to listen on
+// 2. Add a new TLS certificate and hostname
+// We will use option 1 and trust that the existing TLS cert has an entry for
+// +domainName+
+// Option 1 will look like this:
+//
+// apiVersion: config.openshift.io/v1
+// kind: APIServer
+// metadata:
+//   name: cluster
+// spec:
+//   clientCA:
+//     name: ""
+//   servingCerts:
+//     defaultServingCertificate:
+//       name: ""
+//     namedCertificates:
+//     - names:
+//       - api.<cluster-domain>
+//       - rh-adpi.<cluster-domain>  <-- Add this
+//       servingCertificate:
+//         name: <cluster-name-primary-cert-bundle-secret
+//
+// For completeness, option 2 looks like
+//
+// apiVersion: config.openshift.io/v1
+// kind: APIServer
+// metadata:
+//   name: cluster
+// spec:
+//   clientCA:
+//     name: ""
+//   servingCerts:
+//     defaultServingCertificate:
+//       name: ""
+//     namedCertificates:
+//     - names:
+//       - api.<cluster-domain>
+//       servingCertificate:
+//         name: <cluster-name>-primary-cert-bundle-secret
+//     - names: <-- Add this
+//       - rh-api.<cluster-domain>
+//       servingCertificate:
+//         name: rh-api-endpoint-cert-bundle-secret <-- openshift-config namespace
+func (r *ReconcileApiScheme) addAdminAPIToApiServerObject(logger *logr.Logger, domainName string) error {
+	//TODO: Validate this logic and object typing
+	api := &configv1.ApiServer{}
+	ns := types.NamespacedName{
+		Namespace: "",
+		Name:      "",
+	}
+	err := r.client.Get(context.TODO(), ns, api)
+	if err != nil {
+		return err
+	}
+	for i, name := range api.Spec.ServingCerts.NamedCertificates.Names {
+		if strings.HasPrefix(name, "api.") {
+			api.Spec.ServingCerts.NamedCertificates[i].Names = append(api.Spec.ServingCerts.NamedCertificates[i].Names, domainName)
+			return r.client.Update(context.TODO(), api)
+		}
+	}
+	return fmt.Errorf("Couldn't find api name for APIServer. Did no work")
+}
