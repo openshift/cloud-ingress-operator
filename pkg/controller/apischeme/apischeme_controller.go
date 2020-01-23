@@ -1,4 +1,4 @@
-package apischeme
+package APIScheme
 
 import (
 	"context"
@@ -18,14 +18,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_apischeme")
+var log = logf.Log.WithName("controller_APIScheme")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
 
-// Add creates a new ApiScheme Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new APIScheme Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -33,19 +33,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileApiScheme{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileAPIScheme{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("apischeme-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("APIScheme-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to primary resource ApiScheme
-	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.ApiScheme{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to primary resource APIScheme
+	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.APIScheme{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -53,11 +53,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-// blank assignment to verify that ReconcileApiScheme implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileApiScheme{}
+// blank assignment to verify that ReconcileAPIScheme implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileAPIScheme{}
 
-// ReconcileApiScheme reconciles a ApiScheme object
-type ReconcileApiScheme struct {
+// ReconcileAPIScheme reconciles a APIScheme object
+type ReconcileAPIScheme struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
@@ -72,14 +72,14 @@ type ReconcileApiScheme struct {
 // 3. Add master Node EC2 instances to the load balancer as listeners (6443/TCP) (UpdatingLoadBalancerListeners)
 // 4. Update APIServer object to add a record for the rh-api endpoint (UpdatingAPIServer)
 // 5. Ready for work (Ready)
-func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling ApiScheme")
+	reqLogger.Info("Reconciling APIScheme")
 
 	// TODO: Add controller to observe Machine objects in case the master nodes change (eg updating listeners)
 
-	// Fetch the ApiScheme instance
-	instance := &cloudingressv1alpha1.ApiScheme{}
+	// Fetch the APIScheme instance
+	instance := &cloudingressv1alpha1.APIScheme{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -99,12 +99,6 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	switch instance.Status.State {
 	case cloudingressv1alpha1.Pending:
-		err = updateCondition(instance,
-			"Moving to Create Load Balancer",
-			"Transition",
-			cloudingressv1alpha1.CreatingLoadBalancer)
-		return reconcile.Result{}, nil
-	case cloudingressv1alpha1.CreatingLoadBalancer:
 		// if the ELB is created already, go to next step
 		if found, err := awsClient.DoesELBExist(config.CloudAdminAPILoadBalancerName); err != nil {
 			return reconcile.Result{}, err
@@ -121,19 +115,22 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 				return reconcile.Result{}, err
 			}
 			reqLogger.Info("DNS Name for ELB from Amazon is %s", dnsName)
-			// Rogerio TODO: update dns name, state and status
+			instance.Status.CloudLoadBalancerDNSName = dnsName
+			setAPISchemeStatus(reqLogger, instance, "Load Balancer Created", cloudingressv1alpha1.APISchemeCreatedLoadBalancer, "Load Balancer Created")
 
 			return reconcile.Result{}, nil
 		} else {
 			//found
 		}
 
-	case cloudingressv1alpha1.UpdatingCIDRAllowances:
-		// if the CIDR list is synced, go to next step
-	case cloudingressv1alpha1.UpdatingLoadBalancerListeners:
-		// if listeners are current, go to next step
-	case cloudingressv1alpha1.UpdatingAPIServer:
-		// if APIServer is current, go to next step
+	case cloudingressv1alpha1.APISchemeCreatedLoadBalancer:
+		// if LB is in place update listeners here
+	case cloudingressv1alpha1.APISchemeUpdatedLoadBalancerListeners:
+		// after updating listeners set up SGs allowing CIDRs
+	case cloudingressv1alpha1.APISchemeUpdatedCIDRAllowances:
+		// update DNS config here
+	case cloudingressv1alpha1.APISchemeUpdatedDNS:
+		// update API endpoint
 	default:
 		// idk!
 
@@ -142,21 +139,20 @@ func (r *ReconcileApiScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	return reconcile.Result{}, nil
 }
 
-func updateCondition(instance *cloudingressv1alpha1.ApiScheme, msg, reason string, nextState cloudingressv1alpha1.ManagementState) error {
+func updateCondition(instance *cloudingressv1alpha1.APIScheme, msg, reason string, nextState cloudingressv1alpha1.ManagementState) error {
 	instance.Status.State = nextState
 	return nil
 }
 
-/*
-func setAccountStatus(reqLogger logr.Logger, awsAccount *awsv1alpha1.Account, message string, ctype awsv1alpha1.AccountConditionType, state string) {
-	awsAccount.Status.Conditions = controllerutils.SetAccountCondition(
-			awsAccount.Status.Conditions,
+
+func setAPISchemeStatus(reqLogger logr.Logger, APIScheme *cloudingressv1alpha1.APIScheme, message string, ctype cloudingressv1alpha1.APISchemeConditionType, state string) {
+	APIScheme.Status.Conditions = controllerutils.SetAccountCondition(
+			APIScheme.Status.Conditions,
 			ctype,
 			corev1.ConditionTrue,
 			state,
 			message,
 			controllerutils.UpdateConditionNever)
-	awsAccount.Status.State = state
-	reqLogger.Info(fmt.Sprintf("Account %s status updated", awsAccount.Name))
+	APIScheme.Status.State = state
 }
-*/
+

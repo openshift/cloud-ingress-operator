@@ -1,20 +1,20 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: apischemes.cloudingress.managed.openshift.io
+  name: APISchemes.cloudingress.managed.openshift.io
 spec:
   group: cloudingress.managed.openshift.io
   names:
-    kind: ApiScheme
-    listKind: ApiSchemeList
-    plural: apischemes
-    singular: apischeme
+    kind: APIScheme
+    listKind: APISchemeList
+    plural: APISchemes
+    singular: APIScheme
   scope: Namespaced
   subresources:
     status: {}
   validation:
     openAPIV3Schema:
-      description: ApiScheme is the Schema for the apischemes API
+      description: APIScheme is the Schema for the APISchemes API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -29,10 +29,10 @@ spec:
         metadata:
           type: object
         spec:
-          description: ApiSchemeSpec defines the desired state of ApiScheme
+          description: APISchemeSpec defines the desired state of APIScheme
           type: object
         status:
-          description: ApiSchemeStatus defines the observed state of ApiScheme
+          description: APISchemeStatus defines the observed state of APIScheme
           type: object
       type: object
   version: v1alpha1
