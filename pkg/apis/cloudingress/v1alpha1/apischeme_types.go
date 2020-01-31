@@ -5,29 +5,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// APISchemeConditionType is to represent where we are in the state machine
-// Pending -> CreatingLoadBalancer -> UpdatingLoadBalancerListeners ->
-// UpdatingCIDRAllowances -> UpdatingDNS -> UpdatingAPIServer -> Ready
-// With errors possible
-type APISchemeConditionType string
-
-const (
-	// APISchemePending is set for pending CR
-	APISchemePending APISchemeConditionType = "Pending"
-	// APISchemeError is set when we have an unrecoverable error
-	APISchemeError APISchemeConditionType = "Error"
-	// APISchemeCreatedLoadBalancer is set after we create the LB
-	APISchemeCreatedLoadBalancer APISchemeConditionType = "CreatedLoadBalancer"
-	// APISchemeUpdatedLoadBalancerListeners is set after we update the api LB listeners
-	APISchemeUpdatedLoadBalancerListeners APISchemeConditionType = "UpdatedLoadBalancerListeners"
-	// APISchemeUpdatedCIDRAllowances is set after we update CIDRs in LB's SG
-	APISchemeUpdatedCIDRAllowances APISchemeConditionType = "UpdatedCIDRAllowances"
-	// APISchemeUpdatedDNS is set after we update DNS settings
-	APISchemeUpdatedDNS APISchemeConditionType = "UpdatedDNS"
-	// APISchemeReady is set when all the steps are completed
-	APISchemeReady APISchemeConditionType = "Ready"
-)
-
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -53,32 +30,7 @@ type APISchemeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	Conditions       []APISchemeCondition `json:",conditions"`
-	CloudLoadBalancerDNSName string              `json:",cloudLoadBalancerDNSName,omitempty"`
-
-	// State is the state machine
-	State ManagementState `json:",state"`
-}
-
-// APISchemeCondition is the history of transitions
-type APISchemeCondition struct {
-	// Type is the type of condition
-	Type APISchemeConditionType `json:"type,omitempty"`
-
-	// LastTransitionTime Last change to status
-	LastTransitionTime metav1.Time `json:",lastTransitionTime"`
-
-	// AllowedCIDRBlocks currently allowed (as of the last successful Security Group update)
-	AllowedCIDRBlocks []string `json:",allowedCIDRBlocks,omitempty"`
-
-	// Reason is why we're making this status change
-	Reason string `json:",reason"`
-
-	// Message is an English text
-	Message string `json:",message"`
-
-	// Status is the string representation of the state machine (See ManagementState)
-	Status corev1.ConditionStatus `json:",status"`
+	CloudLoadBalancerDNSName string `json:",cloudLoadBalancerDNSName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

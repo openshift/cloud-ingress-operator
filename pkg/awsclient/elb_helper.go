@@ -130,7 +130,7 @@ func (c *awsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds 
 		Instances:        instances,
 		LoadBalancerName: aws.String(elbName),
 	}
-	_, err := c.DeregisterInstancesWithLoadBalancer(i)
+	_, err := c.DeregisterInstancesFromLoadBalancer(i)
 	return err
 }
 

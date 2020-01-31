@@ -42,4 +42,13 @@ const (
 
 	// AdminAPIListenerPort
 	AdminAPIListenerPort int64 = 6443
+
+	// MaxAPIRetries
+	MaxAPIRetries int = 10
+
+	// AWSSecretName
+	AWSSecretName string = "cloud-ingress-operator-credentials"
+
+	// OperatorNamespace
+	OperatorNamespace string = "openshift-cloud-ingress-operator"
 )
