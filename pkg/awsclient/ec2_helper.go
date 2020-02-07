@@ -12,7 +12,7 @@ import (
 // blocks, and only those blocks may access it.
 // cidrBlocks always goes from 6443/TCP to 6443/TCP and is IPv4 only
 // TODO: Expand to IPv6. This could be done by regular expression
-func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcId string, cidrBlocks []string) error {
+func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID string, cidrBlocks []string) error {
 	// first need to see if the SecurityGroup exists, and if it does not, create it and populate its ingressCIDR permissions
 	// If the SecurityGroup DOES exist, then make sure it only has the permissions we are receiving here.
 	securityGroup, err := c.findSecurityGroupByName(securityGroupName)
@@ -21,7 +21,7 @@ func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcId 
 	}
 	if securityGroup == nil {
 		// group does not exist, create it
-		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcId)
+		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcID)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ Outer:
 }
 
 // Add rules to the security group
-func (c *awsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
+func (c *AwsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
 	if len(ipPermissions) == 0 {
 		// nothing to do
 		return nil
@@ -105,7 +105,7 @@ func (c *awsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGr
 }
 
 // Remove rules from the security group
-func (c *awsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
+func (c *AwsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
 	if len(ipPermissions) == 0 {
 		// nothing   to do
 		return nil
@@ -122,11 +122,11 @@ func (c *awsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.Secur
 }
 
 // createSecurityGroup creates a SecurityGroup with the given name, and returns the EC2 object and/or any error
-func (c *awsClient) createSecurityGroup(securityGroupName, vpcId string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string) (*ec2.SecurityGroup, error) {
 	createInput := &ec2.CreateSecurityGroupInput{
 		Description: aws.String("Admin API Security group"),
 		GroupName:   aws.String(securityGroupName),
-		VpcId:       aws.String(vpcId),
+		VpcId:       aws.String(vpcID),
 	}
 	createResult, err := c.CreateSecurityGroup(createInput)
 	if err != nil {
@@ -139,7 +139,7 @@ func (c *awsClient) createSecurityGroup(securityGroupName, vpcId string) (*ec2.S
 	return c.findSecurityGroupByID(*createResult.GroupId)
 }
 
-func (c *awsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error) {
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -158,7 +158,7 @@ func (c *awsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error)
 	return o.SecurityGroups[0], nil
 }
 
-func (c *awsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, error) {
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -178,7 +178,7 @@ func (c *awsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, er
 }
 
 // Add a SecurityGroup to a load balancer. This is an idempotent operation
-func (c *awsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securityGroup *ec2.SecurityGroup) error {
+func (c *AwsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securityGroup *ec2.SecurityGroup) error {
 	i := &elb.ApplySecurityGroupsToLoadBalancerInput{
 		LoadBalancerName: aws.String(loadBalancerName),
 		SecurityGroups:   aws.StringSlice([]string{*securityGroup.GroupId}),

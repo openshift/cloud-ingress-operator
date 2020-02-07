@@ -11,7 +11,7 @@ import (
 // AWSLoadBalancer a handy way to return information about an ELB
 type AWSLoadBalancer struct {
 	ELBName   string // Name of the ELB
-	DNSName   string // DNS Name
+	DNSName   string // DNS Name of the ELB
 	DNSZoneId string // Zone ID
 }
 
@@ -20,7 +20,7 @@ type AWSLoadBalancer struct {
 // ELB should attend, as well as the listener port.
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
-func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (*AWSLoadBalancer, error) {
+func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (*AWSLoadBalancer, error) {
 	fmt.Printf("  * CreateClassicELB(%s,%s,%d)\n", elbName, subnets, listenerPort)
 	i := &elb.CreateLoadBalancerInput{
 		LoadBalancerName: aws.String(elbName),
@@ -54,14 +54,14 @@ func (c *awsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 
 // SetLoadBalancerPrivate sets a load balancer private by removing its
 // listeners (port 6443/TCP)
-func (c *awsClient) SetLoadBalancerPrivate(elbName string) error {
+func (c *AwsClient) SetLoadBalancerPrivate(elbName string) error {
 	return c.removeListenersFromELB(elbName)
 }
 
 // SetLoadBalancerPublic will set the specified load balancer public by
 // re-adding the 6443/TCP -> 6443/TCP listener. Any instances (still)
 // attached to the load balancer will begin to receive traffic.
-func (c *awsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) error {
+func (c *AwsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) error {
 	l := []*elb.Listener{
 		{
 			InstancePort:     aws.Int64(listenerPort),
@@ -76,7 +76,7 @@ func (c *awsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) er
 // removeListenersFromELB will remove the 6443/TCP -> 6443/TCP listener from
 // the specified ELB. This is useful when the "ext" ELB is to be no longer
 // publicly accessible
-func (c *awsClient) removeListenersFromELB(elbName string) error {
+func (c *AwsClient) removeListenersFromELB(elbName string) error {
 	i := &elb.DeleteLoadBalancerListenersInput{
 		LoadBalancerName:  aws.String(elbName),
 		LoadBalancerPorts: aws.Int64Slice([]int64{6443}),
@@ -90,7 +90,7 @@ func (c *awsClient) removeListenersFromELB(elbName string) error {
 // removeListenersFromELB.
 // Note: This will likely always want to be given 6443/tcp -> 6443/tcp for
 // the kube-api
-func (c *awsClient) addListenersToELB(elbName string, listeners []*elb.Listener) error {
+func (c *AwsClient) addListenersToELB(elbName string, listeners []*elb.Listener) error {
 	i := &elb.CreateLoadBalancerListenersInput{
 		Listeners:        listeners,
 		LoadBalancerName: aws.String(elbName),
@@ -107,7 +107,7 @@ func (c *awsClient) addListenersToELB(elbName string, listeners []*elb.Listener)
 // 2. deregister the instance,
 // 3. start the instance,
 // 4. and then register the instance.
-func (c *awsClient) AddLoadBalancerInstances(elbName string, instanceIds []string) error {
+func (c *AwsClient) AddLoadBalancerInstances(elbName string, instanceIds []string) error {
 	instances := make([]*elb.Instance, 0)
 	for _, instance := range instanceIds {
 		instances = append(instances, &elb.Instance{InstanceId: aws.String(instance)})
@@ -121,7 +121,7 @@ func (c *awsClient) AddLoadBalancerInstances(elbName string, instanceIds []strin
 }
 
 // RemoveInstancesFromLoadBalancer removes +instanceIds+ from +elbName+, eg when an Node is deleted.
-func (c *awsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds []string) error {
+func (c *AwsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds []string) error {
 	instances := make([]*elb.Instance, 0)
 	for _, instance := range instanceIds {
 		instances = append(instances, &elb.Instance{InstanceId: aws.String(instance)})
@@ -136,7 +136,7 @@ func (c *awsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds 
 
 // DoesELBExist checks for the existence of an ELB by name. If there's an AWS
 // error it is returned.
-func (c *awsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error) {
+func (c *AwsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error) {
 	i := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbName)},
 	}
@@ -154,7 +154,7 @@ func (c *awsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error)
 	return true, &AWSLoadBalancer{ELBName: elbName, DNSName: *res.LoadBalancerDescriptions[0].DNSName, DNSZoneId: *res.LoadBalancerDescriptions[0].CanonicalHostedZoneNameID}, nil
 }
 
-func (c *awsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {
+func (c *AwsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {
 	i := &elb.ConfigureHealthCheckInput{
 		HealthCheck: &elb.HealthCheck{
 			HealthyThreshold:   aws.Int64(2),

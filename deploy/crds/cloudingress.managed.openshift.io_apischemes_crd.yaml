@@ -8,7 +8,7 @@ spec:
     kind: APIScheme
     listKind: APISchemeList
     plural: APISchemes
-    singular: APIScheme
+    singular: apischeme
   scope: Namespaced
   subresources:
     status: {}
@@ -30,9 +30,38 @@ spec:
           type: object
         spec:
           description: APISchemeSpec defines the desired state of APIScheme
+          properties:
+            managementAPIServerIngress:
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "operator-sdk generate k8s" to regenerate code after
+                modifying this file Add custom validation using kubebuilder tags:
+                https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              properties:
+                allowedCIDRBlocks:
+                  items:
+                    type: string
+                  type: array
+                dnsName:
+                  type: string
+                enabled:
+                  type: boolean
+              required:
+              - allowedCIDRBlocks
+              - dnsName
+              - enabled
+              type: object
+          required:
+          - managementAPIServerIngress
           type: object
         status:
           description: APISchemeStatus defines the observed state of APIScheme
+          properties:
+            cloudLoadBalancerDNSName:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "operator-sdk generate k8s" to regenerate
+                code after modifying this file Add custom validation using kubebuilder
+                tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              type: string
           type: object
       type: object
   version: v1alpha1

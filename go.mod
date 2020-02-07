@@ -4,18 +4,23 @@ go 1.13
 
 require (
 	9fans.net/go v0.0.2 // indirect
-	github.com/aws/aws-sdk-go v1.16.26
+	github.com/aws/aws-sdk-go v1.20.19
+	github.com/go-logr/logr v0.1.0
 	github.com/go-openapi/spec v0.19.0
 	github.com/nsf/gocode v0.0.0-20190302080247-5bee97b48836 // indirect
+	github.com/openshift/api v3.9.1-0.20191217101959-25e6c5c55d58+incompatible
+	github.com/openshift/cluster-api v0.0.0-20191129101638-b09907ac6668
 	github.com/operator-framework/operator-sdk v0.12.0
 	github.com/rogpeppe/godef v1.1.1 // indirect
-	github.com/spf13/pflag v1.0.3
+	github.com/spf13/pflag v1.0.5
 	github.com/zmb3/gogetdoc v0.0.0-20190228002656-b37376c5da6a // indirect
 	golang.org/x/tools v0.0.0-20200114191411-189207f339b7 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
-	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
+	sigs.k8s.io/cluster-api v0.2.9
+	sigs.k8s.io/cluster-api-provider-aws v0.4.8
 	sigs.k8s.io/controller-runtime v0.3.0
 )
 

@@ -1,12 +1,14 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// APISchemeConditionType - APISchemeConditionType
+type APISchemeConditionType string
 
 // APISchemeSpec defines the desired state of APIScheme
 // +k8s:openapi-gen=true
@@ -14,14 +16,14 @@ type APISchemeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	ManagementAPIServerIngress ManagementAPIServerIngress `json:",managementAPIServerIngress"`
+	ManagementAPIServerIngress ManagementAPIServerIngress `json:"managementAPIServerIngress"`
 }
 
 // ManagementAPIServerIngress defines the Management API ingress
 type ManagementAPIServerIngress struct {
-	Enabled           bool     `json:",enabled"`
-	DNSName           string   `json:",dnsName"`
-	AllowedCIDRBlocks []string `json:",allowedCIDRBlocks"`
+	Enabled           bool     `json:"enabled"`
+	DNSName           string   `json:"dnsName"`
+	AllowedCIDRBlocks []string `json:"allowedCIDRBlocks"`
 }
 
 // APISchemeStatus defines the observed state of APIScheme
@@ -30,7 +32,8 @@ type APISchemeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	CloudLoadBalancerDNSName string `json:",cloudLoadBalancerDNSName,omitempty"`
+	CloudLoadBalancerDNSName string               `json:"cloudLoadBalancerDNSName,omitempty"`
+	Conditions               []APISchemeCondition `json:"conditions"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -45,6 +48,27 @@ type APIScheme struct {
 
 	Spec   APISchemeSpec   `json:"spec,omitempty"`
 	Status APISchemeStatus `json:"status,omitempty"`
+}
+
+// APISchemeCondition is the history of transitions
+type APISchemeCondition struct {
+	// Type is the type of condition
+	Type APISchemeConditionType `json:"type,omitempty"`
+
+	// LastTransitionTime Last change to status
+	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
+
+	// LastProbeTime last time probed
+	LastProbeTime metav1.Time `json:"lastProbeTime"`
+
+	// AllowedCIDRBlocks currently allowed (as of the last successful Security Group update)
+	AllowedCIDRBlocks []string `json:"allowedCIDRBlocks,omitempty"`
+
+	// Reason is why we're making this status change
+	Reason string `json:"reason"`
+
+	// Message is an English text
+	Message string `json:"message"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

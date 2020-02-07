@@ -91,4 +91,3 @@ func shouldUpdateCondition(
 	}
 	return updateConditionCheck(oldReason, oldMessage, newReason, newMessage)
 }
-
