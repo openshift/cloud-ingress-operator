@@ -100,6 +100,12 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
+	ownerTags, err := utils.AWSOwnerTag(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Couldn't get the cluster owner tags")
+		return reconcile.Result{}, err
+	}
+
 	region, err := utils.GetClusterRegion(r.client)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -117,27 +123,49 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 	subnets, err := utils.GetMasterNodeSubnets(r.client)
 	if err != nil {
+		reqLogger.Error(err, "Couldn't get the subnets used by master nodes")
 		return reconcile.Result{}, err
 	}
+
 	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
 	if err != nil {
+		reqLogger.Error(err, "Couldn't obtain the cluster's base domain")
 		return reconcile.Result{}, err
+	}
+	masterNodeInstances, err := utils.GetClusterMasterInstances(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Couldn't detect the AWS instances for master nodes")
+		return reconcile.Result{}, err
+	}
+
+	// In theory this could return more than one VPC for master nodes. That would be
+	// odd since the security group is associated with a single VPC.
+	vpcs, err := utils.GetMasterNodeVPCs(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Couldn't get the VPC in use by master nodes")
+		return reconcile.Result{}, err
+	}
+	if len(vpcs) > 1 {
+		reqLogger.Info(fmt.Sprintf("Multiple VPCs detected for master nodes. Using %s for security group", vpcs[0]))
 	}
 	// Now try to make sure all the things for Admin API are present in AWS
-	_, err = ensureCloudLoadBalancer(reqLogger, awsClient, config.AdminAPIName, subnets)
+	err = ensureAdminAPIEndpoint(reqLogger, instance, awsClient, config.AdminAPIName, config.AdminAPISecurityGroupName, vpcs[0], clusterBaseDomain, subnets, masterNodeInstances, ownerTags)
 	if err != nil {
+		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
 		return reconcile.Result{}, err
 	}
+
 	// And now, tell the APIServer/cluster object about it.
 	err = r.addAdminAPIToAPIServerObject(reqLogger, config.AdminAPIName+"."+clusterBaseDomain)
 	if err != nil {
+		reqLogger.Error(err, "Couldn't update APIServer/cluster object")
 		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
 }
 
-func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, endpointName string, elbSubnets []string) (*awsclient.AWSLoadBalancer, error) {
+func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, endpointName string, elbSubnets []string, ownerTags map[string]string) (*awsclient.AWSLoadBalancer, error) {
 	var awsObj *awsclient.AWSLoadBalancer
 	found := false
 	var err error
@@ -160,8 +188,9 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 		reqLogger.Info(fmt.Sprintf("ELB exists for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
 	} else {
 		reqLogger.Info("Need to create ELB for Admin API")
+
 		for i := 1; i <= config.MaxAPIRetries; i++ {
-			awsObj, err = awsAPI.CreateClassicELB(endpointName, elbSubnets, 6443)
+			awsObj, err = awsAPI.CreateClassicELB(endpointName, elbSubnets, 6443, ownerTags)
 			if err != nil {
 				fmt.Printf("Error creating ELB: " + err.Error())
 				if i == config.MaxAPIRetries {
@@ -179,10 +208,10 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 	return awsObj, nil
 }
 
-func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, endpointName, securityGroupName, securityGroupPVCName string) error {
+func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, endpointName, securityGroupName, securityGroupPVCName string, ownerTags map[string]string) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 
-		err := awsAPI.EnsureCIDRAccess(endpointName, securityGroupName, securityGroupPVCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks)
+		err := awsAPI.EnsureCIDRAccess(endpointName, securityGroupName, securityGroupPVCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, ownerTags)
 		if err != nil {
 			reqLogger.Info("Error ensuring CIDR access for the security group: " + err.Error())
 			if i == config.MaxAPIRetries {
@@ -239,16 +268,16 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, baseClu
 // ensureAdminAPIEndpoint will ensure the Admin API endpoint exists. Returns any error
 // This function is idempotent
 func ensureAdminAPIEndpoint(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient,
-	endpointName, securityGroupName, securityGroupPVCName, baseClusterDomain string, elbSubnets, primaryInstanceIDs []string) error {
+	endpointName, securityGroupName, securityGroupPVCName, baseClusterDomain string, elbSubnets, primaryInstanceIDs []string, ownerTags map[string]string) error {
 
 	// First, let's ensure an ELB exists
-	awsObj, err := ensureCloudLoadBalancer(reqLogger, awsAPI, endpointName, elbSubnets)
+	awsObj, err := ensureCloudLoadBalancer(reqLogger, awsAPI, endpointName, elbSubnets, ownerTags)
 	if err != nil {
 		// This is actually fatal due to the retries in ensureCloudLoadBalancer
 		return err
 	}
 	// Now, ensure CIDR access
-	err = ensureCIDRAccess(reqLogger, crObject, awsAPI, endpointName, securityGroupName, securityGroupPVCName)
+	err = ensureCIDRAccess(reqLogger, crObject, awsAPI, endpointName, securityGroupName, securityGroupPVCName, ownerTags)
 	if err != nil {
 		// This is actually fatal
 		return err
@@ -320,7 +349,7 @@ func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(logger logr.Logger, do
 	api := &configv1.APIServer{}
 	ns := types.NamespacedName{
 		Namespace: "",
-		Name:      "",
+		Name:      "cluster",
 	}
 	err := r.client.Get(context.TODO(), ns, api)
 	if err != nil {

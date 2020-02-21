@@ -12,7 +12,7 @@ import (
 // blocks, and only those blocks may access it.
 // cidrBlocks always goes from 6443/TCP to 6443/TCP and is IPv4 only
 // TODO: Expand to IPv6. This could be done by regular expression
-func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID string, cidrBlocks []string) error {
+func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID string, cidrBlocks []string, ownerTag map[string]string) error {
 	// first need to see if the SecurityGroup exists, and if it does not, create it and populate its ingressCIDR permissions
 	// If the SecurityGroup DOES exist, then make sure it only has the permissions we are receiving here.
 	securityGroup, err := c.findSecurityGroupByName(securityGroupName)
@@ -21,7 +21,7 @@ func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID 
 	}
 	if securityGroup == nil {
 		// group does not exist, create it
-		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcID)
+		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcID, ownerTag)
 		if err != nil {
 			return err
 		}
@@ -122,13 +122,20 @@ func (c *AwsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.Secur
 }
 
 // createSecurityGroup creates a SecurityGroup with the given name, and returns the EC2 object and/or any error
-func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string, ownerTag map[string]string) (*ec2.SecurityGroup, error) {
 	createInput := &ec2.CreateSecurityGroupInput{
 		Description: aws.String("Admin API Security group"),
 		GroupName:   aws.String(securityGroupName),
 		VpcId:       aws.String(vpcID),
 	}
 	createResult, err := c.CreateSecurityGroup(createInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply tags
+
+	err = c.ApplyTagsToResources([]string{*createResult.GroupId}, ownerTag)
 	if err != nil {
 		return nil, err
 	}
@@ -184,5 +191,23 @@ func (c *AwsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securi
 		SecurityGroups:   aws.StringSlice([]string{*securityGroup.GroupId}),
 	}
 	_, err := c.ApplySecurityGroupsToLoadBalancer(i)
+	return err
+}
+
+// ApplyTagsToResources will apply the specified tags to the resource IDs specified.
+func (c *AwsClient) ApplyTagsToResources(resources []string, tagList map[string]string) error {
+	tags := make([]*ec2.Tag, 0)
+	for k, v := range tagList {
+		tags = append(tags, &ec2.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	i := &ec2.CreateTagsInput{
+		Resources: aws.StringSlice(resources),
+		Tags:      tags,
+	}
+
+	_, err := c.CreateTags(i)
 	return err
 }

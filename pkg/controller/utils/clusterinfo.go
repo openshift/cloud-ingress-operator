@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -16,6 +17,7 @@ import (
 )
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
+const instanceRegex string = `^aws:\/\/\/.*\/(.*)$`
 
 // GetClusterBaseDomain returns the installed cluster's base domain name
 func GetClusterBaseDomain(kclient client.Client) (string, error) {
@@ -78,6 +80,35 @@ func GetMasterNodeSubnets(kclient client.Client) ([]string, error) {
 	return subnets, nil
 }
 
+// GetMasterNodeVPCs returns all the VPCs for Machines with 'master' label.
+// TODO: Validate the return here are AWS identifiers.
+func GetMasterNodeVPCs(kclient client.Client) ([]string, error) {
+	machineList := &machineapi.MachineList{}
+	s := map[string]string{masterMachineLabel: "master"}
+
+	vpcs := []string{}
+
+	err := kclient.List(context.TODO(), machineList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(s)})
+	if err != nil {
+		return vpcs, err
+	}
+
+	// only append unique subnet IDs
+	dedup := make(map[string]bool)
+	for _, machineObj := range machineList.Items {
+		clusterConfig, err := awsproviderapi.ClusterConfigFromProviderSpec(machineObj.Spec.ProviderSpec)
+		if err != nil {
+			return vpcs, err
+		}
+
+		if !dedup[clusterConfig.NetworkSpec.VPC.ID] {
+			vpcs = append(vpcs, clusterConfig.NetworkSpec.VPC.ID)
+			dedup[clusterConfig.NetworkSpec.VPC.ID] = true
+		}
+	}
+	return vpcs, nil
+}
+
 // GetClusterRegion returns the installed cluster's AWS region
 func GetClusterRegion(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
@@ -87,6 +118,31 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 		return "", fmt.Errorf("Expected to have a PlatformStatus for Infrastructure/cluster, but it was nil")
 	}
 	return infra.Status.PlatformStatus.AWS.Region, nil
+}
+
+// GetClusterMasterInstances gets all the instance IDs for Master nodes
+// For AWS the form is aws:///<availability zone>/<instance ID>
+// This could come from parsing the arbitrarily formatted .Status.ProviderStatus
+// but .Spec.ProviderID is standard
+func GetClusterMasterInstances(kclient client.Client) ([]string, error) {
+	machineList := &machineapi.MachineList{}
+	s := map[string]string{masterMachineLabel: "master"}
+
+	err := kclient.List(context.TODO(), machineList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(s)})
+	if err != nil {
+		return []string{}, err
+	}
+
+	ids := make([]string, 0)
+	matcher := regexp.MustCompile(instanceRegex)
+	for _, machine := range machineList.Items {
+
+		r := matcher.FindString(*machine.Spec.ProviderID)
+		if r != "" {
+			ids = append(ids, r)
+		}
+	}
+	return ids, nil
 }
 
 func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, error) {
@@ -100,4 +156,16 @@ func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, e
 		return nil, err
 	}
 	return infra, nil
+}
+
+// AWSOwnerTag returns owner taglist for the cluster
+func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
+	m := make(map[string]string)
+	name, err := GetClusterName(kclient)
+	if err != nil {
+		return m, err
+	}
+
+	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
+	return m, nil
 }

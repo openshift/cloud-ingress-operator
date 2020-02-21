@@ -1,5 +1,7 @@
 package awsclient
 
+// TODO: Retry upon API failure
+
 import (
 	"context"
 	"fmt"
@@ -97,6 +99,8 @@ type Client interface {
 	RevokeSecurityGroupIngress(*ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error)
 	// DescribeSubnets to find subnet for master nodes for incoming elb
 	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+	// CreateTags to apply tags to EC2 resources
+	CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
 }
 
 type AwsClient struct {
@@ -242,4 +246,7 @@ func (c *AwsClient) RevokeSecurityGroupIngress(i *ec2.RevokeSecurityGroupIngress
 }
 func (c *AwsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 	return c.ec2Client.DescribeSubnets(i)
+}
+func (c *AwsClient) CreateTags(i *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return c.ec2Client.CreateTags(i)
 }

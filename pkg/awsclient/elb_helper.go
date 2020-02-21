@@ -20,8 +20,15 @@ type AWSLoadBalancer struct {
 // ELB should attend, as well as the listener port.
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
-func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64) (*AWSLoadBalancer, error) {
+func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64, tagList map[string]string) (*AWSLoadBalancer, error) {
 	fmt.Printf("  * CreateClassicELB(%s,%s,%d)\n", elbName, subnets, listenerPort)
+	tags := make([]*elb.Tag, 0)
+	for k, v := range tagList {
+		tags = append(tags, &elb.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
 	i := &elb.CreateLoadBalancerInput{
 		LoadBalancerName: aws.String(elbName),
 		Subnets:          aws.StringSlice(subnets),
@@ -34,6 +41,7 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 				LoadBalancerPort: aws.Int64(listenerPort),
 			},
 		},
+		Tags: tags,
 	}
 	_, err := c.CreateLoadBalancer(i)
 	if err != nil {
