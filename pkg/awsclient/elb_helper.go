@@ -21,7 +21,6 @@ type AWSLoadBalancer struct {
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
 func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64, tagList map[string]string) (*AWSLoadBalancer, error) {
-	fmt.Printf("  * CreateClassicELB(%s,%s,%d)\n", elbName, subnets, listenerPort)
 	tags := make([]*elb.Tag, 0)
 	for k, v := range tagList {
 		tags = append(tags, &elb.Tag{
@@ -47,7 +46,6 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 	if err != nil {
 		return &AWSLoadBalancer{}, err
 	}
-	fmt.Printf("    * Adding health check (HTTP:6443/)\n")
 	err = c.addHealthCheck(elbName, "HTTP", "/", 6443)
 	if err != nil {
 		return &AWSLoadBalancer{}, err

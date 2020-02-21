@@ -6,11 +6,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
-// FIXME: Add tags
+// TODO: Handle errors, where possible, instead of returning to caller.
 
 // EnsureCIDRAccess ensures that for the given load balancer, the specified CIDR
 // blocks, and only those blocks may access it.
-// cidrBlocks always goes from 6443/TCP to 6443/TCP and is IPv4 only
+// cidrBlocks always goes from source:6443/TCP to target:6443/TCP and is IPv4 only
 // TODO: Expand to IPv6. This could be done by regular expression
 func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID string, cidrBlocks []string, ownerTag map[string]string) error {
 	// first need to see if the SecurityGroup exists, and if it does not, create it and populate its ingressCIDR permissions
