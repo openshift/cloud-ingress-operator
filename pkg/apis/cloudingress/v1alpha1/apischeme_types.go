@@ -11,6 +11,11 @@ import (
 // APISchemeConditionType - APISchemeConditionType
 type APISchemeConditionType string
 
+const (
+	ConditionError APISchemeConditionType = "Error"
+	ConditionReady APISchemeConditionType = "Ready"
+)
+
 // APISchemeSpec defines the desired state of APIScheme
 // +k8s:openapi-gen=true
 type APISchemeSpec struct {
@@ -33,8 +38,9 @@ type APISchemeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
-	CloudLoadBalancerDNSName string               `json:"cloudLoadBalancerDNSName,omitempty"`
-	Conditions               []APISchemeCondition `json:"conditions"`
+	CloudLoadBalancerDNSName string                 `json:"cloudLoadBalancerDNSName,omitempty"`
+	Conditions               []APISchemeCondition   `json:"conditions,omitempty"`
+	State                    APISchemeConditionType `json:"state",omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

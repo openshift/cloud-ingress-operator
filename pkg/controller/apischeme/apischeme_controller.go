@@ -14,6 +14,7 @@ import (
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -103,11 +104,16 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	ownerTags, err := utils.AWSOwnerTag(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the cluster owner tags")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster owner tags", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
 	region, err := utils.GetClusterRegion(r.client)
 	if err != nil {
+		reqLogger.Error(err, "Couldn't get the cluster owner tags")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's AWS region", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 	// We expect this secret to exist in the same namespace Account CR's are created
@@ -119,22 +125,30 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	})
 	if err != nil {
 		reqLogger.Error(err, "Failed to get AWS client")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't create an AWS client", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 	subnets, err := utils.GetMasterNodeSubnets(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the subnets used by master nodes")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
 	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't obtain the cluster's base domain")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's base domain", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 	masterNodeInstances, err := utils.GetClusterMasterInstances(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't detect the AWS instances for master nodes")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't find the cluster's AWS instances for master nodes", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
@@ -143,6 +157,8 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	vpcs, err := utils.GetMasterNodeVPCs(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the VPC in use by master nodes")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the VPC id for master nodes", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 	if len(vpcs) > 1 {
@@ -152,6 +168,8 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	err = ensureAdminAPIEndpoint(reqLogger, instance, awsClient, config.AdminAPIName, config.AdminAPISecurityGroupName, vpcs[0], clusterBaseDomain, subnets, masterNodeInstances, ownerTags)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
@@ -159,8 +177,12 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	err = r.addAdminAPIToAPIServerObject(reqLogger, config.AdminAPIName+"."+clusterBaseDomain)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't update APIServer/cluster object")
+		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't update APIServer/cluster object", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
+	SetAPISchemeStatus(reqLogger, instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
+	r.client.Status().Update(context.TODO(), instance)
 
 	return reconcile.Result{}, nil
 }
@@ -362,4 +384,16 @@ func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(logger logr.Logger, do
 		}
 	}
 	return fmt.Errorf("Couldn't find api name for APIServer. Did no work")
+}
+
+// SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
+func SetAPISchemeStatus(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
+	crObject.Status.Conditions = utils.SetAPISchemeCondition(
+		crObject.Status.Conditions,
+		ctype,
+		corev1.ConditionTrue,
+		reason,
+		message,
+		utils.UpdateConditionNever)
+	crObject.Status.State = ctype
 }
