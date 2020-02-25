@@ -1,0 +1,7 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: PublishingStrategy
+metadata:
+  name: example-publishingstrategy
+spec:
+  # Add fields here
+  dnsName: app
