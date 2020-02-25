@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -116,6 +117,27 @@ func main() {
 	}
 
 	if err = serveCRMetrics(cfg); err != nil {
+
+	// Add the Metrics Service
+	addMetrics(ctx, cfg, namespace)
+
+	log.Info("Starting the Cmd.")
+
+	// Start the Cmd
+	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+		log.Error(err, "Manager exited non-zero")
+		os.Exit(1)
+	}
+}
+
+// addMetrics will create the Services and Service Monitors to allow the operator export the metrics by using
+// the Prometheus operator
+func addMetrics(ctx context.Context, cfg *rest.Config, namespace string) {
+	if err := serveCRMetrics(cfg); err != nil {
+		if errors.Is(err, k8sutil.ErrRunLocal) {
+			log.Info("Skipping CR metrics server creation; not running in a cluster.")
+			return
+		}
 		log.Info("Could not generate and serve custom resource metrics", "error", err.Error())
 	}
 

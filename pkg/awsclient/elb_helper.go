@@ -3,6 +3,7 @@ package awsclient
 import (
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elb"
@@ -28,6 +29,7 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 			Value: aws.String(v),
 		})
 	}
+
 	i := &elb.CreateLoadBalancerInput{
 		LoadBalancerName: aws.String(elbName),
 		Subnets:          aws.StringSlice(subnets),
@@ -61,6 +63,7 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 // SetLoadBalancerPrivate sets a load balancer private by removing its
 // listeners (port 6443/TCP)
 func (c *AwsClient) SetLoadBalancerPrivate(elbName string) error {
+
 	return c.removeListenersFromELB(elbName)
 }
 
@@ -68,6 +71,7 @@ func (c *AwsClient) SetLoadBalancerPrivate(elbName string) error {
 // re-adding the 6443/TCP -> 6443/TCP listener. Any instances (still)
 // attached to the load balancer will begin to receive traffic.
 func (c *AwsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) error {
+
 	l := []*elb.Listener{
 		{
 			InstancePort:     aws.Int64(listenerPort),
@@ -83,6 +87,7 @@ func (c *AwsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) er
 // the specified ELB. This is useful when the "ext" ELB is to be no longer
 // publicly accessible
 func (c *AwsClient) removeListenersFromELB(elbName string) error {
+
 	i := &elb.DeleteLoadBalancerListenersInput{
 		LoadBalancerName:  aws.String(elbName),
 		LoadBalancerPorts: aws.Int64Slice([]int64{6443}),
@@ -97,6 +102,7 @@ func (c *AwsClient) removeListenersFromELB(elbName string) error {
 // Note: This will likely always want to be given 6443/tcp -> 6443/tcp for
 // the kube-api
 func (c *AwsClient) addListenersToELB(elbName string, listeners []*elb.Listener) error {
+
 	i := &elb.CreateLoadBalancerListenersInput{
 		Listeners:        listeners,
 		LoadBalancerName: aws.String(elbName),
@@ -114,6 +120,7 @@ func (c *AwsClient) addListenersToELB(elbName string, listeners []*elb.Listener)
 // 3. start the instance,
 // 4. and then register the instance.
 func (c *AwsClient) AddLoadBalancerInstances(elbName string, instanceIds []string) error {
+
 	instances := make([]*elb.Instance, 0)
 	for _, instance := range instanceIds {
 		instances = append(instances, &elb.Instance{InstanceId: aws.String(instance)})
@@ -128,6 +135,7 @@ func (c *AwsClient) AddLoadBalancerInstances(elbName string, instanceIds []strin
 
 // RemoveInstancesFromLoadBalancer removes +instanceIds+ from +elbName+, eg when an Node is deleted.
 func (c *AwsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds []string) error {
+
 	instances := make([]*elb.Instance, 0)
 	for _, instance := range instanceIds {
 		instances = append(instances, &elb.Instance{InstanceId: aws.String(instance)})
@@ -143,6 +151,7 @@ func (c *AwsClient) RemoveInstancesFromLoadBalancer(elbName string, instanceIds 
 // DoesELBExist checks for the existence of an ELB by name. If there's an AWS
 // error it is returned.
 func (c *AwsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error) {
+
 	i := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbName)},
 	}
@@ -158,6 +167,45 @@ func (c *AwsClient) DoesELBExist(elbName string) (bool, *AWSLoadBalancer, error)
 		}
 	}
 	return true, &AWSLoadBalancer{ELBName: elbName, DNSName: *res.LoadBalancerDescriptions[0].DNSName, DNSZoneId: *res.LoadBalancerDescriptions[0].CanonicalHostedZoneNameID}, nil
+}
+
+// LoadBalancerV2 is a list of all non-classic ELBs
+type LoadBalancerV2 struct {
+	CanonicalHostedZoneNameID string
+	DNSName                   string
+	LoadBalancerArn           string
+	LoadBalancerName          string
+	Scheme                    string
+}
+
+// ListAllNLBs uses the DescribeLoadBalancersV2 to get back a list of all Network Load Balancers
+func (c *AwsClient) ListAllNLBs() ([]LoadBalancerV2, error) {
+
+	i := &elbv2.DescribeLoadBalancersInput{}
+	output, err := c.DescribeLoadBalancersV2(i)
+	if err != nil {
+		return []LoadBalancerV2{}, err
+	}
+	loadBalancers := make([]LoadBalancerV2, 0)
+	for _, loadBalancer := range output.LoadBalancers {
+		loadBalancers = append(loadBalancers, LoadBalancerV2{
+			CanonicalHostedZoneNameID: aws.StringValue(loadBalancer.CanonicalHostedZoneId),
+			DNSName:                   aws.StringValue(loadBalancer.DNSName),
+			LoadBalancerArn:           aws.StringValue(loadBalancer.LoadBalancerArn),
+			LoadBalancerName:          aws.StringValue(loadBalancer.LoadBalancerName),
+			Scheme:                    aws.StringValue(loadBalancer.Scheme),
+		})
+	}
+	return loadBalancers, nil
+}
+
+// DeleteExternalLoadBalancer takes in the external LB arn and deletes the entire LB
+func (c *AwsClient) DeleteExternalLoadBalancer(extLoadBalancerArn string) error {
+	i := elbv2.DeleteLoadBalancerInput{
+		LoadBalancerArn: aws.String(extLoadBalancerArn),
+	}
+	_, err := c.DeleteLoadBalancerV2(&i)
+	return err
 }
 
 func (c *AwsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {

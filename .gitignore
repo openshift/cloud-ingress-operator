@@ -75,3 +75,8 @@ tags
 .vscode/*
 .history
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
+
+build/_output
+
+# Dependency directories (remove the comment below to include it)
+# vendor/

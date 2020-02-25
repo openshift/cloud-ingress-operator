@@ -16,7 +16,13 @@ rules:
   - configmaps
   - secrets
   verbs:
-  - '*'
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - apps
   resources:
@@ -25,7 +31,13 @@ rules:
   - replicasets
   - statefulsets
   verbs:
-  - '*'
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - monitoring.coreos.com
   resources:
@@ -58,5 +70,12 @@ rules:
   - cloudingress.managed.openshift.io
   resources:
   - '*'
+  - apischemes
   verbs:
-  - '*'
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

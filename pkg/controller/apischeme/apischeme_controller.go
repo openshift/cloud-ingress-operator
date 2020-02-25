@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -81,11 +82,10 @@ type ReconcileAPIScheme struct {
 // 3. Add master Node EC2 instances to the load balancer as listeners (6443/TCP) (UpdatingLoadBalancerListeners)
 // 4. Update APIServer object to add a record for the rh-api endpoint (UpdatingAPIServer)
 // 5. Ready for work (Ready)
+
 func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIScheme")
-
-	// TODO: Add controller to observe Machine objects in case the master nodes change (eg updating listeners)
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
@@ -271,7 +271,7 @@ func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsCli
 
 func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, baseClusterDomain, endpointName string, awsObj *awsclient.AWSLoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := awsAPI.AddManagementDNSRecord(baseClusterDomain, endpointName, awsObj)
+    err := awsAPI.UpsertCNAME(baseClusterDomain, endpointName, awsObj.DNSZoneId, endpointName + "." + baseClusterDomain, "RH API Endpoint", false)
 		if err != nil {
 			reqLogger.Info("Couldn't upsert a DNS record: " + err.Error())
 			if i == config.MaxAPIRetries {

@@ -70,7 +70,10 @@ type Client interface {
 	 * ELBv2-related Functions
 	 */
 
-	// ELBv2 - to figure out which to assign back to the nlb
+	// list all or 1 NLB to get external or internal
+	DescribeLoadBalancersV2(*elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error)
+	// delete external NLB so we can make cluster private
+	DeleteLoadBalancerV2(*elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error)
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
 
 	/*
@@ -212,7 +215,6 @@ func (c *AwsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*e
 func (c *AwsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
 	return c.elbClient.DescribeTags(i)
 }
-
 func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
 	return c.elbClient.RegisterInstancesWithLoadBalancer(i)
 }
@@ -220,11 +222,16 @@ func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWi
 func (c *AwsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
 }
+func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
+	return c.elbv2Client.DescribeLoadBalancers(i)
+}
+func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
+	return c.elbv2Client.DeleteLoadBalancer(i)
+}
 
 func (c *AwsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
 	return c.route53Client.ChangeResourceRecordSets(i)
 }
-
 func (c *AwsClient) ListHostedZonesByName(i *route53.ListHostedZonesByNameInput) (*route53.ListHostedZonesByNameOutput, error) {
 	return c.route53Client.ListHostedZonesByName(i)
 }
@@ -250,3 +257,5 @@ func (c *AwsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeS
 func (c *AwsClient) CreateTags(i *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 	return c.ec2Client.CreateTags(i)
 }
+
+

@@ -139,7 +139,6 @@ func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string, ownerTa
 	if err != nil {
 		return nil, err
 	}
-
 	// Caller of this method wants a *ec2.SecurityGroup, and since the create
 	// method doesn't give us nought but the group-id, we have to do a search
 	// to find it.
@@ -147,6 +146,7 @@ func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string, ownerTa
 }
 
 func (c *AwsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error) {
+
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -166,6 +166,7 @@ func (c *AwsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error)
 }
 
 func (c *AwsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, error) {
+
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -186,6 +187,7 @@ func (c *AwsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, er
 
 // Add a SecurityGroup to a load balancer. This is an idempotent operation
 func (c *AwsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securityGroup *ec2.SecurityGroup) error {
+
 	i := &elb.ApplySecurityGroupsToLoadBalancerInput{
 		LoadBalancerName: aws.String(loadBalancerName),
 		SecurityGroups:   aws.StringSlice([]string{*securityGroup.GroupId}),
