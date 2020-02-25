@@ -30,7 +30,7 @@ func (c *AwsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resource
 			// Since we only care about the ID number, we take index of the last "/" char and parse right
 			zoneID := aws.StringValue(zone.Id)
 			slashIndex := strings.LastIndex(zoneID, "/")
-			publicHostedZoneID = zoneID[slashIndex+1 : len(zoneID)]
+			publicHostedZoneID = zoneID[slashIndex+1:]
 		}
 	}
 

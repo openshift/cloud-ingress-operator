@@ -271,7 +271,7 @@ func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsCli
 
 func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, baseClusterDomain, endpointName string, awsObj *awsclient.AWSLoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-    err := awsAPI.UpsertCNAME(baseClusterDomain, endpointName, awsObj.DNSZoneId, endpointName + "." + baseClusterDomain, "RH API Endpoint", false)
+		err := awsAPI.UpsertCNAME(baseClusterDomain, endpointName, awsObj.DNSZoneId, endpointName+"."+baseClusterDomain, "RH API Endpoint", false)
 		if err != nil {
 			reqLogger.Info("Couldn't upsert a DNS record: " + err.Error())
 			if i == config.MaxAPIRetries {

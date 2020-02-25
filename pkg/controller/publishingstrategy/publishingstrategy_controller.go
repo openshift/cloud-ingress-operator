@@ -166,7 +166,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		// which happens to be the domainName minus the name of the cluster
 		// Since there are NO object on cluster with just clusterName,
 		// we will index the first period and parse right
-		pubDomainName := domainName[strings.Index(domainName, ".")+1 : len(domainName)] // pubDomainName in form of ```j5u3.s1.devshift.org```
+		pubDomainName := domainName[strings.Index(domainName, ".")+1:] // pubDomainName in form of ```j5u3.s1.devshift.org```
 		apiDNSName := "api." + domainName + "."
 		comment := "Update api.<clusterName> alias to internal NLB"
 

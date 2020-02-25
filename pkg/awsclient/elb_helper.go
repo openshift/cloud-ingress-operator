@@ -3,10 +3,10 @@ package awsclient
 import (
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elb"
+	"github.com/aws/aws-sdk-go/service/elbv2"
 )
 
 // AWSLoadBalancer a handy way to return information about an ELB

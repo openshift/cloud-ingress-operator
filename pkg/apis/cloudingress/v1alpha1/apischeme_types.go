@@ -40,7 +40,7 @@ type APISchemeStatus struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 	CloudLoadBalancerDNSName string                 `json:"cloudLoadBalancerDNSName,omitempty"`
 	Conditions               []APISchemeCondition   `json:"conditions,omitempty"`
-	State                    APISchemeConditionType `json:"state",omitempty"`
+	State                    APISchemeConditionType `json:"state,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -257,5 +257,3 @@ func (c *AwsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeS
 func (c *AwsClient) CreateTags(i *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 	return c.ec2Client.CreateTags(i)
 }
-
-
