@@ -75,6 +75,25 @@ type ReconcileAPIScheme struct {
 	scheme *runtime.Scheme
 }
 
+// LoadBalancer contains the relevant information to create a Load Balancer
+// TODO: Move this into pkg/client
+type LoadBalancer struct {
+	EndpointName     string            // FQDN of what it should be called
+	BaseDomain       string            // What is the base domain (DNS zone) for the EndpointName record?
+	Subnets          []string          // On which subnets it should operate (provider-native IDs)
+	Tags             map[string]string // Map of tags to apply to the Load Balancer
+	MachineInstances []string          // What are the cloud provider instance IDs that should receive traffic?
+}
+
+// CIDRAccess represents the information needed to ensure proper access to the named LoadBalancer
+// TODO: Move this into pkg/client
+type CIDRAccess struct {
+	LoadBalancer         *LoadBalancer     // For what LoadBalancer does these CIDR restrictions apply?
+	SecurityGroupName    string            // What should the Security Group be called?
+	SecurityGroupVPCName string            // To what VPC should the Security Group be attached?
+	Tags                 map[string]string // Tags to apply to the Security Group and (non-LoadBalancer) related assets?
+}
+
 // Reconcile will ensure that the rh-api management api endpoint is created and ready.
 // Rough Steps:
 // 1. Create AWS ELB (CreatingLoadBalancer)
@@ -164,8 +183,23 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	if len(vpcs) > 1 {
 		reqLogger.Info(fmt.Sprintf("Multiple VPCs detected for master nodes. Using %s for security group", vpcs[0]))
 	}
+
+	lb := &LoadBalancer{
+		EndpointName:     config.AdminAPIName,
+		Subnets:          subnets,
+		Tags:             ownerTags,
+		MachineInstances: masterNodeInstances,
+		BaseDomain:       clusterBaseDomain,
+	}
+	cidrAccess := &CIDRAccess{
+		LoadBalancer:         lb,
+		SecurityGroupName:    config.AdminAPISecurityGroupName,
+		SecurityGroupVPCName: vpcs[0],
+		Tags:                 ownerTags,
+	}
+
 	// Now try to make sure all the things for Admin API are present in AWS
-	err = ensureAdminAPIEndpoint(reqLogger, instance, awsClient, config.AdminAPIName, config.AdminAPISecurityGroupName, vpcs[0], clusterBaseDomain, subnets, masterNodeInstances, ownerTags)
+	err = ensureAdminAPIEndpoint(reqLogger, instance, awsClient, lb, cidrAccess)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
 		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
@@ -187,12 +221,12 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	return reconcile.Result{}, nil
 }
 
-func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, endpointName string, elbSubnets []string, ownerTags map[string]string) (*awsclient.AWSLoadBalancer, error) {
+func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
 	var awsObj *awsclient.AWSLoadBalancer
 	found := false
 	var err error
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		found, awsObj, err = awsAPI.DoesELBExist(endpointName)
+		found, awsObj, err = awsAPI.DoesELBExist(lb.EndpointName)
 		if err != nil {
 			reqLogger.Info("Couldn't determine if the Admin API ELB exists due to error: " + err.Error())
 			if i == config.MaxAPIRetries {
@@ -212,9 +246,8 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 		reqLogger.Info("Need to create ELB for Admin API")
 
 		for i := 1; i <= config.MaxAPIRetries; i++ {
-			awsObj, err = awsAPI.CreateClassicELB(endpointName, elbSubnets, 6443, ownerTags)
+			awsObj, err = awsAPI.CreateClassicELB(lb.EndpointName, lb.Subnets, 6443, lb.Tags)
 			if err != nil {
-				fmt.Printf("Error creating ELB: " + err.Error())
 				if i == config.MaxAPIRetries {
 					reqLogger.Info("Out of retries")
 					return nil, err
@@ -230,10 +263,10 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 	return awsObj, nil
 }
 
-func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, endpointName, securityGroupName, securityGroupPVCName string, ownerTags map[string]string) error {
+func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, cidrAccess *CIDRAccess) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 
-		err := awsAPI.EnsureCIDRAccess(endpointName, securityGroupName, securityGroupPVCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, ownerTags)
+		err := awsAPI.EnsureCIDRAccess(cidrAccess.LoadBalancer.EndpointName, cidrAccess.SecurityGroupName, cidrAccess.SecurityGroupVPCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrAccess.Tags)
 		if err != nil {
 			reqLogger.Info("Error ensuring CIDR access for the security group: " + err.Error())
 			if i == config.MaxAPIRetries {
@@ -250,11 +283,11 @@ func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIS
 	return nil
 }
 
-func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, endpointName string, primaryInstanceIDs []string) error {
+func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := awsAPI.AddLoadBalancerInstances(endpointName, primaryInstanceIDs)
+		err := awsAPI.AddLoadBalancerInstances(lb.EndpointName, lb.MachineInstances)
 		if err != nil {
-			reqLogger.Info(fmt.Sprintf("Couldn't add instances %s to ELB %s: %s", primaryInstanceIDs, endpointName, err.Error()))
+			reqLogger.Info(fmt.Sprintf("Couldn't add instances %s to ELB %s: %s", lb.MachineInstances, lb.EndpointName, err.Error()))
 			if i == config.MaxAPIRetries {
 				reqLogger.Info("Out of retries")
 				return err
@@ -262,16 +295,16 @@ func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsCli
 			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
-			reqLogger.Info(fmt.Sprintf("Added instances %s to ELB", primaryInstanceIDs))
+			reqLogger.Info(fmt.Sprintf("Added instances %s to ELB", lb.MachineInstances))
 			break
 		}
 	}
 	return nil
 }
 
-func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, baseClusterDomain, endpointName string, awsObj *awsclient.AWSLoadBalancer) error {
+func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := awsAPI.UpsertCNAME(baseClusterDomain, endpointName, awsObj.DNSZoneId, endpointName+"."+baseClusterDomain, "RH API Endpoint", false)
+		err := awsAPI.UpsertCNAME(lb.BaseDomain, lb.EndpointName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
 		if err != nil {
 			reqLogger.Info("Couldn't upsert a DNS record: " + err.Error())
 			if i == config.MaxAPIRetries {
@@ -289,28 +322,27 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, baseClu
 
 // ensureAdminAPIEndpoint will ensure the Admin API endpoint exists. Returns any error
 // This function is idempotent
-func ensureAdminAPIEndpoint(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient,
-	endpointName, securityGroupName, securityGroupPVCName, baseClusterDomain string, elbSubnets, primaryInstanceIDs []string, ownerTags map[string]string) error {
+func ensureAdminAPIEndpoint(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
 
 	// First, let's ensure an ELB exists
-	awsObj, err := ensureCloudLoadBalancer(reqLogger, awsAPI, endpointName, elbSubnets, ownerTags)
+	awsObj, err := ensureCloudLoadBalancer(reqLogger, awsAPI, lb)
 	if err != nil {
 		// This is actually fatal due to the retries in ensureCloudLoadBalancer
 		return err
 	}
 	// Now, ensure CIDR access
-	err = ensureCIDRAccess(reqLogger, crObject, awsAPI, endpointName, securityGroupName, securityGroupPVCName, ownerTags)
+	err = ensureCIDRAccess(reqLogger, crObject, awsAPI, cidrAccess)
 	if err != nil {
 		// This is actually fatal
 		return err
 	}
 	// Add the "master" instances are attached to the ELB
-	err = ensureLoadBalancerInstances(reqLogger, awsAPI, endpointName, primaryInstanceIDs)
+	err = ensureLoadBalancerInstances(reqLogger, awsAPI, lb)
 	if err != nil {
 		// This is actually fatal
 		return err
 	}
-	err = ensureDNSRecord(reqLogger, awsAPI, baseClusterDomain, endpointName, awsObj)
+	err = ensureDNSRecord(reqLogger, awsAPI, lb, awsObj)
 	if err != nil {
 		// This is actually fatal
 		return err
