@@ -16,19 +16,25 @@ type AWSLoadBalancer struct {
 	DNSZoneId string // Zone ID
 }
 
+// MapToELBTags will turn a map[string]string into a slice of *elb.Tag
+func (c *AwsClient) MapToELBTags(tags map[string]string) []*elb.Tag {
+	ret := make([]*elb.Tag, 0)
+	for k, v := range tags {
+		ret = append(ret, &elb.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	return ret
+}
+
 // CreateClassicELB creates a classic ELB in Amazon, as in for management API endpoint.
 // inputs are the name of the ELB, the availability zone(s) and subnet(s) the
 // ELB should attend, as well as the listener port.
 // The port is used for the instance port and load balancer port
 // Return is the (FQDN) DNS name from Amazon, and error, if any.
 func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerPort int64, tagList map[string]string) (*AWSLoadBalancer, error) {
-	tags := make([]*elb.Tag, 0)
-	for k, v := range tagList {
-		tags = append(tags, &elb.Tag{
-			Key:   aws.String(k),
-			Value: aws.String(v),
-		})
-	}
+	tags := c.MapToELBTags(tagList)
 
 	i := &elb.CreateLoadBalancerInput{
 		LoadBalancerName: aws.String(elbName),
@@ -60,18 +66,16 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 	return awsELBObj, nil
 }
 
-// SetLoadBalancerPrivate sets a load balancer private by removing its
+// RemoveLoadBalancerListeners sets a load balancer private by removing its
 // listeners (port 6443/TCP)
-func (c *AwsClient) SetLoadBalancerPrivate(elbName string) error {
-
+func (c *AwsClient) RemoveLoadBalancerListeners(elbName string) error {
 	return c.removeListenersFromELB(elbName)
 }
 
-// SetLoadBalancerPublic will set the specified load balancer public by
+// AddLoadBalancerListeners will set the specified load balancer public by
 // re-adding the 6443/TCP -> 6443/TCP listener. Any instances (still)
 // attached to the load balancer will begin to receive traffic.
-func (c *AwsClient) SetLoadBalancerPublic(elbName string, listenerPort int64) error {
-
+func (c *AwsClient) AddLoadBalancerListeners(elbName string, listenerPort int64) error {
 	l := []*elb.Listener{
 		{
 			InstancePort:     aws.Int64(listenerPort),
