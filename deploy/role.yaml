@@ -79,3 +79,27 @@ rules:
   - patch
   - update
   - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: cloud-ingress-operator-cr
+rules:
+  - apiGroups:
+    - machine.openshift.io
+    resources:
+      - machine
+      - machineset
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+    - config.openshift.io
+    resources:
+      - infrastructures
+    verbs:
+      - list
+      - get
+      - watch

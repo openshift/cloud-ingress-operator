@@ -1,7 +1,12 @@
 apiVersion: cloudingress.managed.openshift.io/v1alpha1
 kind: APIScheme
 metadata:
-  name: example-APIScheme
+  name: example-apischeme
 spec:
   # Add fields here
-  size: 3
+  managementAPIServerIngress:
+    enabled: true
+    dnsName: rh-api
+    allowedCIDRBlocks:
+      - "127.0.0.1/32"
+
