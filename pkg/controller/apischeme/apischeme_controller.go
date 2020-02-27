@@ -119,6 +119,13 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	// If the management API isn't enabled, we have nothing to do!
+	// TODO (lisa/lseelye): This should call a teardown feature to ensure we have
+	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
+	// depend on rh-api.
+	if !instance.Spec.ManagementAPIServerIngress.Enabled {
+		return reconcile.Result{}, nil
+	}
 
 	ownerTags, err := utils.AWSOwnerTag(r.client)
 	if err != nil {
@@ -185,7 +192,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 
 	lb := &LoadBalancer{
-		EndpointName:     config.AdminAPIName,
+		EndpointName:     instance.Spec.ManagementAPIServerIngress.DNSName,
 		Subnets:          subnets,
 		Tags:             ownerTags,
 		MachineInstances: masterNodeInstances,
@@ -208,7 +215,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 
 	// And now, tell the APIServer/cluster object about it.
-	err = r.addAdminAPIToAPIServerObject(reqLogger, config.AdminAPIName+"."+clusterBaseDomain)
+	err = r.addAdminAPIToAPIServerObject(reqLogger, instance.Spec.ManagementAPIServerIngress.DNSName+"."+clusterBaseDomain)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't update APIServer/cluster object")
 		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't update APIServer/cluster object", cloudingressv1alpha1.ConditionError)

@@ -27,8 +27,11 @@ type APISchemeSpec struct {
 
 // ManagementAPIServerIngress defines the Management API ingress
 type ManagementAPIServerIngress struct {
-	Enabled           bool     `json:"enabled"`
-	DNSName           string   `json:"dnsName"`
+	// Enabled to create the Management API endpoint or not.
+	Enabled bool `json:"enabled"`
+	// DNSName is the name that should be used for DNS of the management API, eg rh-api
+	DNSName string `json:"dnsName"`
+	// AllowedCIDRBlocks is the list of CIDR blocks that should be allowed to access the management API
 	AllowedCIDRBlocks []string `json:"allowedCIDRBlocks"`
 }
 
