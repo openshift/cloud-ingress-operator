@@ -8,6 +8,8 @@ import (
 	"os"
 	"runtime"
 
+	// "net/http"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -17,7 +19,6 @@ import (
 	"github.com/openshift/cloud-ingress-operator/version"
 
 	configv1 "github.com/openshift/api/config/v1"
-	//machineapi "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -50,6 +51,32 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
+/*
+type wrapTransport struct {
+	rt http.RoundTripper
+}
+
+func (w *wrapTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := w.rt.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("* RT Method = %s ; URI = %s\n", req.Method, req.URL)
+	return res, nil
+}
+
+type plugin struct{}
+
+func (*plugin) WrapTransport(rt http.RoundTripper) http.RoundTripper {
+	return &wrapTransport{}
+}
+
+func (*plugin) Login() error { return nil }
+
+func pluginProvider(string, map[string]string, rest.AuthProviderConfigPersister) (rest.AuthProvider, error) {
+	return &plugin{}, nil
+}
+*/
 func main() {
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
@@ -85,7 +112,11 @@ func main() {
 		log.Error(err, "")
 		os.Exit(1)
 	}
-
+	/*
+		cfg.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+			return &wrapTransport{rt}
+		}
+	*/
 	ctx := context.TODO()
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "cloud-ingress-operator-lock")
