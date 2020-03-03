@@ -7,10 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 )
 
-// UpsertCNAME will change resource record
-// +adminAPIName+ (eg rh-api) as a CNAME alias to +elbFQDN+
-// or api.<clusterName> from external to internal NLB
-func (c *AwsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
+// UpsertARecord adds an A record alias named DNSName in the target zone aliasDNSZoneID, inside the clusterDomain's zone.
+func (c *AwsClient) UpsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
 	// look up clusterDomain to get hostedzoneID
 	lookup := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(clusterDomain),
@@ -47,7 +45,7 @@ func (c *AwsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resource
 							HostedZoneId:         aws.String(aliasDNSZoneID),
 						},
 						Name: aws.String(resourceRecordSetName),
-						Type: aws.String("CNAME"),
+						Type: aws.String("A"),
 					},
 				},
 			},

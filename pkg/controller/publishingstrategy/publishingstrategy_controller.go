@@ -171,7 +171,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		comment := "Update api.<clusterName> alias to internal NLB"
 
 		// upsert resource record to change api.<clusterName> from external NLB to internal NLB
-		err = awsClient.UpsertCNAME(pubDomainName, intDNSName, intHostedZoneID, apiDNSName, comment, false)
+		err = awsClient.UpsertARecord(pubDomainName, intDNSName, intHostedZoneID, apiDNSName, comment, false)
 		if err != nil {
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
 		}

@@ -15,7 +15,6 @@ import (
 )
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
-const nameFilterKey string = "tag:Name"
 
 // GetClusterBaseDomain returns the installed cluster's base domain name
 func GetClusterBaseDomain(kclient client.Client) (string, error) {
@@ -50,36 +49,43 @@ func GetClusterName(kclient client.Client) (string, error) {
 }
 
 // GetMasterNodeSubnets returns all the subnets for Machines with 'master' label.
-// TODO: Validate the return here are AWS identifiers.
-func GetMasterNodeSubnets(kclient client.Client) ([]string, error) {
+// return structure:
+// {
+//   public => subnetname,
+//   private => subnetname,
+// }
+//
+func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 	machineList := &machineapi.MachineList{}
+	subnets := make(map[string]string)
 	err := kclient.List(context.TODO(), machineList, client.InNamespace("openshift-machine-api"), client.MatchingLabels{masterMachineLabel: "master"})
 	if err != nil {
-		return []string{}, err
+		return subnets, err
 	}
-	subnets := []string{}
-	// only append unique subnet IDs
-	dedup := make(map[string]bool)
+
+	// get the AZ from a Master object's providerSpec.
 	codec, err := awsproviderapi.NewCodec()
+
 	if err != nil {
-		return []string{}, err
+		return subnets, err
 	}
-	for _, machineObj := range machineList.Items {
-		awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
-		err := codec.DecodeProviderSpec(&machineObj.Spec.ProviderSpec, awsconfig)
-		//		clusterConfig, err := awsproviderapi.ClusterConfigFromProviderSpec(machineObj.Spec.ProviderSpec)
-		if err != nil {
-			return []string{}, err
-		}
-		subnetName, err := getNameFromFilters(&awsconfig.Subnet.Filters)
-		if err != nil {
-			return []string{}, err
-		}
-		if !dedup[subnetName] {
-			subnets = append(subnets, subnetName)
-			dedup[subnetName] = true
-		}
+
+	// Obtain the availability zone
+	awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
+	err = codec.DecodeProviderSpec(&machineList.Items[0].Spec.ProviderSpec, awsconfig)
+	if err != nil {
+		return subnets, err
 	}
+
+	// Infra object gives us the Infrastructure name, which is the combination of
+	// cluster name and identifier.
+	infra, err := getInfrastructureObject(kclient)
+	if err != nil {
+		return subnets, err
+	}
+	subnets["public"] = fmt.Sprintf("%s-public-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
+	subnets["private"] = fmt.Sprintf("%s-private-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
+
 	return subnets, nil
 }
 
@@ -144,14 +150,4 @@ func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
 
 	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
 	return m, nil
-}
-
-// getNameFromFilters will return the value of the name filter tag
-func getNameFromFilters(filters *[]awsproviderapi.Filter) (string, error) {
-	for _, filter := range *filters {
-		if filter.Name == nameFilterKey {
-			return filter.Values[0], nil
-		}
-	}
-	return "", fmt.Errorf("Didn't find a name filter")
 }

@@ -157,6 +157,9 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
+	// Get both public and private subnet names for master Machines
+	// Note: master Machines have only one listed (private one) in their sepc, but
+	// this returns both public and private. We need the public one.
 	subnets, err := utils.GetMasterNodeSubnets(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the subnets used by master nodes")
@@ -164,18 +167,8 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	if len(subnets) == 0 {
-		if err != nil {
-			reqLogger.Error(err, "Zero length subnets")
-		} else {
-			reqLogger.Info("Zero length subnets, but no error set.")
-			err = fmt.Errorf("Zero length subnets")
-		}
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	subnetIDs, err := awsClient.SubnetNameToSubnetIDLookup(subnets)
+	// Turn the public subnet name into a subnet ID
+	subnetIDs, err := awsClient.SubnetNameToSubnetIDLookup([]string{subnets["public"]})
 	if err != nil {
 		reqLogger.Error(err, "Couldn't turn subnet names into subnet IDs")
 		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't turn subnet names into subnet IDs", cloudingressv1alpha1.ConditionError)
@@ -341,7 +334,7 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *Loa
 	// Private zone
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		// Append a . to get the zone name
-		err := awsAPI.UpsertCNAME(lb.BaseDomain+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
+		err := awsAPI.UpsertARecord(lb.BaseDomain+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
 		if err != nil {
 			reqLogger.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
 			if i == config.MaxAPIRetries {
@@ -361,7 +354,7 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *Loa
 	publicZone := lb.BaseDomain[strings.Index(lb.BaseDomain, ".")+1:]
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		// Append a . to get the zone name
-		err := awsAPI.UpsertCNAME(publicZone+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
+		err := awsAPI.UpsertARecord(publicZone+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
 		if err != nil {
 			reqLogger.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
 			if i == config.MaxAPIRetries {
