@@ -4,20 +4,18 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"regexp"
+	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	// machineapi and awsprovider are tied
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsprovider/v1alpha1"
-	machineapi "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 )
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
-const instanceRegex string = `^aws:\/\/\/.*\/(.*)$`
+const nameFilterKey string = "tag:Name"
 
 // GetClusterBaseDomain returns the installed cluster's base domain name
 func GetClusterBaseDomain(kclient client.Client) (string, error) {
@@ -25,11 +23,12 @@ func GetClusterBaseDomain(kclient client.Client) (string, error) {
 	if err != nil {
 		return "", nil
 	}
+	// This starts with "api." that needs to be removed.
 	u, err := url.Parse(infra.Status.APIServerURL)
 	if err != nil {
 		return "", fmt.Errorf("Couldn't parse the cluster's URI from %s: %s", infra.Status.APIServerURL, err)
 	}
-	return u.Hostname(), nil
+	return u.Hostname()[4:], nil
 }
 
 // GetClusterPlatform will return the installed cluster's platform type
@@ -54,59 +53,34 @@ func GetClusterName(kclient client.Client) (string, error) {
 // TODO: Validate the return here are AWS identifiers.
 func GetMasterNodeSubnets(kclient client.Client) ([]string, error) {
 	machineList := &machineapi.MachineList{}
-	s := map[string]string{masterMachineLabel: "master"}
-
-	subnets := []string{}
-
-	err := kclient.List(context.TODO(), machineList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(s)})
+	err := kclient.List(context.TODO(), machineList, client.InNamespace("openshift-machine-api"), client.MatchingLabels{masterMachineLabel: "master"})
 	if err != nil {
-		return subnets, err
+		return []string{}, err
 	}
-
+	subnets := []string{}
 	// only append unique subnet IDs
 	dedup := make(map[string]bool)
+	codec, err := awsproviderapi.NewCodec()
+	if err != nil {
+		return []string{}, err
+	}
 	for _, machineObj := range machineList.Items {
-		clusterConfig, err := awsproviderapi.ClusterConfigFromProviderSpec(machineObj.Spec.ProviderSpec)
+		awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
+		err := codec.DecodeProviderSpec(&machineObj.Spec.ProviderSpec, awsconfig)
+		//		clusterConfig, err := awsproviderapi.ClusterConfigFromProviderSpec(machineObj.Spec.ProviderSpec)
 		if err != nil {
-			return subnets, err
+			return []string{}, err
 		}
-		for _, subnet := range clusterConfig.NetworkSpec.Subnets {
-			if !dedup[subnet.ID] {
-				subnets = append(subnets, subnet.ID)
-				dedup[subnet.ID] = true
-			}
+		subnetName, err := getNameFromFilters(&awsconfig.Subnet.Filters)
+		if err != nil {
+			return []string{}, err
+		}
+		if !dedup[subnetName] {
+			subnets = append(subnets, subnetName)
+			dedup[subnetName] = true
 		}
 	}
 	return subnets, nil
-}
-
-// GetMasterNodeVPCs returns all the VPCs for Machines with 'master' label.
-// TODO: Validate the return here are AWS identifiers.
-func GetMasterNodeVPCs(kclient client.Client) ([]string, error) {
-	machineList := &machineapi.MachineList{}
-	s := map[string]string{masterMachineLabel: "master"}
-
-	vpcs := []string{}
-
-	err := kclient.List(context.TODO(), machineList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(s)})
-	if err != nil {
-		return vpcs, err
-	}
-
-	// only append unique subnet IDs
-	dedup := make(map[string]bool)
-	for _, machineObj := range machineList.Items {
-		clusterConfig, err := awsproviderapi.ClusterConfigFromProviderSpec(machineObj.Spec.ProviderSpec)
-		if err != nil {
-			return vpcs, err
-		}
-
-		if !dedup[clusterConfig.NetworkSpec.VPC.ID] {
-			vpcs = append(vpcs, clusterConfig.NetworkSpec.VPC.ID)
-			dedup[clusterConfig.NetworkSpec.VPC.ID] = true
-		}
-	}
-	return vpcs, nil
 }
 
 // GetClusterRegion returns the installed cluster's AWS region
@@ -126,20 +100,22 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 // but .Spec.ProviderID is standard
 func GetClusterMasterInstances(kclient client.Client) ([]string, error) {
 	machineList := &machineapi.MachineList{}
-	s := map[string]string{masterMachineLabel: "master"}
-
-	err := kclient.List(context.TODO(), machineList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(s)})
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-machine-api"),
+		client.MatchingLabels{masterMachineLabel: "master"},
+	}
+	err := kclient.List(context.TODO(), machineList, listOptions...)
 	if err != nil {
 		return []string{}, err
 	}
 
 	ids := make([]string, 0)
-	matcher := regexp.MustCompile(instanceRegex)
-	for _, machine := range machineList.Items {
 
-		r := matcher.FindString(*machine.Spec.ProviderID)
-		if r != "" {
-			ids = append(ids, r)
+	for _, machineObj := range machineList.Items {
+		r := strings.LastIndex(*machineObj.Spec.ProviderID, "/")
+		if r != -1 {
+			n := *machineObj.Spec.ProviderID
+			ids = append(ids, n[r+1:])
 		}
 	}
 	return ids, nil
@@ -149,7 +125,7 @@ func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, e
 	infra := &configv1.Infrastructure{}
 	ns := types.NamespacedName{
 		Namespace: "",
-		Name:      "",
+		Name:      "cluster",
 	}
 	err := kclient.Get(context.TODO(), ns, infra)
 	if err != nil {
@@ -168,4 +144,14 @@ func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
 
 	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
 	return m, nil
+}
+
+// getNameFromFilters will return the value of the name filter tag
+func getNameFromFilters(filters *[]awsproviderapi.Filter) (string, error) {
+	for _, filter := range *filters {
+		if filter.Name == nameFilterKey {
+			return filter.Values[0], nil
+		}
+	}
+	return "", fmt.Errorf("Didn't find a name filter")
 }

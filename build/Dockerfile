@@ -1,4 +1,4 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.12 AS builder
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 
 # Allow specifying a GOPROXY cache during build to speed up dependency resolution
 ARG GOPROXY=https://proxy.golang.org

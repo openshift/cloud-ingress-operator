@@ -54,7 +54,7 @@ func (c *AwsClient) CreateClassicELB(elbName string, subnets []string, listenerP
 	if err != nil {
 		return &AWSLoadBalancer{}, err
 	}
-	err = c.addHealthCheck(elbName, "HTTP", "/", 6443)
+	err = c.addHealthCheck(elbName, "TCP", "/", 6443)
 	if err != nil {
 		return &AWSLoadBalancer{}, err
 	}

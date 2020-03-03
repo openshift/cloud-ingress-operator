@@ -8,5 +8,5 @@ spec:
     enabled: true
     dnsName: rh-api
     allowedCIDRBlocks:
-      - "127.0.0.1/32"
+      - "0.0.0.0/0"
 

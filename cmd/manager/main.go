@@ -16,6 +16,10 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	"github.com/openshift/cloud-ingress-operator/version"
 
+	configv1 "github.com/openshift/api/config/v1"
+	//machineapi "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -104,6 +108,15 @@ func main() {
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	if err := machineapi.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+	if err := configv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

@@ -24,13 +24,14 @@ func (c *AwsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resource
 	// get public hosted zone ID needed to changeResourceRecordSets
 	var publicHostedZoneID string
 	for _, zone := range listHostedZones.HostedZones {
-		if zone.Config.PrivateZone == aws.Bool(false) || zone.Name == aws.String(clusterDomain) {
+		if *zone.Name == clusterDomain {
 			// In order to get the publicHostedZoneID we need to get
 			// the HostedZone.Id object which is in the form of "/hostedzone/Z1P3C0HZA40C0N"
 			// Since we only care about the ID number, we take index of the last "/" char and parse right
 			zoneID := aws.StringValue(zone.Id)
 			slashIndex := strings.LastIndex(zoneID, "/")
 			publicHostedZoneID = zoneID[slashIndex+1:]
+			break
 		}
 	}
 
