@@ -138,6 +138,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		loadBalancerInfo, err := awsClient.ListAllNLBs()
 		if err != nil {
 			log.Error(err, "Error listing all NLBs")
+			return reconcile.Result{}, err
 		}
 
 		var intDNSName string
@@ -176,6 +177,29 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
 		}
 		return reconcile.Result{}, nil
+	}
+
+	// if CR is wanted the default server API to be internet-facing, we
+	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
+	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
+		// get a list of all non-classic ELBs
+		loadBalancerInfo, err := awsClient.ListAllNLBs()
+		if err != nil {
+			log.Error(err, "error listing all NLBs")
+			return reconcile.Result{}, err
+		}
+
+		// check if external NLB exists
+		// if it does no action needed
+		for _, loadBalancer := range loadBalancerInfo {
+			if loadBalancer.Scheme == "internet-facing" {
+				log.Info("External LoadBalancer already exists")
+				return reconcile.Result{}, nil
+			}
+		}
+
+		// create a new external NLB
+
 	}
 
 	return reconcile.Result{}, nil
