@@ -2,6 +2,7 @@ package publishingstrategy
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -198,7 +199,23 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			}
 		}
 
-		// create a new external NLB
+		// 1. create a new external NLB (TODO: add tags)
+		extNLBName := configv1.InfrastructureStatus{}.InfrastructureName + "-ext"
+		newNLBs, err := awsClient.CreateNetworkLoadBalancer(extNLBName, "internet-facing", "subnetID") // subnetID can be found by utils.GetMasterNodeSubnets(r.client)
+		if err != nil {
+			log.Error(err, "couldn't create external NLB")
+			return reconcile.Result{}, err
+		}
+
+		// 2. create target group for listener
+		targetGroupArn, err := awsClient.CreateExternalNLBTargetGroup(extNLBName, newNLBs[0].VpcID)
+		if err != nil {
+			log.Error(err, "couldn't create targetGroup for external NLB")
+			return reconcile.Result{}, err
+		}
+		fmt.Println(targetGroupArn)
+
+		// 3. register master IPs(targets) with target group
 
 	}
 

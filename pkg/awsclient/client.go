@@ -72,6 +72,12 @@ type Client interface {
 	DescribeLoadBalancersV2(*elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error)
 	// delete external NLB so we can make cluster private
 	DeleteLoadBalancerV2(*elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error)
+	// create nlb to make server api public
+	CreateLoadBalancerV2(*elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error)
+	// create targetGroup for new external NLB
+	CreateTargetGroupV2(*elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error)
+	// register master instances with target group
+	RegisterTargetsV2(*elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error)
 
 	// ELBv2 - to figure out which to assign back to the nlb
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
@@ -216,6 +222,18 @@ func (c *awsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput)
 
 func (c *awsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
 	return c.elbv2Client.DeleteLoadBalancer(i)
+}
+
+func (c *awsClient) CreateLoadBalancerV2(i *elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error) {
+	return c.elbv2Client.CreateLoadBalancer(i)
+}
+
+func (c *awsClient) CreateTargetGroupV2(i *elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error) {
+	return c.elbv2Client.CreateTargetGroup(i)
+}
+
+func (c *awsClient) RegisterTargetsV2(i *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
+	return c.elbv2Client.RegisterTargets(i)
 }
 
 func (c *awsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
