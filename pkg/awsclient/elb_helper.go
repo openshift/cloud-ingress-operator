@@ -215,7 +215,7 @@ func (c *AwsClient) DeleteExternalLoadBalancer(extLoadBalancerArn string) error 
 }
 
 // CreateNetworkLoadBalancer should only return one new NLB at a time
-func (c *awsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]LoadBalancerV2, error) {
+func (c *AwsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]LoadBalancerV2, error) {
 	i := &elbv2.CreateLoadBalancerInput{
 		Name:   aws.String(lbName),
 		Scheme: aws.String(scheme),
@@ -247,7 +247,7 @@ func (c *awsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]
 }
 
 // create the external NLB target group and returns the targetGroupArn
-func (c *awsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string, error) {
+func (c *AwsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string, error) {
 	i := &elbv2.CreateTargetGroupInput{
 		Name:                       aws.String(nlbName),
 		Port:                       aws.Int64(6443),

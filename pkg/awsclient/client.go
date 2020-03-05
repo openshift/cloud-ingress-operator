@@ -220,23 +220,23 @@ func (c *AwsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*e
 	return c.elbClient.DescribeLoadBalancers(i)
 }
 
-func (c *awsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
+func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
 	return c.elbv2Client.DescribeLoadBalancers(i)
 }
 
-func (c *awsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
+func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
 	return c.elbv2Client.DeleteLoadBalancer(i)
 }
 
-func (c *awsClient) CreateLoadBalancerV2(i *elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error) {
+func (c *AwsClient) CreateLoadBalancerV2(i *elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error) {
 	return c.elbv2Client.CreateLoadBalancer(i)
 }
 
-func (c *awsClient) CreateTargetGroupV2(i *elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error) {
+func (c *AwsClient) CreateTargetGroupV2(i *elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error) {
 	return c.elbv2Client.CreateTargetGroup(i)
 }
 
-func (c *awsClient) RegisterTargetsV2(i *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
+func (c *AwsClient) RegisterTargetsV2(i *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
 	return c.elbv2Client.RegisterTargets(i)
 }
 
@@ -249,12 +249,6 @@ func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWi
 
 func (c *AwsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
-}
-func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
-	return c.elbv2Client.DescribeLoadBalancers(i)
-}
-func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
-	return c.elbv2Client.DeleteLoadBalancer(i)
 }
 
 func (c *AwsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
