@@ -21,13 +21,16 @@ spec:
           - cloud-ingress-operator
           imagePullPolicy: Always
           env:
+            # "" so that the cache can read objects outside its namespace
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "cloud-ingress-operator"
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

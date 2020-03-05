@@ -7,10 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 )
 
-// UpsertCNAME will change resource record
-// +adminAPIName+ (eg rh-api) as a CNAME alias to +elbFQDN+
-// or api.<clusterName> from external to internal NLB
-func (c *awsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
+// UpsertARecord adds an A record alias named DNSName in the target zone aliasDNSZoneID, inside the clusterDomain's zone.
+func (c *AwsClient) UpsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
 	// look up clusterDomain to get hostedzoneID
 	lookup := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(clusterDomain),
@@ -24,13 +22,14 @@ func (c *awsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resource
 	// get public hosted zone ID needed to changeResourceRecordSets
 	var publicHostedZoneID string
 	for _, zone := range listHostedZones.HostedZones {
-		if zone.Config.PrivateZone == aws.Bool(false) && zone.Name == aws.String(clusterDomain) {
+		if *zone.Name == clusterDomain {
 			// In order to get the publicHostedZoneID we need to get
 			// the HostedZone.Id object which is in the form of "/hostedzone/Z1P3C0HZA40C0N"
 			// Since we only care about the ID number, we take index of the last "/" char and parse right
 			zoneID := aws.StringValue(zone.Id)
 			slashIndex := strings.LastIndex(zoneID, "/")
-			publicHostedZoneID = zoneID[slashIndex+1 : len(zoneID)]
+			publicHostedZoneID = zoneID[slashIndex+1:]
+			break
 		}
 	}
 
@@ -46,7 +45,7 @@ func (c *awsClient) UpsertCNAME(clusterDomain, DNSName, aliasDNSZoneID, resource
 							HostedZoneId:         aws.String(aliasDNSZoneID),
 						},
 						Name: aws.String(resourceRecordSetName),
-						Type: aws.String("CNAME"),
+						Type: aws.String("A"),
 					},
 				},
 			},

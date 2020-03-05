@@ -168,12 +168,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		// which happens to be the domainName minus the name of the cluster
 		// Since there are NO object on cluster with just clusterName,
 		// we will index the first period and parse right
-		pubDomainName := domainName[strings.Index(domainName, ".")+1 : len(domainName)] // pubDomainName in form of ```j5u3.s1.devshift.org```
+		pubDomainName := domainName[strings.Index(domainName, ".")+1:] // pubDomainName in form of ```j5u3.s1.devshift.org```
 		apiDNSName := "api." + domainName + "."
 		comment := "Update api.<clusterName> alias to internal NLB"
 
 		// upsert resource record to change api.<clusterName> from external NLB to internal NLB
-		err = awsClient.UpsertCNAME(pubDomainName, intDNSName, intHostedZoneID, apiDNSName, comment, false)
+		err = awsClient.UpsertARecord(pubDomainName, intDNSName, intHostedZoneID, apiDNSName, comment, false)
 		if err != nil {
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
 		}
