@@ -1,5 +1,7 @@
 package awsclient
 
+// TODO: Retry upon API failure
+
 import (
 	"context"
 	"fmt"
@@ -72,8 +74,6 @@ type Client interface {
 	DescribeLoadBalancersV2(*elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error)
 	// delete external NLB so we can make cluster private
 	DeleteLoadBalancerV2(*elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error)
-
-	// ELBv2 - to figure out which to assign back to the nlb
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
 
 	/*
@@ -102,16 +102,18 @@ type Client interface {
 	RevokeSecurityGroupIngress(*ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error)
 	// DescribeSubnets to find subnet for master nodes for incoming elb
 	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+	// CreateTags to apply tags to EC2 resources
+	CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
 }
 
-type awsClient struct {
+type AwsClient struct {
 	ec2Client     ec2iface.EC2API
 	route53Client route53iface.Route53API
 	elbClient     elbiface.ELBAPI
 	elbv2Client   elbv2iface.ELBV2API
 }
 
-func NewClient(accessID, accessSecret, token, region string) (*awsClient, error) {
+func NewClient(accessID, accessSecret, token, region string) (*AwsClient, error) {
 	awsConfig := &aws.Config{Region: aws.String(region)}
 	if token == "" {
 		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
@@ -123,7 +125,7 @@ func NewClient(accessID, accessSecret, token, region string) (*awsClient, error)
 	if err != nil {
 		return nil, err
 	}
-	return &awsClient{
+	return &AwsClient{
 		ec2Client:     ec2.New(s),
 		elbClient:     elb.New(s),
 		elbv2Client:   elbv2.New(s),
@@ -136,7 +138,7 @@ func NewClient(accessID, accessSecret, token, region string) (*awsClient, error)
 // Pass in token if sessions requires a token
 // if it includes a secretName and nameSpace it will create credentials from that secret data
 // If it includes awsCredsSecretIDKey and awsCredsSecretAccessKey it will build credentials from those
-func GetAWSClient(kubeClient kubeclientpkg.Client, input NewAwsClientInput) (*awsClient, error) {
+func GetAWSClient(kubeClient kubeclientpkg.Client, input NewAwsClientInput) (*AwsClient, error) {
 
 	// error if region is not included
 	if input.AwsRegion == "" {
@@ -165,94 +167,93 @@ func GetAWSClient(kubeClient kubeclientpkg.Client, input NewAwsClientInput) (*aw
 				input.SecretName, awsCredsSecretAccessKey)
 		}
 
-		awsClient, err := NewClient(string(accessKeyID), string(secretAccessKey), input.AwsToken, input.AwsRegion)
+		AwsClient, err := NewClient(string(accessKeyID), string(secretAccessKey), input.AwsToken, input.AwsRegion)
 		if err != nil {
 			return nil, err
 		}
-		return awsClient, nil
+		return AwsClient, nil
 	}
 
 	if input.AwsCredsSecretIDKey == "" && input.AwsCredsSecretAccessKey != "" {
 		return nil, fmt.Errorf("getAWSClient: NoAwsCredentials or Secret %v", input)
 	}
 
-	awsClient, err := NewClient(input.AwsCredsSecretIDKey, input.AwsCredsSecretAccessKey, input.AwsToken, input.AwsRegion)
+	AwsClient, err := NewClient(input.AwsCredsSecretIDKey, input.AwsCredsSecretAccessKey, input.AwsToken, input.AwsRegion)
 	if err != nil {
 		return nil, err
 	}
-	return awsClient, nil
+	return AwsClient, nil
 }
 
-func (c *awsClient) ApplySecurityGroupsToLoadBalancer(i *elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error) {
+func (c *AwsClient) ApplySecurityGroupsToLoadBalancer(i *elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error) {
 	return c.elbClient.ApplySecurityGroupsToLoadBalancer(i)
 }
 
-func (c *awsClient) ConfigureHealthCheck(i *elb.ConfigureHealthCheckInput) (*elb.ConfigureHealthCheckOutput, error) {
+func (c *AwsClient) ConfigureHealthCheck(i *elb.ConfigureHealthCheckInput) (*elb.ConfigureHealthCheckOutput, error) {
 	return c.elbClient.ConfigureHealthCheck(i)
 }
 
-func (c *awsClient) CreateLoadBalancer(i *elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error) {
+func (c *AwsClient) CreateLoadBalancer(i *elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error) {
 	return c.elbClient.CreateLoadBalancer(i)
 }
 
-func (c *awsClient) CreateLoadBalancerListeners(i *elb.CreateLoadBalancerListenersInput) (*elb.CreateLoadBalancerListenersOutput, error) {
+func (c *AwsClient) CreateLoadBalancerListeners(i *elb.CreateLoadBalancerListenersInput) (*elb.CreateLoadBalancerListenersOutput, error) {
 	return c.elbClient.CreateLoadBalancerListeners(i)
 }
 
-func (c *awsClient) DeleteLoadBalancerListeners(i *elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error) {
+func (c *AwsClient) DeleteLoadBalancerListeners(i *elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error) {
 	return c.elbClient.DeleteLoadBalancerListeners(i)
 }
 
-func (c *awsClient) DeregisterInstancesFromLoadBalancer(i *elb.DeregisterInstancesFromLoadBalancerInput) (*elb.DeregisterInstancesFromLoadBalancerOutput, error) {
+func (c *AwsClient) DeregisterInstancesFromLoadBalancer(i *elb.DeregisterInstancesFromLoadBalancerInput) (*elb.DeregisterInstancesFromLoadBalancerOutput, error) {
 	return c.elbClient.DeregisterInstancesFromLoadBalancer(i)
 }
-func (c *awsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error) {
+func (c *AwsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error) {
 	return c.elbClient.DescribeLoadBalancers(i)
 }
 
-func (c *awsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
-	return c.elbv2Client.DescribeLoadBalancers(i)
-}
-
-func (c *awsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
-	return c.elbv2Client.DeleteLoadBalancer(i)
-}
-
-func (c *awsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
+func (c *AwsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
 	return c.elbClient.DescribeTags(i)
 }
-
-func (c *awsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
+func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
 	return c.elbClient.RegisterInstancesWithLoadBalancer(i)
 }
 
-func (c *awsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
+func (c *AwsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
 }
-
-func (c *awsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
-	return c.route53Client.ChangeResourceRecordSets(i)
+func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
+	return c.elbv2Client.DescribeLoadBalancers(i)
+}
+func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
+	return c.elbv2Client.DeleteLoadBalancer(i)
 }
 
-func (c *awsClient) ListHostedZonesByName(i *route53.ListHostedZonesByNameInput) (*route53.ListHostedZonesByNameOutput, error) {
+func (c *AwsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
+	return c.route53Client.ChangeResourceRecordSets(i)
+}
+func (c *AwsClient) ListHostedZonesByName(i *route53.ListHostedZonesByNameInput) (*route53.ListHostedZonesByNameOutput, error) {
 	return c.route53Client.ListHostedZonesByName(i)
 }
 
-func (c *awsClient) AuthorizeSecurityGroupIngress(i *ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
+func (c *AwsClient) AuthorizeSecurityGroupIngress(i *ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
 	return c.ec2Client.AuthorizeSecurityGroupIngress(i)
 }
-func (c *awsClient) CreateSecurityGroup(i *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
+func (c *AwsClient) CreateSecurityGroup(i *ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error) {
 	return c.ec2Client.CreateSecurityGroup(i)
 }
-func (c *awsClient) DeleteSecurityGroup(i *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
+func (c *AwsClient) DeleteSecurityGroup(i *ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error) {
 	return c.ec2Client.DeleteSecurityGroup(i)
 }
-func (c *awsClient) DescribeSecurityGroups(i *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+func (c *AwsClient) DescribeSecurityGroups(i *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 	return c.ec2Client.DescribeSecurityGroups(i)
 }
-func (c *awsClient) RevokeSecurityGroupIngress(i *ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error) {
+func (c *AwsClient) RevokeSecurityGroupIngress(i *ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error) {
 	return c.ec2Client.RevokeSecurityGroupIngress(i)
 }
-func (c *awsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+func (c *AwsClient) DescribeSubnets(i *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 	return c.ec2Client.DescribeSubnets(i)
+}
+func (c *AwsClient) CreateTags(i *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return c.ec2Client.CreateTags(i)
 }

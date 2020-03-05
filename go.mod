@@ -4,14 +4,18 @@ go 1.13
 
 require (
 	github.com/aws/aws-sdk-go v1.20.19
+	github.com/go-logr/logr v0.1.0
+	github.com/go-openapi/spec v0.19.4
+	github.com/gophercloud/gophercloud v0.3.0 // indirect
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
+	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
 	github.com/operator-framework/operator-sdk v0.15.1
 	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
+	k8s.io/api v0.17.2
+	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v12.0.0+incompatible
-	sigs.k8s.io/cluster-api v0.2.10
-	sigs.k8s.io/cluster-api-provider-aws v0.4.9
+	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
+	sigs.k8s.io/cluster-api-provider-aws v0.0.0-00010101000000-000000000000
 	sigs.k8s.io/controller-runtime v0.4.0
 )
 
@@ -38,6 +42,7 @@ replace (
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.0.0-20191016115753-cf0698c3a16b
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9
+	sigs.k8s.io/cluster-api-provider-aws => github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200204144622-0df2d100309c // Pin OpenShift fork
 )
 
 replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm

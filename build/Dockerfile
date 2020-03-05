@@ -1,4 +1,4 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.12 AS builder
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 
 # Allow specifying a GOPROXY cache during build to speed up dependency resolution
 ARG GOPROXY=https://proxy.golang.org
@@ -24,6 +24,7 @@ ENV OPERATOR_PATH=/go/src/github.com/openshift/cloud-ingress-operator \
 
 # install operator binary
 COPY --from=builder ${OPERATOR_PATH}/build/_output/bin/${OPERATOR_BIN} /usr/local/bin/${OPERATOR_BIN}
+
 
 COPY build/bin /usr/local/bin
 RUN  /usr/local/bin/user_setup

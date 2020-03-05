@@ -14,25 +14,54 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: APIScheme is the Schema for the apischemes API
+      description: APIScheme is the Schema for the APISchemes API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
         spec:
           description: APISchemeSpec defines the desired state of APIScheme
+          properties:
+            managementAPIServerIngress:
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "operator-sdk generate k8s" to regenerate code after
+                modifying this file Add custom validation using kubebuilder tags:
+                https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              properties:
+                allowedCIDRBlocks:
+                  items:
+                    type: string
+                  type: array
+                dnsName:
+                  type: string
+                enabled:
+                  type: boolean
+              required:
+              - allowedCIDRBlocks
+              - dnsName
+              - enabled
+              type: object
+          required:
+          - managementAPIServerIngress
           type: object
         status:
           description: APISchemeStatus defines the observed state of APIScheme
+          properties:
+            cloudLoadBalancerDNSName:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "operator-sdk generate k8s" to regenerate
+                code after modifying this file Add custom validation using kubebuilder
+                tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              type: string
           type: object
       type: object
   version: v1alpha1

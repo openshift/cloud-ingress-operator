@@ -6,13 +6,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
-// FIXME: Add tags
+// TODO: Handle errors, where possible, instead of returning to caller.
 
 // EnsureCIDRAccess ensures that for the given load balancer, the specified CIDR
 // blocks, and only those blocks may access it.
-// cidrBlocks always goes from 6443/TCP to 6443/TCP and is IPv4 only
+// cidrBlocks always goes from source:6443/TCP to target:6443/TCP and is IPv4 only
 // TODO: Expand to IPv6. This could be done by regular expression
-func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcId string, cidrBlocks []string) error {
+func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID string, cidrBlocks []string, ownerTag map[string]string) error {
 	// first need to see if the SecurityGroup exists, and if it does not, create it and populate its ingressCIDR permissions
 	// If the SecurityGroup DOES exist, then make sure it only has the permissions we are receiving here.
 	securityGroup, err := c.findSecurityGroupByName(securityGroupName)
@@ -21,7 +21,7 @@ func (c *awsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcId 
 	}
 	if securityGroup == nil {
 		// group does not exist, create it
-		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcId)
+		securityGroup, err = c.createSecurityGroup(securityGroupName, vpcID, ownerTag)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ Outer:
 }
 
 // Add rules to the security group
-func (c *awsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
+func (c *AwsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
 	if len(ipPermissions) == 0 {
 		// nothing to do
 		return nil
@@ -105,7 +105,7 @@ func (c *awsClient) addIngressRulesToSecurityGroup(securityGroup *ec2.SecurityGr
 }
 
 // Remove rules from the security group
-func (c *awsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
+func (c *AwsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.SecurityGroup, ipPermissions []*ec2.IpPermission) error {
 	if len(ipPermissions) == 0 {
 		// nothing   to do
 		return nil
@@ -122,24 +122,31 @@ func (c *awsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.Secur
 }
 
 // createSecurityGroup creates a SecurityGroup with the given name, and returns the EC2 object and/or any error
-func (c *awsClient) createSecurityGroup(securityGroupName, vpcId string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) createSecurityGroup(securityGroupName, vpcID string, ownerTag map[string]string) (*ec2.SecurityGroup, error) {
 	createInput := &ec2.CreateSecurityGroupInput{
 		Description: aws.String("Admin API Security group"),
 		GroupName:   aws.String(securityGroupName),
-		VpcId:       aws.String(vpcId),
+		VpcId:       aws.String(vpcID),
 	}
 	createResult, err := c.CreateSecurityGroup(createInput)
 	if err != nil {
 		return nil, err
 	}
 
+	// Apply tags
+
+	err = c.ApplyTagsToResources([]string{*createResult.GroupId}, ownerTag)
+	if err != nil {
+		return nil, err
+	}
 	// Caller of this method wants a *ec2.SecurityGroup, and since the create
 	// method doesn't give us nought but the group-id, we have to do a search
 	// to find it.
 	return c.findSecurityGroupByID(*createResult.GroupId)
 }
 
-func (c *awsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error) {
+
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -158,7 +165,8 @@ func (c *awsClient) findSecurityGroupByID(id string) (*ec2.SecurityGroup, error)
 	return o.SecurityGroups[0], nil
 }
 
-func (c *awsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, error) {
+func (c *AwsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, error) {
+
 	i := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -178,11 +186,69 @@ func (c *awsClient) findSecurityGroupByName(name string) (*ec2.SecurityGroup, er
 }
 
 // Add a SecurityGroup to a load balancer. This is an idempotent operation
-func (c *awsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securityGroup *ec2.SecurityGroup) error {
+func (c *AwsClient) setLoadBalancerSecurityGroup(loadBalancerName string, securityGroup *ec2.SecurityGroup) error {
+
 	i := &elb.ApplySecurityGroupsToLoadBalancerInput{
 		LoadBalancerName: aws.String(loadBalancerName),
 		SecurityGroups:   aws.StringSlice([]string{*securityGroup.GroupId}),
 	}
 	_, err := c.ApplySecurityGroupsToLoadBalancer(i)
 	return err
+}
+
+// ApplyTagsToResources will apply the specified tags to the resource IDs specified.
+func (c *AwsClient) ApplyTagsToResources(resources []string, tagList map[string]string) error {
+	tags := make([]*ec2.Tag, 0)
+	for k, v := range tagList {
+		tags = append(tags, &ec2.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+	i := &ec2.CreateTagsInput{
+		Resources: aws.StringSlice(resources),
+		Tags:      tags,
+	}
+
+	_, err := c.CreateTags(i)
+	return err
+}
+
+// SubnetIDToVPCLookup will return the VPC IDs of the given Subnet IDs
+func (c *AwsClient) SubnetIDToVPCLookup(subnetID []string) ([]string, error) {
+	i := &ec2.DescribeSubnetsInput{
+		SubnetIds: aws.StringSlice(subnetID),
+	}
+	r, err := c.DescribeSubnets(i)
+	vpcs := make([]string, 0)
+	if err != nil {
+		return vpcs, err
+	}
+	dedup := make(map[string]bool)
+	for _, subnet := range r.Subnets {
+		if !dedup[*subnet.VpcId] {
+			vpcs = append(vpcs, *subnet.VpcId)
+			dedup[*subnet.VpcId] = true
+		}
+
+	}
+	return vpcs, nil
+}
+
+// SubnetNameToSubnetIDLookup takes a slice of names and turns them into IDs.
+// The return is the same order as the names: name[0] -> return[0]
+func (c *AwsClient) SubnetNameToSubnetIDLookup(subnetNames []string) ([]string, error) {
+	r := make([]string, len(subnetNames))
+	for i, name := range subnetNames {
+		filter := []*ec2.Filter{{Name: aws.String("tag:Name"), Values: aws.StringSlice([]string{name})}}
+		res, err := c.DescribeSubnets(&ec2.DescribeSubnetsInput{
+			Filters: filter,
+		})
+		if err != nil {
+			return []string{}, err
+		}
+		r[i] = *res.Subnets[0].SubnetId
+	}
+
+	return r, nil
 }

@@ -4,4 +4,9 @@ metadata:
   name: example-apischeme
 spec:
   # Add fields here
-  size: 3
+  managementAPIServerIngress:
+    enabled: true
+    dnsName: rh-api
+    allowedCIDRBlocks:
+      - "0.0.0.0/0"
+
