@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
+	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 )
 
 // AWSLoadBalancer a handy way to return information about an ELB
@@ -246,7 +247,7 @@ func (c *AwsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]
 	return loadBalancers, nil
 }
 
-// create the external NLB target group and returns the targetGroupArn
+// CreateExternalNLBTargetGroup creates the external NLB target group and returns the targetGroupArn
 func (c *AwsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string, error) {
 	i := &elbv2.CreateTargetGroupInput{
 		Name:                       aws.String(nlbName),
@@ -271,22 +272,50 @@ func (c *AwsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string,
 	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
 }
 
-// type TargetDescription struct {
-// 	AvailabilityZone string
-// 	Id string
-// 	Port string
-// }
+// RegisterMasterNodeAZsandIPs register master node IPs and AZs
+// TODO: need to test function
+// This will take awhile before healthcheck is happy
+func (c *AwsClient) RegisterMasterNodeAZsandIPs(targetGroupArn string, mi []utils.MasterInstance) error {
+	for _, masterInstance := range mi {
+		i := &elbv2.RegisterTargetsInput{
+			TargetGroupArn: aws.String(targetGroupArn),
+			Targets: []*elbv2.TargetDescription{
+				{
+					AvailabilityZone: aws.String(masterInstance.AvailabilityZone),
+					Id:               aws.String(masterInstance.IPaddress),
+					Port:             aws.Int64(6443),
+				},
+			},
+		}
 
-// func (c *awsClient) RegisterMasterNodeIPs(targetGroupArn string, ) error {
-// 	i := &elbv2.RegisterTargetsInput{
-// 		TargetGroupArn: aws.String(targetGroupArn),
-// 		Targets: []*elbv2.TargetDescription{
-// 			{
+		_, err := c.RegisterTargetsV2(i)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-// 			}
-// 		}
-// 	}
-// }
+// CreateListenerForNLB creates a listener between target group and nlb given their arn
+func (c *AwsClient) CreateListenerForNLB(targetGroupArn, loadBalancerArn string) error {
+	i := &elbv2.CreateListenerInput{
+		DefaultActions: []*elbv2.Action{
+			{
+				TargetGroupArn: aws.String(targetGroupArn),
+				Type:           aws.String("forward"),
+			},
+		},
+		LoadBalancerArn: aws.String(loadBalancerArn),
+		Port:            aws.Int64(80),
+		Protocol:        aws.String("TCP"),
+	}
+
+	_, err := c.CreateListenerV2(i)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func (c *AwsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {
 	i := &elb.ConfigureHealthCheckInput{

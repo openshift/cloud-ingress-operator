@@ -100,11 +100,11 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 	return infra.Status.PlatformStatus.AWS.Region, nil
 }
 
-// GetClusterMasterInstances gets all the instance IDs for Master nodes
+// GetClusterMasterInstancesIDs gets all the instance IDs for Master nodes
 // For AWS the form is aws:///<availability zone>/<instance ID>
 // This could come from parsing the arbitrarily formatted .Status.ProviderStatus
 // but .Spec.ProviderID is standard
-func GetClusterMasterInstances(kclient client.Client) ([]string, error) {
+func GetClusterMasterInstancesIDs(kclient client.Client) ([]string, error) {
 	machineList := &machineapi.MachineList{}
 	listOptions := []client.ListOption{
 		client.InNamespace("openshift-machine-api"),
@@ -125,6 +125,50 @@ func GetClusterMasterInstances(kclient client.Client) ([]string, error) {
 		}
 	}
 	return ids, nil
+}
+
+// MasterInstance used to fill out TargetDescription
+// when calling registerTargetInput
+type MasterInstance struct {
+	AvailabilityZone string
+	IPaddress        string
+}
+
+// GetMasterInstancesAZsandIPs gets all the master instances AZs and IPs
+func GetMasterInstancesAZsandIPs(kclient client.Client) ([]MasterInstance, error) {
+	machineList := &machineapi.MachineList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-machine-api"),
+		client.MatchingLabels{masterMachineLabel: "master"},
+	}
+	err := kclient.List(context.TODO(), machineList, listOptions...)
+	if err != nil {
+		return []MasterInstance{}, err
+	}
+
+	masterInstances := make([]MasterInstance, 0)
+	for _, mi := range machineList.Items {
+		// get the AZ from a Master object's providerSpec.
+		codec, err := awsproviderapi.NewCodec()
+		if err != nil {
+			return masterInstances, err
+		}
+		awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
+		err = codec.DecodeProviderSpec(&machineList.Items[0].Spec.ProviderSpec, awsconfig)
+		if err != nil {
+			return masterInstances, err
+		}
+		az := awsconfig.Placement.AvailabilityZone
+
+		// get the IP address from Master object's status
+		ip := mi.Status.Addresses[0].Address
+
+		masterInstances = append(masterInstances, MasterInstance{
+			AvailabilityZone: az,
+			IPaddress:        ip,
+		})
+	}
+	return masterInstances, nil
 }
 
 func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, error) {

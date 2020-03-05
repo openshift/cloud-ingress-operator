@@ -80,6 +80,8 @@ type Client interface {
 	CreateTargetGroupV2(*elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error)
 	// register master instances with target group
 	RegisterTargetsV2(*elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error)
+	// create listener for an NLB
+	CreateListenerV2(*elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error)
 
 	// ELBv2 - to figure out which to assign back to the nlb
 	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
@@ -238,6 +240,10 @@ func (c *AwsClient) CreateTargetGroupV2(i *elbv2.CreateTargetGroupInput) (*elbv2
 
 func (c *AwsClient) RegisterTargetsV2(i *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
 	return c.elbv2Client.RegisterTargets(i)
+}
+
+func (c *AwsClient) CreateListenerV2(i *elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error) {
+	return c.elbv2Client.CreateListener(i)
 }
 
 func (c *AwsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {

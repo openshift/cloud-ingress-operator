@@ -215,8 +215,25 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 		fmt.Println(targetGroupArn)
 
-		// 3. register master IPs(targets) with target group
+		// 3. get the masterInstances AZ and IPs
+		masterInstances, err := utils.GetMasterInstancesAZsandIPs(r.client)
+		if err != nil {
+			log.Error(err, "cannot get masterInstances")
+			return reconcile.Result{}, err
+		}
 
+		// 4. register master IPs(targets) with target group
+		err = awsClient.RegisterMasterNodeAZsandIPs(targetGroupArn, masterInstances)
+		if err != nil {
+			log.Error(err, "cannot register master instace IP and/or AZ with target group")
+			return reconcile.Result{}, err
+		}
+
+		// 5. create listener for new external NLB
+		err = awsClient.CreateListenerForNLB(targetGroupArn, newNLBs[0].LoadBalancerArn)
+		if err != nil {
+			log.Error(err, "cannot create listener for external NLB")
+		}
 	}
 
 	return reconcile.Result{}, nil
