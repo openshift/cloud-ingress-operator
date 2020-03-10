@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 )
 
 // AWSLoadBalancer a handy way to return information about an ELB
@@ -245,58 +244,6 @@ func (c *AwsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]
 		})
 	}
 	return loadBalancers, nil
-}
-
-// CreateExternalNLBTargetGroup creates the external NLB target group and returns the targetGroupArn
-func (c *AwsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string, error) {
-	i := &elbv2.CreateTargetGroupInput{
-		Name:                       aws.String(nlbName),
-		Port:                       aws.Int64(6443),
-		Protocol:                   aws.String("TCP"),
-		TargetType:                 aws.String("ip"),
-		VpcId:                      aws.String(vpcID),
-		HealthCheckPath:            aws.String("/readyz"),
-		HealthCheckPort:            aws.String("6443"),
-		HealthCheckProtocol:        aws.String("HTTPS"),
-		HealthCheckIntervalSeconds: aws.Int64(10),
-		HealthCheckTimeoutSeconds:  aws.Int64(10),
-		HealthyThresholdCount:      aws.Int64(2),
-		UnhealthyThresholdCount:    aws.Int64(2),
-	}
-
-	result, err := c.CreateTargetGroupV2(i)
-	if err != nil {
-		return "", err
-	}
-	if len(result.TargetGroups) != 1 {
-		return "", err
-	}
-
-	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
-}
-
-// RegisterMasterNodeAZsandIPs register master node IPs and AZs
-// TODO: need to test function
-// This will take awhile before healthcheck is happy
-func (c *AwsClient) RegisterMasterNodeAZsandIPs(targetGroupArn string, mi []utils.MasterInstance) error {
-	for _, masterInstance := range mi {
-		i := &elbv2.RegisterTargetsInput{
-			TargetGroupArn: aws.String(targetGroupArn),
-			Targets: []*elbv2.TargetDescription{
-				{
-					AvailabilityZone: aws.String(masterInstance.AvailabilityZone),
-					Id:               aws.String(masterInstance.IPaddress),
-					Port:             aws.Int64(6443),
-				},
-			},
-		}
-
-		_, err := c.RegisterTargetsV2(i)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // CreateListenerForNLB creates a listener between target group and nlb given their arn

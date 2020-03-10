@@ -220,7 +220,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		log.Info(fmt.Sprintf("new external NLB: %v", newNLBs))
 
 		if len(newNLBs) != 1 {
-			log.Error(err, "more than one NLB detected. Error out")
+			log.Error(err, "more than one NLB or no NLB detected, but we expect one")
 			return reconcile.Result{}, err
 		}
 
