@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	configv1 "github.com/openshift/api/config/v1"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
@@ -132,6 +133,22 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	domainName, err := utils.GetClusterBaseDomain(r.client) // in form of ```samn-test.j5u3.s1.devshift.org```
+	if err != nil {
+		log.Error(err, "Couldn't obtain the cluster's base domain")
+		return reconcile.Result{}, err
+	}
+	log.Info(fmt.Sprintf("domain name is %s", domainName))
+
+	// append "api" at beginning of domainName and add "." at the end
+	apiDNSName := "api." + domainName + "."
+
+	// In order to update DNS we need the route53 public zone name
+	// which happens to be the domainName minus the name of the cluster
+	// Since there are NO object on cluster with just clusterName,
+	// we will index the first period and parse right
+	pubDomainName := domainName[strings.Index(domainName, ".")+1:] // pubDomainName in form of ```j5u3.s1.devshift.org```
+
 	// if CR is wanted the default API server to be internal-facing only, we
 	// delete the external NLB for port 6443/TCP and change api.<cluster-domain> DNS record to point to internal NLB
 	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
@@ -151,6 +168,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				if err != nil {
 					log.Error(err, "error deleting external LB")
 				}
+				log.Info(fmt.Sprintf("external LB %v deleted", loadBalancer.LoadBalancerArn))
 			}
 			// get internal dnsName and HostID for UpsertCNAME func
 			// when we refactor multi-cloud we can figure out what aws lb arn looks like
@@ -162,21 +180,23 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 
 		// change Alias of resource record set of external LB in public hosted zone to internal LB
-		domainName := configv1.DNSSpec{}.BaseDomain // in form of ```samn-test.j5u3.s1.devshift.org```
 
-		// In order to update DNS we need the route53 public zone name
-		// which happens to be the domainName minus the name of the cluster
-		// Since there are NO object on cluster with just clusterName,
-		// we will index the first period and parse right
-		pubDomainName := domainName[strings.Index(domainName, ".")+1:] // pubDomainName in form of ```j5u3.s1.devshift.org```
-		apiDNSName := "api." + domainName + "."
 		comment := "Update api.<clusterName> alias to internal NLB"
 
+		// print out what we're passing into the UpsertARecord func
+		log.Info(fmt.Sprintf("publicDomainName is: %s", pubDomainName))
+		log.Info(fmt.Sprintf("intDNSName is: %s", intDNSName))
+		log.Info(fmt.Sprintf("intHostedZoneID is: %s", intHostedZoneID))
+		log.Info(fmt.Sprintf("apiDNSName is %s", apiDNSName))
+		log.Info(fmt.Sprintf("comment is: %s", comment))
+
 		// upsert resource record to change api.<clusterName> from external NLB to internal NLB
-		err = awsClient.UpsertARecord(pubDomainName, intDNSName, intHostedZoneID, apiDNSName, comment, false)
+		err = awsClient.UpsertARecord(pubDomainName+".", intDNSName, intHostedZoneID, apiDNSName, comment, false)
 		if err != nil {
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
+			return reconcile.Result{}, err
 		}
+		log.Info(comment + " successful")
 		return reconcile.Result{}, nil
 	}
 
@@ -184,56 +204,117 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
 	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
 		// get a list of all non-classic ELBs
-		loadBalancerInfo, err := awsClient.ListAllNLBs()
-		if err != nil {
-			log.Error(err, "error listing all NLBs")
-			return reconcile.Result{}, err
-		}
+		// loadBalancerInfo, err := awsClient.ListAllNLBs()
+		// if err != nil {
+		// 	log.Error(err, "error listing all NLBs")
+		// 	return reconcile.Result{}, err
+		// }
 
 		// check if external NLB exists
 		// if it does no action needed
-		for _, loadBalancer := range loadBalancerInfo {
-			if loadBalancer.Scheme == "internet-facing" {
-				log.Info("External LoadBalancer already exists")
-				return reconcile.Result{}, nil
-			}
-		}
+		// for _, loadBalancer := range loadBalancerInfo {
+		// 	if loadBalancer.Scheme == "internet-facing" {
+		// 		log.Info("External LoadBalancer already exists")
+		// 		return reconcile.Result{}, nil
+		// 	}
+		// }
 
 		// 1. create a new external NLB (TODO: add tags)
-		extNLBName := configv1.InfrastructureStatus{}.InfrastructureName + "-ext"
-		newNLBs, err := awsClient.CreateNetworkLoadBalancer(extNLBName, "internet-facing", "subnetID") // subnetID can be found by utils.GetMasterNodeSubnets(r.client)
+		infrastructureName, err := utils.GetClusterName(r.client)
+		if err != nil {
+			log.Error(err, "cannot get infrastructure name")
+			return reconcile.Result{}, err
+		}
+		log.Info("infrastructure name is: " + infrastructureName)
+		extNLBName := infrastructureName + "-test"
+		log.Info("external NLB name " + extNLBName)
+		// Get both public and private subnet names for master Machines
+		// Note: master Machines have only one listed (private one) in their sepc, but
+		// this returns both public and private. We need the public one.
+		subnets, err := utils.GetMasterNodeSubnets(r.client)
+		if err != nil {
+			log.Error(err, "Couldn't get the subnets used by master nodes")
+			return reconcile.Result{}, err
+		}
+		log.Info(fmt.Sprintf("subnets: %v", subnets))
+		subnetIDs, err := awsClient.SubnetNameToSubnetIDLookup([]string{subnets["public"]})
+		if err != nil {
+			log.Error(err, "Couldn't get subnetIDs")
+			return reconcile.Result{}, err
+		}
+		log.Info(fmt.Sprintf("subnet IDs : %v ", subnetIDs))
+		newNLBs, err := awsClient.CreateNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0]) // subnetID can be found by utils.GetMasterNodeSubnets(r.client)
 		if err != nil {
 			log.Error(err, "couldn't create external NLB")
 			return reconcile.Result{}, err
 		}
+		log.Info(fmt.Sprintf("new external NLB: %v", newNLBs))
 
-		// 2. create target group for listener
-		targetGroupArn, err := awsClient.CreateExternalNLBTargetGroup(extNLBName, newNLBs[0].VpcID)
+		// ATTEMPT TO USE EXISTING TG
+		targetGroupName := infrastructureName + "-aext"
+		log.Info(targetGroupName)
+		targetGroupArn, err := awsClient.GetTargetGroupArn(targetGroupName)
 		if err != nil {
-			log.Error(err, "couldn't create targetGroup for external NLB")
-			return reconcile.Result{}, err
-		}
-		fmt.Println(targetGroupArn)
-
-		// 3. get the masterInstances AZ and IPs
-		masterInstances, err := utils.GetMasterInstancesAZsandIPs(r.client)
-		if err != nil {
-			log.Error(err, "cannot get masterInstances")
+			log.Error(err, "cannot get existing targetGroupName")
 			return reconcile.Result{}, err
 		}
 
-		// 4. register master IPs(targets) with target group
-		err = awsClient.RegisterMasterNodeAZsandIPs(targetGroupArn, masterInstances)
-		if err != nil {
-			log.Error(err, "cannot register master instace IP and/or AZ with target group")
-			return reconcile.Result{}, err
-		}
-
-		// 5. create listener for new external NLB
+		// create listener for new external NLB
 		err = awsClient.CreateListenerForNLB(targetGroupArn, newNLBs[0].LoadBalancerArn)
 		if err != nil {
-			log.Error(err, "cannot create listener for external NLB")
+			if aerr, ok := err.(awserr.Error); ok {
+				if aerr.Code() == "TargetGroupAssociationLimit" {
+					log.Info("another load balancer associated with targetGroup") // not possible to modify LB, we'd have to create a new targetGroup
+					// return reconcile for now, but we need to deal with this later
+					return reconcile.Result{}, nil
+				}
+			} else {
+				log.Error(err, "cannot create listerner for new external NLB")
+			}
+			return reconcile.Result{}, err
 		}
+
+		// TODO: HAVE NOT TESTED THIF FUNCTION YET
+		// TODO: test when management api is confirmed working
+		// upsert resource record to change api.<clusterName> from internal NLB to external NLB
+		comment := "Update api.<clusterName> alias to external NLB"
+		err = awsClient.UpsertARecord(pubDomainName+".", newNLBs[0].DNSName, newNLBs[0].CanonicalHostedZoneNameID, apiDNSName, comment, false)
+		if err != nil {
+			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
+			return reconcile.Result{}, err
+		}
+		log.Info(comment + " successful")
+
+		// update route53 api.<cluster-name> with external NLB
+
+		// // 2. create target group for listener
+		// targetGroupArn, err := awsClient.CreateExternalNLBTargetGroup(extNLBName, newNLBs[0].VpcID)
+		// if err != nil {
+		// 	log.Error(err, "couldn't create targetGroup for external NLB")
+		// 	return reconcile.Result{}, err
+		// }
+		// log.Info(fmt.Sprintf("targetGroupArn is %s", targetGroupArn))
+
+		// // 3. get the masterInstances AZ and IPs
+		// masterInstances, err := utils.GetMasterInstancesAZsandIPs(r.client)
+		// if err != nil {
+		// 	log.Error(err, "cannot get masterInstances")
+		// 	return reconcile.Result{}, err
+		// }
+		// log.Info("get AZ and Ip %v", masterInstances)
+
+		// // 4. register master IPs(targets) with target group
+		// err = awsClient.RegisterMasterNodeAZsandIPs(targetGroupArn, masterInstances)
+		// if err != nil {
+		// 	log.Error(err, "cannot register master instace IP and/or AZ with target group")
+		// 	return reconcile.Result{}, err
+		// }
+
+		// // 5. create listener for new external NLB
+		// err = awsClient.CreateListenerForNLB(targetGroupArn, newNLBs[0].LoadBalancerArn)
+		// if err != nil {
+		// 	log.Error(err, "cannot create listener for external NLB")
+		// }
 	}
 
 	return reconcile.Result{}, nil

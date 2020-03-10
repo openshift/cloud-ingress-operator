@@ -306,7 +306,7 @@ func (c *AwsClient) CreateListenerForNLB(targetGroupArn, loadBalancerArn string)
 			},
 		},
 		LoadBalancerArn: aws.String(loadBalancerArn),
-		Port:            aws.Int64(80),
+		Port:            aws.Int64(6443),
 		Protocol:        aws.String("TCP"),
 	}
 
@@ -315,6 +315,21 @@ func (c *AwsClient) CreateListenerForNLB(targetGroupArn, loadBalancerArn string)
 		return err
 	}
 	return nil
+}
+
+// GetTargetGroupArn by passing in targetGroup Name
+func (c *AwsClient) GetTargetGroupArn(targetGroupName string) (string, error) {
+	i := &elbv2.DescribeTargetGroupsInput{
+		Names: []*string{
+			aws.String(targetGroupName),
+		},
+	}
+
+	result, err := c.DescribeTargetGroupsV2(i)
+	if err != nil {
+		return "", err
+	}
+	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
 }
 
 func (c *AwsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {

@@ -82,9 +82,8 @@ type Client interface {
 	RegisterTargetsV2(*elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error)
 	// create listener for an NLB
 	CreateListenerV2(*elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error)
-
-	// ELBv2 - to figure out which to assign back to the nlb
-	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
+	// describes the targetGroup for NLB
+	DescribeTargetGroupsV2(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
 
 	/*
 	 * Route 53-related Functions
@@ -253,7 +252,7 @@ func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWi
 	return c.elbClient.RegisterInstancesWithLoadBalancer(i)
 }
 
-func (c *AwsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
+func (c *AwsClient) DescribeTargetGroupsV2(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
 }
 
