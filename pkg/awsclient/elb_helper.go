@@ -268,6 +268,9 @@ func (c *AwsClient) CreateExternalNLBTargetGroup(nlbName, vpcID string) (string,
 	if err != nil {
 		return "", err
 	}
+	if len(result.TargetGroups) != 1 {
+		return "", err
+	}
 
 	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
 }

@@ -141,7 +141,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	log.Info(fmt.Sprintf("domain name is %s", domainName))
 
 	// append "api" at beginning of domainName and add "." at the end
-	apiDNSName := "api." + domainName + "."
+	apiDNSName := fmt.Sprintf("api.%s.", domainName)
 
 	// In order to update DNS we need the route53 public zone name
 	// which happens to be the domainName minus the name of the cluster
@@ -196,7 +196,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
 			return reconcile.Result{}, err
 		}
-		log.Info(comment + " successful")
+		log.Info(fmt.Sprintf("%s successful", comment))
 		return reconcile.Result{}, nil
 	}
 
@@ -225,9 +225,9 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			log.Error(err, "cannot get infrastructure name")
 			return reconcile.Result{}, err
 		}
-		log.Info("infrastructure name is: " + infrastructureName)
+		log.Info(fmt.Sprintf("infrastructure name is: %s", infrastructureName))
 		extNLBName := infrastructureName + "-test"
-		log.Info("external NLB name " + extNLBName)
+		log.Info(fmt.Sprintf("external NLB name %s", extNLBName))
 		// Get both public and private subnet names for master Machines
 		// Note: master Machines have only one listed (private one) in their sepc, but
 		// this returns both public and private. We need the public one.
@@ -250,8 +250,13 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 		log.Info(fmt.Sprintf("new external NLB: %v", newNLBs))
 
+		if len(newNLBs) != 1 {
+			log.Error(err, "more than one NLB detected. Error out")
+			return reconcile.Result{}, err
+		}
+
 		// ATTEMPT TO USE EXISTING TG
-		targetGroupName := infrastructureName + "-aext"
+		targetGroupName := fmt.Sprintf("%s-aext", infrastructureName)
 		log.Info(targetGroupName)
 		targetGroupArn, err := awsClient.GetTargetGroupArn(targetGroupName)
 		if err != nil {
@@ -268,9 +273,9 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 					// return reconcile for now, but we need to deal with this later
 					return reconcile.Result{}, nil
 				}
-			} else {
-				log.Error(err, "cannot create listerner for new external NLB")
+				return reconcile.Result{}, err
 			}
+			log.Error(err, "cannot create listerner for new external NLB")
 			return reconcile.Result{}, err
 		}
 
@@ -283,7 +288,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			log.Error(err, "Error updating api.<clusterName> alias to internal NLB")
 			return reconcile.Result{}, err
 		}
-		log.Info(comment + " successful")
+		log.Info(fmt.Sprintf("%s successful ", comment))
 
 		// update route53 api.<cluster-name> with external NLB
 
