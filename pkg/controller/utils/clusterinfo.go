@@ -93,7 +93,7 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 func GetClusterRegion(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", err
+		return "", nil
 	} else if infra.Status.PlatformStatus == nil {
 		return "", fmt.Errorf("Expected to have a PlatformStatus for Infrastructure/cluster, but it was nil")
 	}
