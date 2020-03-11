@@ -267,16 +267,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-	// data ingress logic
-	// for every ingress on the cluster
-	// if it is of type default=true check if [listening && dnsName && certificate] matches with publishingStrategy CR's default application ingress
-	// if it matches, exit reconcile
-	// if it does not match, delete on-cluster default ingress and replace it with new one
-	// else if default=false
-	// for every default=false on publishing CR's applicationIngress
-	// check if publishing CR's applicationIngress [listening && dnsName && certificate] matches with on-cluster's ingress
-	// create new ingress if does not match
-
 	// get a list of all ingress on the cluster
 	ingressControllerList := &operatorv1.IngressControllerList{}
 	listOptions := []client.ListOption{
@@ -288,20 +278,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// for every ingress on the cluster
-	// if it is default cehck if scope, listening, certificate matches with cr app ingress
-
-	// For each app ingress
-	// For each item in the ps.applicationIngress
-	// Check if the appingress definition is the same as the item in the list
-	// If none of them match, do
-
+	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
 	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
 		for _, ingressController := range ingressControllerList.Items {
-			if doesIngressMatch(&publishingStrategyIngress, &ingressController) {
-				log.Info("match, move on to next cycle")
-				continue
-			} else {
+			if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
 				// create a LocalObjectReference and fill it out secret passed in by OCM
 				newCertificate := &corev1.LocalObjectReference{
 					Name: publishingStrategyIngress.Certificate.Name,
@@ -329,10 +309,8 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				// if the ingresscontroller name is not default
 				if ingressController.Name != "default" {
 					// if the content of this ingresscontroller matches
-					if doesIngressMatch(&publishingStrategyIngress, &ingressController) {
-						log.Info(fmt.Sprintf("%s already exists on cluster", ingressController.Name))
-						continue
-					} else { // if the ingresscontroller name is not default and the contents do not match
+					if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
+						// if the ingresscontroller name is not default and the contents do not match
 						// create a new ingresscontroller
 						publishingStrategyIngressDNSName := publishingStrategyIngress.DNSName
 						firstPeriodIndex := strings.Index(publishingStrategyIngressDNSName, ".")
