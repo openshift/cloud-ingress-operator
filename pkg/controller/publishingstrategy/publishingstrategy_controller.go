@@ -103,6 +103,80 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// FOR TESTING PURPOSES
+	// FOR TESTING PURPOSES
+	// FOR TESTING PURPOSES
+
+	// get a list of all ingress on the cluster
+	ingressControllerList := &operatorv1.IngressControllerList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-ingress-operator"),
+	}
+	err = r.client.List(context.TODO(), ingressControllerList, listOptions...)
+	if err != nil {
+		log.Error(err, "Cannot get list of ingresscontroller")
+		return reconcile.Result{}, err
+	}
+
+	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
+	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
+		for _, ingressController := range ingressControllerList.Items {
+			if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
+				// create a LocalObjectReference and fill it out secret passed in by OCM
+				newCertificate := &corev1.LocalObjectReference{
+					Name: publishingStrategyIngress.Certificate.Name,
+				}
+				log.Info(fmt.Sprintf("newCertificate is : %v", newCertificate))
+				if ingressController.Name == "default" {
+					// delete existing default ingresscontroller
+					err := r.client.Delete(context.TODO(), &ingressController)
+					if err != nil {
+						log.Error(err, "failed to delete existing ingresscontroller")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("successfully deleted ingresscontroller default"))
+					// create a new ingresscontroller
+					newIngressControllerCR, err := newApplicationIngressControllerCR("default", string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate, publishingStrategyIngress.RouteSelector.MatchLabels)
+					if err != nil {
+						log.Error(err, "failed to generate data for new ingresscontroller CR")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("generated ingresscontroller %v", newIngressControllerCR))
+					err = r.client.Create(context.TODO(), newIngressControllerCR)
+					if err != nil {
+						log.Error(err, "failed to create new ingresscontroller CR")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("successfully created ingresscontroller %v", newIngressControllerCR))
+
+				}
+				// if the ingresscontroller name is not default
+				// and the content of this ingresscontroller matches
+				if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
+					// if the ingresscontroller name is not default and the contents do not match
+					// create a new ingresscontroller
+					newIngressControllerName := getIngressName(publishingStrategyIngress.DNSName)
+					log.Info(fmt.Sprintf("new ingresscontroller name: %s", newIngressControllerName))
+					newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate, publishingStrategyIngress.RouteSelector.MatchLabels)
+					if err != nil {
+						log.Error(err, "failed to generate data for new ingresscontroller CR")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("generated ingresscontroller %v", newIngressController))
+					err = r.client.Create(context.TODO(), newIngressController)
+					if err != nil {
+						log.Error(err, "failed to create new ingresscontroller CR")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("succesfully create new ingresscontroller %v", newIngressController))
+				}
+			}
+		}
+	}
+	// FOR TESTING PURPOSES
+	// FOR TESTING PURPOSES
+	// FOR TESTING PURPOSES
+
 	// get region
 	region, err := utils.GetClusterRegion(r.client)
 	if err != nil {
@@ -267,74 +341,18 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-	// get a list of all ingress on the cluster
-	ingressControllerList := &operatorv1.IngressControllerList{}
-	listOptions := []client.ListOption{
-		client.InNamespace("openshift-ingress-operator"),
-	}
-	err = r.client.List(context.TODO(), ingressControllerList, listOptions...)
-	if err != nil {
-		log.Error(err, "Cannot get list of ingresscontroller")
-		return reconcile.Result{}, err
-	}
-
-	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
-	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
-		for _, ingressController := range ingressControllerList.Items {
-			if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
-				// create a LocalObjectReference and fill it out secret passed in by OCM
-				newCertificate := &corev1.LocalObjectReference{
-					Name: publishingStrategyIngress.Certificate.Name,
-				}
-				if ingressController.Name == "default" {
-					// delete existing default ingresscontroller
-					err := r.client.Delete(context.TODO(), &ingressController)
-					if err != nil {
-						log.Error(err, "failed to delete existing ingresscontroller")
-						return reconcile.Result{}, err
-					}
-
-					// create a new ingresscontroller
-					newIngressControllerCR, err := newApplicationIngressControllerCR("default", string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate)
-					if err != nil {
-						log.Error(err, "failed to generate data for new ingresscontroller CR")
-					}
-					err = r.client.Create(context.TODO(), newIngressControllerCR)
-					if err != nil {
-						log.Error(err, "failed to create new ingresscontroller CR")
-						return reconcile.Result{}, err
-					}
-					log.Info("succesfully created new ingresscontroller default")
-				}
-				// if the ingresscontroller name is not default
-				if ingressController.Name != "default" {
-					// if the content of this ingresscontroller matches
-					if !doesIngressMatch(&publishingStrategyIngress, &ingressController) {
-						// if the ingresscontroller name is not default and the contents do not match
-						// create a new ingresscontroller
-						publishingStrategyIngressDNSName := publishingStrategyIngress.DNSName
-						firstPeriodIndex := strings.Index(publishingStrategyIngressDNSName, ".")
-						newIngressControllerName := publishingStrategyIngressDNSName[:firstPeriodIndex]
-						newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate)
-						if err != nil {
-							log.Error(err, "failed to generate data for new ingresscontroller CR")
-						}
-						err = r.client.Create(context.TODO(), newIngressController)
-						if err != nil {
-							log.Error(err, "failed to create new ingresscontroller CR")
-							return reconcile.Result{}, err
-						}
-						log.Info(fmt.Sprintf("succesfully create new ingresscontroller %s", newIngressControllerName))
-					}
-				}
-			}
-		}
-	}
 	return reconcile.Result{}, nil
 }
 
+// getIngressName takes the domain name and returns the first part
+func getIngressName(dnsName string) string {
+	firstPeriodIndex := strings.Index(dnsName, ".")
+	newIngressName := dnsName[:firstPeriodIndex]
+	return newIngressName
+}
+
 // newApplicationIngressControllerCR creates a new IngressController CR
-func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName string, certificate *corev1.LocalObjectReference) (*operatorv1.IngressController, error) {
+func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName string, certificate *corev1.LocalObjectReference, matchLabels map[string]string) (*operatorv1.IngressController, error) {
 	loadBalancerScope := operatorv1.LoadBalancerScope("")
 	switch scope {
 	case "internal":
@@ -358,6 +376,9 @@ func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName s
 				LoadBalancer: &operatorv1.LoadBalancerStrategy{
 					Scope: loadBalancerScope,
 				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: matchLabels,
 			},
 		},
 	}, nil
