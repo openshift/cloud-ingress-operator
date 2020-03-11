@@ -20,7 +20,7 @@ const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role
 func GetClusterBaseDomain(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	// This starts with "api." that needs to be removed.
 	u, err := url.Parse(infra.Status.APIServerURL)
@@ -34,7 +34,7 @@ func GetClusterBaseDomain(kclient client.Client) (string, error) {
 func GetClusterPlatform(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return string(infra.Status.Platform), nil
 }
@@ -43,7 +43,7 @@ func GetClusterPlatform(kclient client.Client) (string, error) {
 func GetClusterName(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return infra.Status.InfrastructureName, nil
 }
@@ -93,7 +93,7 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 func GetClusterRegion(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	} else if infra.Status.PlatformStatus == nil {
 		return "", fmt.Errorf("Expected to have a PlatformStatus for Infrastructure/cluster, but it was nil")
 	}
