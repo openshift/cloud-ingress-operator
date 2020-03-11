@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Template
+parameters:
+- name: REGISTRY_IMG
+  required: true
+- name: CHANNEL
+  value: staging
+  required: true
+- name: IMAGE_TAG
+  required: true
+- name: REPO_NAME
+  value: cloud-ingress-operator
+  required: true
+metadata:
+  name: selectorsyncset-template
+objects:
+- apiVersion: hive.openshift.io/v1alpha1
+  kind: SelectorSyncSet
+  metadata:
+    labels:
+      managed.openshift.io/gitHash: ${IMAGE_TAG}
+      managed.openshift.io/gitRepoName: ${REPO_NAME}
+      managed.openshift.io/osd: 'true'
+    name: cloud-ingress-operator
+  spec:
+    clusterDeploymentSelector:
+      matchLabels:
+        api.openshift.com/managed: 'true'
+    resourceApplyMode: sync
+    resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: openshift-cloud-ingress
+        labels:
+          openshift.io/cluster-monitoring: 'true'
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: prometheus-k8s
+        namespace: openshift-cloud-ingress
+      rules:
+      - apiGroups:
+        - ''
+        resources:
+        - services
+        - endpoints
+        - pods
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: prometheus-k8s
+        namespace: openshift-cloud-ingress
+      roleRef:
+        kind: Role
+        name: prometheus-k8s
+      subjects:
+      - kind: ServiceAccount
+        name: prometheus-k8s
+        namespace: openshift-monitoring
+    - apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        labels:
+          opsrc-datastore: "true"
+          opsrc-provider: redhat
+        name: cloud-ingress-operator-registry
+        namespace: openshift-cloud-ingress
+      spec:
+        image: ${REGISTRY_IMG}:${CHANNEL}-${IMAGE_TAG}
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                - key: node-role.kubernetes.io/infra
+                  operator: Exists
+              weight: 1
+        tolerations:
+          - effect: NoSchedule
+            key: node-role.kubernetes.io/infra
+            operator: Exists
+        displayName: RBAC Permissions Operator
+        icon:
+          base64data: ''
+          mediatype: ''
+        publisher: Red Hat
+        sourceType: grpc
+    - apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress
+      spec:
+        channel: ${CHANNEL}
+        name: cloud-ingress-operator
+        source: cloud-ingress-operator-registry
+        sourceNamespace: openshift-cloud-ingress
+    - apiVersion: operators.coreos.com/v1alpha2
+      kind: OperatorGroup
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress
+      spec:
+        targetNamespaces:
+        - openshift-cloud-ingress
