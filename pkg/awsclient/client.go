@@ -74,7 +74,16 @@ type Client interface {
 	DescribeLoadBalancersV2(*elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error)
 	// delete external NLB so we can make cluster private
 	DeleteLoadBalancerV2(*elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error)
-	DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
+	// create nlb to make server api public
+	CreateLoadBalancerV2(*elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error)
+	// create targetGroup for new external NLB
+	CreateTargetGroupV2(*elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error)
+	// register master instances with target group
+	RegisterTargetsV2(*elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error)
+	// create listener for an NLB
+	CreateListenerV2(*elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error)
+	// describes the targetGroup for NLB
+	DescribeTargetGroupsV2(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
 
 	/*
 	 * Route 53-related Functions
@@ -212,6 +221,30 @@ func (c *AwsClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*e
 	return c.elbClient.DescribeLoadBalancers(i)
 }
 
+func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
+	return c.elbv2Client.DescribeLoadBalancers(i)
+}
+
+func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
+	return c.elbv2Client.DeleteLoadBalancer(i)
+}
+
+func (c *AwsClient) CreateLoadBalancerV2(i *elbv2.CreateLoadBalancerInput) (*elbv2.CreateLoadBalancerOutput, error) {
+	return c.elbv2Client.CreateLoadBalancer(i)
+}
+
+func (c *AwsClient) CreateTargetGroupV2(i *elbv2.CreateTargetGroupInput) (*elbv2.CreateTargetGroupOutput, error) {
+	return c.elbv2Client.CreateTargetGroup(i)
+}
+
+func (c *AwsClient) RegisterTargetsV2(i *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
+	return c.elbv2Client.RegisterTargets(i)
+}
+
+func (c *AwsClient) CreateListenerV2(i *elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error) {
+	return c.elbv2Client.CreateListener(i)
+}
+
 func (c *AwsClient) DescribeTags(i *elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
 	return c.elbClient.DescribeTags(i)
 }
@@ -219,14 +252,8 @@ func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWi
 	return c.elbClient.RegisterInstancesWithLoadBalancer(i)
 }
 
-func (c *AwsClient) DescribeTargetGroups(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
+func (c *AwsClient) DescribeTargetGroupsV2(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
-}
-func (c *AwsClient) DescribeLoadBalancersV2(i *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
-	return c.elbv2Client.DescribeLoadBalancers(i)
-}
-func (c *AwsClient) DeleteLoadBalancerV2(i *elbv2.DeleteLoadBalancerInput) (*elbv2.DeleteLoadBalancerOutput, error) {
-	return c.elbv2Client.DeleteLoadBalancer(i)
 }
 
 func (c *AwsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {

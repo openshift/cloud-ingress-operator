@@ -194,7 +194,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	masterNodeInstances, err := utils.GetClusterMasterInstances(r.client)
+	masterNodeInstances, err := utils.GetClusterMasterInstancesIDs(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't detect the AWS instances for master nodes")
 		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't find the cluster's AWS instances for master nodes", cloudingressv1alpha1.ConditionError)
