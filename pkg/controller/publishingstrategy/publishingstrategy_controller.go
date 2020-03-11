@@ -2,17 +2,20 @@ package publishingstrategy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	// corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,10 +27,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_publishingstrategy")
+const (
+	defaultIngressName         = "default"
+	ingressControllerNamespace = "openshift-ingress-operator"
+)
 
-// namespace where we will be creating the ingresscontroller types
-var ingressControllerNamespace = "openshift-ingress-operator"
+var log = logf.Log.WithName("controller_publishingstrategy")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -261,5 +266,138 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		log.Info(fmt.Sprintf("%s successful ", comment))
 		return reconcile.Result{}, nil
 	}
+
+	// data ingress logic
+	// for every ingress on the cluster
+	// if it is of type default=true check if [listening && dnsName && certificate] matches with publishingStrategy CR's default application ingress
+	// if it matches, exit reconcile
+	// if it does not match, delete on-cluster default ingress and replace it with new one
+	// else if default=false
+	// for every default=false on publishing CR's applicationIngress
+	// check if publishing CR's applicationIngress [listening && dnsName && certificate] matches with on-cluster's ingress
+	// create new ingress if does not match
+
+	// get a list of all ingress on the cluster
+	ingressControllerList := &operatorv1.IngressControllerList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-ingress-operator"),
+	}
+	err = r.client.List(context.TODO(), ingressControllerList, listOptions...)
+	if err != nil {
+		log.Error(err, "Cannot get list of ingresscontroller")
+		return reconcile.Result{}, err
+	}
+
+	// for every ingress on the cluster
+	// if it is default cehck if scope, listening, certificate matches with cr app ingress
+
+	// For each app ingress
+	// For each item in the ps.applicationIngress
+	// Check if the appingress definition is the same as the item in the list
+	// If none of them match, do
+
+	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
+		for _, ingressController := range ingressControllerList.Items {
+			if doesIngressMatch(&publishingStrategyIngress, &ingressController) {
+				log.Info("match, move on to next cycle")
+				continue
+			} else {
+				// create a LocalObjectReference and fill it out secret passed in by OCM
+				newCertificate := &corev1.LocalObjectReference{
+					Name: publishingStrategyIngress.Certificate.Name,
+				}
+				if ingressController.Name == "default" {
+					// delete existing default ingresscontroller
+					err := r.client.Delete(context.TODO(), &ingressController)
+					if err != nil {
+						log.Error(err, "failed to delete existing ingresscontroller")
+						return reconcile.Result{}, err
+					}
+
+					// create a new ingresscontroller
+					newIngressControllerCR, err := newApplicationIngressControllerCR("default", string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate)
+					if err != nil {
+						log.Error(err, "failed to generate data for new ingresscontroller CR")
+					}
+					err = r.client.Create(context.TODO(), newIngressControllerCR)
+					if err != nil {
+						log.Error(err, "failed to create new ingresscontroller CR")
+						return reconcile.Result{}, err
+					}
+					log.Info("succesfully created new ingresscontroller default")
+				}
+				// if the ingresscontroller name is not default
+				if ingressController.Name != "default" {
+					// if the content of this ingresscontroller matches
+					if doesIngressMatch(&publishingStrategyIngress, &ingressController) {
+						log.Info(fmt.Sprintf("%s already exists on cluster", ingressController.Name))
+						continue
+					} else { // if the ingresscontroller name is not default and the contents do not match
+						// create a new ingresscontroller
+						publishingStrategyIngressDNSName := publishingStrategyIngress.DNSName
+						firstPeriodIndex := strings.Index(publishingStrategyIngressDNSName, ".")
+						newIngressControllerName := publishingStrategyIngressDNSName[:firstPeriodIndex]
+						newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(publishingStrategyIngress.Listening), publishingStrategyIngress.DNSName, newCertificate)
+						if err != nil {
+							log.Error(err, "failed to generate data for new ingresscontroller CR")
+						}
+						err = r.client.Create(context.TODO(), newIngressController)
+						if err != nil {
+							log.Error(err, "failed to create new ingresscontroller CR")
+							return reconcile.Result{}, err
+						}
+						log.Info(fmt.Sprintf("succesfully create new ingresscontroller %s", newIngressControllerName))
+					}
+				}
+			}
+		}
+	}
 	return reconcile.Result{}, nil
+}
+
+// newApplicationIngressControllerCR creates a new IngressController CR
+func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName string, certificate *corev1.LocalObjectReference) (*operatorv1.IngressController, error) {
+	loadBalancerScope := operatorv1.LoadBalancerScope("")
+	switch scope {
+	case "internal":
+		loadBalancerScope = operatorv1.InternalLoadBalancer
+	case "external":
+		loadBalancerScope = operatorv1.ExternalLoadBalancer
+	default:
+		return &operatorv1.IngressController{}, errors.New("ErrCreatingIngressController")
+	}
+
+	return &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ingressControllerCRName,
+			Namespace: ingressControllerNamespace,
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: certificate,
+			Domain:             dnsName,
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: loadBalancerScope,
+				},
+			},
+		},
+	}, nil
+}
+
+// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
+func doesIngressMatch(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
+	if string(publishingStrategyIngress.Listening) != string(ingressController.Spec.EndpointPublishingStrategy.Type) {
+		return false
+	}
+	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
+		return false
+	}
+	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		if publishingStrategyIngress.Certificate.Namespace != ingressController.Namespace {
+			return false
+		}
+		return false
+	}
+	return true
 }
