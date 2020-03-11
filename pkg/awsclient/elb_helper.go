@@ -180,7 +180,6 @@ type LoadBalancerV2 struct {
 	LoadBalancerArn           string
 	LoadBalancerName          string
 	Scheme                    string
-	VpcID                     string
 }
 
 // ListAllNLBs uses the DescribeLoadBalancersV2 to get back a list of all Network Load Balancers
@@ -199,7 +198,6 @@ func (c *AwsClient) ListAllNLBs() ([]LoadBalancerV2, error) {
 			LoadBalancerArn:           aws.StringValue(loadBalancer.LoadBalancerArn),
 			LoadBalancerName:          aws.StringValue(loadBalancer.LoadBalancerName),
 			Scheme:                    aws.StringValue(loadBalancer.Scheme),
-			VpcID:                     aws.StringValue(loadBalancer.VpcId),
 		})
 	}
 	return loadBalancers, nil
@@ -212,74 +210,6 @@ func (c *AwsClient) DeleteExternalLoadBalancer(extLoadBalancerArn string) error 
 	}
 	_, err := c.DeleteLoadBalancerV2(&i)
 	return err
-}
-
-// CreateNetworkLoadBalancer should only return one new NLB at a time
-func (c *AwsClient) CreateNetworkLoadBalancer(lbName, scheme, subnet string) ([]LoadBalancerV2, error) {
-	i := &elbv2.CreateLoadBalancerInput{
-		Name:   aws.String(lbName),
-		Scheme: aws.String(scheme),
-		Subnets: []*string{
-			aws.String(subnet),
-		},
-		Type: aws.String("network"),
-	}
-
-	result, err := c.CreateLoadBalancerV2(i)
-	if err != nil {
-		return []LoadBalancerV2{}, err
-	}
-
-	// there should only be 1 NLB made, but since CreateLoadBalancerOutput takes in slice
-	// we return it as slice
-	loadBalancers := make([]LoadBalancerV2, 0)
-	for _, loadBalancer := range result.LoadBalancers {
-		loadBalancers = append(loadBalancers, LoadBalancerV2{
-			CanonicalHostedZoneNameID: aws.StringValue(loadBalancer.CanonicalHostedZoneId),
-			DNSName:                   aws.StringValue(loadBalancer.DNSName),
-			LoadBalancerArn:           aws.StringValue(loadBalancer.LoadBalancerArn),
-			LoadBalancerName:          aws.StringValue(loadBalancer.LoadBalancerName),
-			Scheme:                    aws.StringValue(loadBalancer.Scheme),
-			VpcID:                     aws.StringValue(loadBalancer.VpcId),
-		})
-	}
-	return loadBalancers, nil
-}
-
-// CreateListenerForNLB creates a listener between target group and nlb given their arn
-func (c *AwsClient) CreateListenerForNLB(targetGroupArn, loadBalancerArn string) error {
-	i := &elbv2.CreateListenerInput{
-		DefaultActions: []*elbv2.Action{
-			{
-				TargetGroupArn: aws.String(targetGroupArn),
-				Type:           aws.String("forward"),
-			},
-		},
-		LoadBalancerArn: aws.String(loadBalancerArn),
-		Port:            aws.Int64(6443),
-		Protocol:        aws.String("TCP"),
-	}
-
-	_, err := c.CreateListenerV2(i)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// GetTargetGroupArn by passing in targetGroup Name
-func (c *AwsClient) GetTargetGroupArn(targetGroupName string) (string, error) {
-	i := &elbv2.DescribeTargetGroupsInput{
-		Names: []*string{
-			aws.String(targetGroupName),
-		},
-	}
-
-	result, err := c.DescribeTargetGroupsV2(i)
-	if err != nil {
-		return "", err
-	}
-	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
 }
 
 func (c *AwsClient) addHealthCheck(loadBalancerName, protocol, path string, port int64) error {
