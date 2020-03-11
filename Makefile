@@ -4,18 +4,18 @@ SHELL := /usr/bin/env bash
 include project.mk
 include standard.mk
 
-￼default: gobuild
+default: gobuild
 
 # Extend Makefile after here
 
 # Build the docker image
-￼.PHONY: docker-build
-￼docker-build:
+.PHONY: container-build
+container-build:
 	$(MAKE) build
 
 # Push the docker image
-.PHONY: docker-push
-docker-push:
+.PHONY: container-push
+container-push:
 	$(MAKE) push
 
 .PHONY: operator-sdk-generate

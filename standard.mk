@@ -32,6 +32,8 @@ export GOPROXY?=https://proxy.golang.org
 GOENV=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 GOFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
 
+CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
+
 # ex, -v
 TESTOPTS :=
 
@@ -49,13 +51,13 @@ isclean:
 
 .PHONY: build
 build: isclean envtest
-	docker build --build-arg "GOPROXY=${GOPROXY}" . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
-	docker tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} build --build-arg "GOPROXY=${GOPROXY}" . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: push
 push:
-	docker push $(OPERATOR_IMAGE_URI)
-	docker push $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: gocheck
 gocheck: ## Lint code
