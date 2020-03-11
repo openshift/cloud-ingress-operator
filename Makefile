@@ -22,3 +22,12 @@ container-push:
 operator-sdk-generate:
 	operator-sdk generate crds
 	operator-sdk generate k8s
+
+.PHONY: generate-syncset
+generate-syncset:
+	if [ "${IN_CONTAINER}" == "true" ]; then \
+		docker run --rm -v `pwd -P`:`pwd -P` python:2.7.15 /bin/sh -c "cd `pwd`; pip install oyaml; `pwd`/${GEN_SYNCSET}"; \
+	else \
+		${GEN_SYNCSET}; \
+	fi
+
