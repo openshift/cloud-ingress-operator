@@ -3,6 +3,7 @@ kind: ClusterRole
 metadata:
   creationTimestamp: null
   name: cloud-ingress-operator-cr
+  namespace: openshift-cloud-ingress-operator
 rules:
 - apiGroups:
   - machine.openshift.io

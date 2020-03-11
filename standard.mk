@@ -27,10 +27,14 @@ OPERATOR_DOCKERFILE ?=build/Dockerfile
 
 BINFILE=build/_output/bin/$(OPERATOR_NAME)
 MAINPACKAGE=./cmd/manager
-export GO111MODULE=on
-export GOPROXY?=https://proxy.golang.org
+GO111MODULE=on
+GOPROXY?=https://proxy.golang.org
 GOENV=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 GOFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
+
+CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
+
+GO_DIRS=$(shell GO111MODULE=$(GO111MODULE) GOPROXY=$(GOPROXY) go list -f '{{ .Dir }}' ./... )
 
 # ex, -v
 TESTOPTS :=
@@ -49,26 +53,26 @@ isclean:
 
 .PHONY: build
 build: isclean envtest
-	docker build --build-arg "GOPROXY=${GOPROXY}" . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
-	docker tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} build --build-arg "GOPROXY=${GOPROXY}" . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: push
 push:
-	docker push $(OPERATOR_IMAGE_URI)
-	docker push $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: gocheck
 gocheck: ## Lint code
-	gofmt -s -l $(shell go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d $(shell go list -f '{{ .Dir }}' ./... ); exit 1; fi
+	gofmt -s -l ${GO_DIRS} | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d ${GO_DIRS}; exit 1; fi
 	go vet ./cmd/... ./pkg/...
 
 .PHONY: gobuild
-gobuild: gocheck gotest ## Build binary
+gobuild: #gocheck gotest ## Build binary
 	${GOENV} go build ${GOFLAGS} -o ${BINFILE} ${MAINPACKAGE}
 
 .PHONY: gotest
 gotest:
-	go test $(TESTOPTS) $(shell GO111MODULE=$(GO111MODULE) GOPROXY=$(GOPROXY) go list -mod=readonly -e ./... | egrep -v "/(vendor)/")
+	go test ${TESTOPTS} ${GO_DIRS}
 
 .PHONY: envtest
 envtest:
