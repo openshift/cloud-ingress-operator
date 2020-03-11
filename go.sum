@@ -521,7 +521,6 @@ github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad h1:MiZEukiPd7ll8BQDw
 github.com/openshift/api v0.0.0-20190924102528-32369d4db2ad/go.mod h1:dh9o4Fs58gpFXGSYfnVxGR9PnV53I8TW84pQaJDdGiY=
 github.com/openshift/client-go v0.0.0-20190617165122-8892c0adc000/go.mod h1:6rzn+JTr7+WYS2E1TExP4gByoABxMznR6y2SnUIkmxk=
 github.com/openshift/client-go v0.0.0-20190923180330-3b6373338c9b/go.mod h1:6rzn+JTr7+WYS2E1TExP4gByoABxMznR6y2SnUIkmxk=
-github.com/openshift/cluster-api-provider-aws v0.2.0 h1:WcOAGKSEMY8kt4a4kLkRaJQahLkvWnUK0O5kPiTLKWY=
 github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200204144622-0df2d100309c h1:Xy9oQu/23dWIfb16kuSwev++aCwszRPBdqwdMGYw0Zk=
 github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200204144622-0df2d100309c/go.mod h1:ZoUVLK6Sz9wmeVsD0Vc2AmHY3rJeAWQyQW2uRW7vwh4=
 github.com/openshift/cluster-version-operator v3.11.1-0.20190629164025-08cac1c02538+incompatible/go.mod h1:0BbpR1mrN0F2ZRae5N1XHcytmkvVPaeKgSQwRRBWugc=
