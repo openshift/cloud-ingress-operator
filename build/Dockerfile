@@ -1,15 +1,10 @@
 FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 
-# Allow specifying a GOPROXY cache during build to speed up dependency resolution
-ARG GOPROXY=https://proxy.golang.org
-
-ENV GO111MODULE=on \
-    GOPROXY=$GOPROXY
-
-COPY . /workdir
+RUN mkdir -p /workdir
 WORKDIR /workdir
 COPY go.mod go.sum ./
 RUN go mod download
+COPY . .
 RUN make gobuild
 
 ####
@@ -18,7 +13,6 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 ENV USER_UID=1001 \
     USER_NAME=cloud-ingress-operator
 
-# install operator binary
 COPY --from=builder /workdir/build/_output/bin/* /usr/local/bin/
 
 COPY build/bin /usr/local/bin
