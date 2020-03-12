@@ -4,7 +4,8 @@ SHELL := /usr/bin/env bash
 include project.mk
 include standard.mk
 
-default: gobuild
+# by default build .godirs file, do NOT run this inside a container build
+default: .godirs gobuild
 
 # Extend Makefile after here
 

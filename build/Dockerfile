@@ -1,11 +1,5 @@
 FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 
-# Allow specifying a GOPROXY cache during build to speed up dependency resolution
-ARG GOPROXY=https://proxy.golang.org
-
-ENV GO111MODULE=on \
-    GOPROXY=$GOPROXY
-
 COPY . /workdir
 WORKDIR /workdir
 COPY go.mod go.sum ./
