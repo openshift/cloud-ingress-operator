@@ -66,7 +66,7 @@ gocheck: ## Lint code
 	go vet ./cmd/... ./pkg/...
 
 .PHONY: gobuild
-gobuild: #gocheck gotest ## Build binary
+gobuild: gocheck gotest ## Build binary
 	${GOENV} go build ${GOBUILDFLAGS} -o ${BINFILE} ${MAINPACKAGE}
 
 .PHONY: gotest
