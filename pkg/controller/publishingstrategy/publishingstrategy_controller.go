@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
@@ -156,16 +155,16 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			if loadBalancer.Scheme == "internet-facing" {
 				extDNSName = loadBalancer.DNSName
 				log.Info("Trying to remove external LB", "LB", extDNSName)
+				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
+				if err != nil {
+					log.Error(err, "error deleting external LB")
+				}
 				err := RemoveLBFromMasterMachines(r.client, extDNSName, masterList)
 				if err != nil {
 					log.Error(err, "Error removing external LB from master machine objects")
 					return reconcile.Result{}, err
 				}
 				log.Info("Load balancer removed from master machine objects", "LB", extDNSName)
-				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
-				if err != nil {
-					log.Error(err, "error deleting external LB")
-				}
 				log.Info(fmt.Sprintf("external LB %v deleted", loadBalancer.LoadBalancerArn))
 			}
 			// get internal dnsName and HostID for UpsertCNAME func
@@ -277,25 +276,21 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			return reconcile.Result{}, err
 		}
 		log.Info(fmt.Sprintf("%s successful ", comment))
+		err = AddLBToMasterMachines(r.client, extNLBName, masterList)
+		if err != nil {
+			log.Error(err, "Error adding new LB to master machines' providerSpecs")
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
-
 }
 
 func RemoveLBFromMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
-	awsCodec, err := awsproviderapi.NewCodec()
-	if err != nil {
-		log.Error(err, "Error creating AWSProviderConfigCodec")
-		return err
-	}
 	for _, machine := range masterNodes.Items {
-		baseToPatch := client.MergeFrom(machine.DeepCopy())
-		providerSpecEncoded := machine.Spec.ProviderSpec
-		providerSpecDecoded := &awsproviderapi.AWSMachineProviderConfig{}
-		err := awsCodec.DecodeProviderSpec(&providerSpecEncoded, providerSpecDecoded)
+		providerSpecDecoded, err := GetDecodedProviderSpec(machine)
 		if err != nil {
-			log.Error(err, "Error decoding provider spec for machine", "machine", machine.Name)
+			log.Error(err, "Error retrieving decoded ProviderSpec for machine", "machine", machine.Name)
 			return err
 		}
 		lbList := providerSpecDecoded.LoadBalancers
@@ -307,21 +302,80 @@ func RemoveLBFromMasterMachines(kclient client.Client, elbName string, masterNod
 				newLBList = append(newLBList, lb)
 			}
 		}
-		if !reflect.DeepEqual(lbList, newLBList) {
-			providerSpecDecoded.LoadBalancers = newLBList
-			newProviderSpecEncoded, err := awsCodec.EncodeProviderSpec(providerSpecDecoded)
-			if err != nil {
-				log.Error(err, "Error encoding provider spec for machine", "machine", machine.Name)
-				return err
-			}
-			machine.Spec.ProviderSpec = *newProviderSpecEncoded
-			machineObj := machine.DeepCopyObject()
-			if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
-				log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machine.Name)
-				return err
+		err = UpdateLBList(kclient, lbList, newLBList, machine, providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error updating LB list for machine", "machine", machine.Name)
+		}
+	}
+	return nil
+}
+
+func AddLBToMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
+	for _, machine := range masterNodes.Items {
+		providerSpecDecoded, err := GetDecodedProviderSpec(machine)
+		if err != nil {
+			log.Error(err, "Error retrieving decoded ProviderSpec for machine", "machine", machine.Name)
+			return err
+		}
+		lbList := providerSpecDecoded.LoadBalancers
+		newLBList := []awsproviderapi.LoadBalancerReference{}
+		for _, lb := range lbList {
+			if lb.Name != elbName {
+				newLBList = append(newLBList, lb)
 			}
 		}
-
+		newLB := awsproviderapi.LoadBalancerReference{
+			Name: elbName,
+			Type: awsproviderapi.NetworkLoadBalancerType,
+		}
+		newLBList = append(newLBList, newLB)
+		err = UpdateLBList(kclient, lbList, newLBList, machine, providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error updating LB list for machine", "machine", machine.Name)
+		}
 	}
+	return nil
+}
+
+func GetDecodedProviderSpec(machine machineapi.Machine) (*awsproviderapi.AWSMachineProviderConfig, error) {
+	awsCodec, err := awsproviderapi.NewCodec()
+	if err != nil {
+		log.Error(err, "Error creating AWSProviderConfigCodec")
+		return nil, err
+	}
+	providerSpecEncoded := machine.Spec.ProviderSpec
+	providerSpecDecoded := &awsproviderapi.AWSMachineProviderConfig{}
+	err = awsCodec.DecodeProviderSpec(&providerSpecEncoded, providerSpecDecoded)
+	if err != nil {
+		log.Error(err, "Error decoding provider spec for machine", "machine", machine.Name)
+		return nil, err
+	}
+	return providerSpecDecoded, nil
+}
+
+func UpdateLBList(kclient client.Client, oldLBList []awsproviderapi.LoadBalancerReference, newLBList []awsproviderapi.LoadBalancerReference, machineToPatch machineapi.Machine, providerSpecDecoded *awsproviderapi.AWSMachineProviderConfig) error {
+	baseToPatch := client.MergeFrom(machineToPatch.DeepCopy())
+	awsCodec, err := awsproviderapi.NewCodec()
+	if err != nil {
+		log.Error(err, "Error creating AWSProviderConfigCodec")
+		return err
+	}
+	if !reflect.DeepEqual(oldLBList, newLBList) {
+		providerSpecDecoded.LoadBalancers = newLBList
+		newProviderSpecEncoded, err := awsCodec.EncodeProviderSpec(providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error encoding provider spec for machine", "machine", machineToPatch.Name)
+			return err
+		}
+		machineToPatch.Spec.ProviderSpec = *newProviderSpecEncoded
+		machineObj := machineToPatch.DeepCopyObject()
+		if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
+			log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machineToPatch.Name)
+			return err
+		}
+		log.Info("Updated master machine's LBs in providerSpec", "masterMachine", machineToPatch.Name)
+		return nil
+	}
+	log.Info("No need to update LBs for master machine", "masterMachine", machineToPatch.Name)
 	return nil
 }
