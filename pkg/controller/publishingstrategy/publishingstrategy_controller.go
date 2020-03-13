@@ -116,7 +116,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	masterList, err := utils.GetMasterNodes(r.client)
+	masterList, err := utils.GetMasterMachines(r.client)
 	if err != nil {
 		log.Error(err, "Couldn't fetch list of master nodes")
 		return reconcile.Result{}, err
@@ -158,6 +158,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
 				if err != nil {
 					log.Error(err, "error deleting external LB")
+					return reconcile.Result{}, err
 				}
 				err := RemoveLBFromMasterMachines(r.client, extDNSName, masterList)
 				if err != nil {
@@ -305,6 +306,7 @@ func RemoveLBFromMasterMachines(kclient client.Client, elbName string, masterNod
 		err = UpdateLBList(kclient, lbList, newLBList, machine, providerSpecDecoded)
 		if err != nil {
 			log.Error(err, "Error updating LB list for machine", "machine", machine.Name)
+			return err
 		}
 	}
 	return nil
@@ -332,6 +334,7 @@ func AddLBToMasterMachines(kclient client.Client, elbName string, masterNodes *m
 		err = UpdateLBList(kclient, lbList, newLBList, machine, providerSpecDecoded)
 		if err != nil {
 			log.Error(err, "Error updating LB list for machine", "machine", machine.Name)
+			return err
 		}
 	}
 	return nil
