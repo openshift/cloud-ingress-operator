@@ -3,6 +3,7 @@ package publishingstrategy
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -11,10 +12,12 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 
 	// corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -114,6 +117,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	masterList, err := utils.GetMasterNodes(r.client)
+	if err != nil {
+		log.Error(err, "Couldn't fetch list of master nodes")
+		return reconcile.Result{}, err
+	}
+
 	domainName, err := utils.GetClusterBaseDomain(r.client) // in form of ```samn-test.j5u3.s1.devshift.org```
 	if err != nil {
 		log.Error(err, "Couldn't obtain the cluster's base domain")
@@ -141,10 +150,19 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 
 		var intDNSName string
 		var intHostedZoneID string
+		var extDNSName string
 		// delete the external NLB
 		for _, loadBalancer := range loadBalancerInfo {
 			if loadBalancer.Scheme == "internet-facing" {
-				err := awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
+				extDNSName = loadBalancer.DNSName
+				log.Info("Trying to remove external LB", "LB", extDNSName)
+				err := RemoveLBFromMasterMachines(r.client, extDNSName, masterList)
+				if err != nil {
+					log.Error(err, "Error removing external LB from master machine objects")
+					return reconcile.Result{}, err
+				}
+				log.Info("Load balancer removed from master machine objects", "LB", extDNSName)
+				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
 				if err != nil {
 					log.Error(err, "error deleting external LB")
 				}
@@ -200,7 +218,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		extNLBName := infrastructureName + "-test"
 
 		// Get both public and private subnet names for master Machines
-		// Note: master Machines have only one listed (private one) in their sepc, but
+		// Note: master Machines have only one listed (private one) in their spec, but
 		// this returns both public and private. We need the public one.
 		subnets, err := utils.GetMasterNodeSubnets(r.client)
 		if err != nil {
@@ -262,4 +280,48 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
+
+}
+
+func RemoveLBFromMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
+	awsCodec, err := awsproviderapi.NewCodec()
+	if err != nil {
+		log.Error(err, "Error creating AWSProviderConfigCodec")
+		return err
+	}
+	for _, machine := range masterNodes.Items {
+		baseToPatch := client.MergeFrom(machine.DeepCopy())
+		providerSpecEncoded := machine.Spec.ProviderSpec
+		providerSpecDecoded := &awsproviderapi.AWSMachineProviderConfig{}
+		err := awsCodec.DecodeProviderSpec(&providerSpecEncoded, providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error decoding provider spec for machine", "machine", machine.Name)
+			return err
+		}
+		lbList := providerSpecDecoded.LoadBalancers
+		newLBList := []awsproviderapi.LoadBalancerReference{}
+		for _, lb := range lbList {
+			if !strings.HasPrefix(elbName, lb.Name) {
+				log.Info("Machine's LB does not match LB to remove", "Machine LB", lb.Name, "LB to remove", elbName)
+				log.Info("Keeping machine's LB in machine object", "LB", lb.Name, "Machine", machine.Name)
+				newLBList = append(newLBList, lb)
+			}
+		}
+		if !reflect.DeepEqual(lbList, newLBList) {
+			providerSpecDecoded.LoadBalancers = newLBList
+			newProviderSpecEncoded, err := awsCodec.EncodeProviderSpec(providerSpecDecoded)
+			if err != nil {
+				log.Error(err, "Error encoding provider spec for machine", "machine", machine.Name)
+				return err
+			}
+			machine.Spec.ProviderSpec = *newProviderSpecEncoded
+			machineObj := machine.DeepCopyObject()
+			if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
+				log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machine.Name)
+				return err
+			}
+		}
+
+	}
+	return nil
 }
