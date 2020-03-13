@@ -27,10 +27,11 @@ OPERATOR_DOCKERFILE ?=build/Dockerfile
 
 BINFILE=build/_output/bin/$(OPERATOR_NAME)
 MAINPACKAGE=./cmd/manager
-export GO111MODULE=on
-export GOPROXY?=https://proxy.golang.org
+unexport GOFLAGS
 GOENV=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
-GOFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
+GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
+
+CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
 
 # ex, -v
 TESTOPTS :=
@@ -42,6 +43,7 @@ default: gobuild
 .PHONY: clean
 clean:
 	rm -rf ./build/_output
+	rm -rf bundles-staging/ bundles-production/ saas-*-bundle/
 
 .PHONY: isclean
 isclean:
@@ -49,26 +51,42 @@ isclean:
 
 .PHONY: build
 build: isclean envtest
-	docker build --build-arg "GOPROXY=${GOPROXY}" . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
-	docker tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} build . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: push
 push:
-	docker push $(OPERATOR_IMAGE_URI)
-	docker push $(OPERATOR_IMAGE_URI_LATEST)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI_LATEST)
+
+.PHONY: skopeo-push
+skopeo-push: container-build
+	skopeo copy \
+		--dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
+		"docker-daemon:${OPERATOR_IMAGE_URI_LATEST}" \
+		"docker://${OPERATOR_IMAGE_URI_LATEST}"
+	skopeo copy \
+		--dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
+		"docker-daemon:${OPERATOR_IMAGE_URI}" \
+		"docker://${OPERATOR_IMAGE_URI}"
+
+.PHONY: build-catalog-image
+build-catalog-image:
+	$(call create_push_catalog_image,staging,service/saas-$(OPERATOR_NAME)-bundle,$$APP_SRE_BOT_PUSH_TOKEN,false,service/saas-osd-operators,$(OPERATOR_NAME)-services/$(OPERATOR_NAME).yaml,hack/generate-operator-bundle.py,$(CATALOG_REGISTRY_ORGANIZATION))
+	$(call create_push_catalog_image,production,service/saas-$(OPERATOR_NAME)-bundle,$$APP_SRE_BOT_PUSH_TOKEN,true,service/saas-osd-operators,$(OPERATOR_NAME)-services/$(OPERATOR_NAME).yaml,hack/generate-operator-bundle.py,$(CATALOG_REGISTRY_ORGANIZATION))
 
 .PHONY: gocheck
 gocheck: ## Lint code
-	gofmt -s -l $(shell go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d $(shell go list -f '{{ .Dir }}' ./... ); exit 1; fi
+	gofmt -s -l $$(go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d $$(go list -f '{{ .Dir }}' ./... ); exit 1; fi
 	go vet ./cmd/... ./pkg/...
 
 .PHONY: gobuild
 gobuild: gocheck gotest ## Build binary
-	${GOENV} go build ${GOFLAGS} -o ${BINFILE} ${MAINPACKAGE}
+	${GOENV} go build ${GOBUILDFLAGS} -o ${BINFILE} ${MAINPACKAGE}
 
 .PHONY: gotest
 gotest:
-	go test $(TESTOPTS) $(shell GO111MODULE=$(GO111MODULE) GOPROXY=$(GOPROXY) go list -mod=readonly -e ./... | egrep -v "/(vendor)/")
+	go test $(TESTOPTS) $$(go list -mod=readonly -e ./...)
 
 .PHONY: envtest
 envtest:

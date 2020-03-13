@@ -20,7 +20,7 @@ const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role
 func GetClusterBaseDomain(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	// This starts with "api." that needs to be removed.
 	u, err := url.Parse(infra.Status.APIServerURL)
@@ -34,7 +34,7 @@ func GetClusterBaseDomain(kclient client.Client) (string, error) {
 func GetClusterPlatform(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return string(infra.Status.Platform), nil
 }
@@ -43,7 +43,7 @@ func GetClusterPlatform(kclient client.Client) (string, error) {
 func GetClusterName(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return infra.Status.InfrastructureName, nil
 }
@@ -56,9 +56,8 @@ func GetClusterName(kclient client.Client) (string, error) {
 // }
 //
 func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
-	machineList := &machineapi.MachineList{}
 	subnets := make(map[string]string)
-	err := kclient.List(context.TODO(), machineList, client.InNamespace("openshift-machine-api"), client.MatchingLabels{masterMachineLabel: "master"})
+	machineList, err := GetMasterMachines(kclient)
 	if err != nil {
 		return subnets, err
 	}
@@ -93,11 +92,26 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 func GetClusterRegion(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)
 	if err != nil {
-		return "", nil
+		return "", err
 	} else if infra.Status.PlatformStatus == nil {
 		return "", fmt.Errorf("Expected to have a PlatformStatus for Infrastructure/cluster, but it was nil")
 	}
 	return infra.Status.PlatformStatus.AWS.Region, nil
+}
+
+// GetMasterNodes returns a machineList object whose .Items can be iterated
+// over to perform actions on/with information from each master machine object
+func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
+	machineList := &machineapi.MachineList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-machine-api"),
+		client.MatchingLabels{masterMachineLabel: "master"},
+	}
+	err := kclient.List(context.TODO(), machineList, listOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return machineList, nil
 }
 
 // GetClusterMasterInstancesIDs gets all the instance IDs for Master nodes
@@ -105,12 +119,7 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 // This could come from parsing the arbitrarily formatted .Status.ProviderStatus
 // but .Spec.ProviderID is standard
 func GetClusterMasterInstancesIDs(kclient client.Client) ([]string, error) {
-	machineList := &machineapi.MachineList{}
-	listOptions := []client.ListOption{
-		client.InNamespace("openshift-machine-api"),
-		client.MatchingLabels{masterMachineLabel: "master"},
-	}
-	err := kclient.List(context.TODO(), machineList, listOptions...)
+	machineList, err := GetMasterMachines(kclient)
 	if err != nil {
 		return []string{}, err
 	}
