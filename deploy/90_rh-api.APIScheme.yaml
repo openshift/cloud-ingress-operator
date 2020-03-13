@@ -1,0 +1,18 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: APIScheme
+metadata:
+  name: rh-api
+spec:
+  managementAPIServerIngress:
+    enabled: true
+    dnsName: rh-api
+    allowedCIDRBlocks:
+    - "${ALLOWED_CIDR_BLOCKS_1}"
+    - "${ALLOWED_CIDR_BLOCKS_2}"
+    - "${ALLOWED_CIDR_BLOCKS_3}"
+    - "${ALLOWED_CIDR_BLOCKS_4}"
+    - "${ALLOWED_CIDR_BLOCKS_5}"
+    - "${ALLOWED_CIDR_BLOCKS_6}"
+    - "${ALLOWED_CIDR_BLOCKS_7}"
+    - "${ALLOWED_CIDR_BLOCKS_8}"
+    - "${ALLOWED_CIDR_BLOCKS_9}"
