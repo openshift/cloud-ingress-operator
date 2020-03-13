@@ -5,7 +5,7 @@ include project.mk
 include standard.mk
 include functions.mk
 
-default: gobuild
+default: generate-syncset gobuild
 
 # Extend Makefile after here
 
