@@ -100,6 +100,21 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 	return infra.Status.PlatformStatus.AWS.Region, nil
 }
 
+// GetMasterNodes returns a machineList object whose .Items can be iterated
+// over to perform actions on/with information from each master machine object
+func GetMasterNodes(kclient client.Client) (*machineapi.MachineList, error) {
+	machineList := &machineapi.MachineList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-machine-api"),
+		client.MatchingLabels{masterMachineLabel: "master"},
+	}
+	err := kclient.List(context.TODO(), machineList, listOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return machineList, nil
+}
+
 // GetClusterMasterInstancesIDs gets all the instance IDs for Master nodes
 // For AWS the form is aws:///<availability zone>/<instance ID>
 // This could come from parsing the arbitrarily formatted .Status.ProviderStatus
