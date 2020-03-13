@@ -14,4 +14,4 @@ fi
 BASE_IMG="cloud-ingress-operator"
 IMG="${BASE_IMG}:latest"
 
-BUILD_CMD="docker build" IMG="$IMG" make docker-build
+IMG="$IMG" make container-build

@@ -12,4 +12,53 @@ parameters:
   required: true
 metadata:
   name: selectorsyncset-template
-objects: []
+objects:
+- apiVersion: hive.openshift.io/v1alpha1
+  kind: SelectorSyncSet
+  metadata:
+    generation: 1
+    name: ${REPO_NAME}
+  spec:
+    clusterDeploymentSelector:
+      matchLabels:
+        api.openshift.com/managed: "true"
+    resourceApplyMode: sync
+    resources:
+    - apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        labels:
+          opsrc-datastore: "true"
+          opsrc-provider: redhat
+        name: ${REPO_NAME}-registry
+        namespace: openshift-${REPO_NAME}
+      spec:
+        image: ${REGISTRY_IMG}:${CHANNEL}-${IMAGE_TAG}
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                - key: node-role.kubernetes.io/infra
+                  operator: Exists
+              weight: 1
+        tolerations:
+          - effect: NoSchedule
+            key: node-role.kubernetes.io/infra
+            operator: Exists
+        displayName: ${REPO_NAME}
+        icon:
+          base64data: ""
+          mediatype: ""
+        publisher: Red Hat
+        sourceType: grpc
+    - apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: ${REPO_NAME}
+        namespace: openshift-${REPO_NAME}
+      spec:
+        channel: ${CHANNEL}
+        name: ${REPO_NAME}
+        source: ${REPO_NAME}-registry
+        sourceNamespace: openshift-${REPO_NAME}

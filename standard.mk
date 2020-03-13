@@ -33,8 +33,6 @@ GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPAT
 
 CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
 
-GO_DIRS=$(shell go list -mod=readonly -e ./... | egrep -v "/(vendor)/" )
-
 # ex, -v
 TESTOPTS :=
 
@@ -79,7 +77,7 @@ build-catalog-image:
 
 .PHONY: gocheck
 gocheck: ## Lint code
-	gofmt -s -l ${GO_DIRS} | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d ${GO_DIRS}; exit 1; fi
+	gofmt -s -l $$(go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d $$(go list -f '{{ .Dir }}' ./... ); exit 1; fi
 	go vet ./cmd/... ./pkg/...
 
 .PHONY: gobuild
@@ -88,7 +86,7 @@ gobuild: gocheck gotest ## Build binary
 
 .PHONY: gotest
 gotest:
-	go test ${TESTOPTS} ${GO_DIRS}
+	go test $(TESTOPTS) $$(go list -mod=readonly -e ./...)
 
 .PHONY: envtest
 envtest:
