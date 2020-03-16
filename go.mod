@@ -10,6 +10,7 @@ require (
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
 	github.com/operator-framework/operator-sdk v0.15.1
+	github.com/prometheus/common v0.7.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.17.2
 	k8s.io/apimachinery v0.17.2
