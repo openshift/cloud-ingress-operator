@@ -162,6 +162,8 @@ objects:
         - get
         - list
         - watch
+        - patch
+        - update
       - apiGroups:
         - config.openshift.io
         resources:
@@ -285,6 +287,7 @@ objects:
       kind: APIScheme
       metadata:
         name: rh-api
+        namespace: openshift-cloud-ingress-operator
       spec:
         managementAPIServerIngress:
           enabled: true
