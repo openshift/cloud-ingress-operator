@@ -284,6 +284,7 @@ objects:
       kind: APIScheme
       metadata:
         name: rh-api
+        namespace: openshift-cloud-ingress-operator
       spec:
         managementAPIServerIngress:
           enabled: true
