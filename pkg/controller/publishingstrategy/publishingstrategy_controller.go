@@ -119,7 +119,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	}
 
 	// create temp list of applicationIngress
-	ingressNotOnClusterList := instance.Spec.ApplicationIngress
+	var ingressNotOnClusterList []cloudingressv1alpha1.ApplicationIngress
 	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
 	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
 		for _, ingressController := range ingressControllerList.Items {
@@ -484,9 +484,6 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
-		return false
-	}
-	if publishingStrategyIngress.Certificate.Namespace != ingressController.Namespace {
 		return false
 	}
 	return true
