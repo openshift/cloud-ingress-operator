@@ -161,7 +161,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 					}
 				}
 			}
-			log.Info(fmt.Sprintf("in default loop, appingress is: %v", appingress))
 			newDefaultIngressController, err := newApplicationIngressControllerCR(defaultIngressName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to generate information for default ingresscontroller with domain %s", appingress.DNSName))
@@ -212,7 +211,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to generate information for ingresscontroller with domain %s", appingress.DNSName))
 		}
-		log.Info(fmt.Sprintf("value of new ingresscontroller is: %v", newIngressController))
 		err = r.client.Create(context.TODO(), newIngressController)
 		if err != nil {
 			if k8serr.IsAlreadyExists(err) {
