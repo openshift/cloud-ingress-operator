@@ -2,18 +2,23 @@ package publishingstrategy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
+
+	operatorv1 "github.com/openshift/api/operator/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	// corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
@@ -26,10 +31,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_publishingstrategy")
+const (
+	defaultIngressName         = "default"
+	ingressControllerNamespace = "openshift-ingress-operator"
+)
 
-// namespace where we will be creating the ingresscontroller types
-var ingressControllerNamespace = "openshift-ingress-operator"
+var log = logf.Log.WithName("controller_publishingstrategy")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -98,6 +105,139 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
+	}
+
+	// get a list of all ingress on the cluster
+	ingressControllerList := &operatorv1.IngressControllerList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-ingress-operator"),
+	}
+	err = r.client.List(context.TODO(), ingressControllerList, listOptions...)
+	if err != nil {
+		log.Error(err, "Cannot get list of ingresscontroller")
+		return reconcile.Result{}, err
+	}
+
+	// create temp list of applicationIngress
+	var ingressNotOnClusterList []cloudingressv1alpha1.ApplicationIngress
+	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
+	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
+		for _, ingressController := range ingressControllerList.Items {
+			if !isOnCluster(&publishingStrategyIngress, &ingressController) {
+				ingressNotOnClusterList = append(ingressNotOnClusterList, publishingStrategyIngress)
+			}
+		}
+	}
+
+	// unique only
+	ingressList := instance.Spec.ApplicationIngress
+	for _, v := range ingressNotOnClusterList {
+		skip := false
+		for _, u := range ingressList {
+			if v.DNSName == u.DNSName {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			ingressList = append(ingressList, v)
+		}
+	}
+
+	for _, appingress := range ingressList {
+
+		newCertificate := &corev1.LocalObjectReference{
+			Name: appingress.Certificate.Name,
+		}
+		// default=true
+		if appingress.Default == true {
+			// delete the default appingress on cluster
+			for _, ingresscontroller := range ingressControllerList.Items {
+				if ingresscontroller.Name == defaultIngressName {
+					err := r.client.Delete(context.TODO(), &ingresscontroller)
+					if err != nil {
+						log.Error(err, "failed to delete existing ingresscontroller")
+						return reconcile.Result{}, err
+					}
+				}
+			}
+			newDefaultIngressController, err := newApplicationIngressControllerCR(defaultIngressName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+			if err != nil {
+				log.Error(err, fmt.Sprintf("failed to generate information for default ingresscontroller with domain %s", appingress.DNSName))
+				return reconcile.Result{}, err
+			}
+			err = r.client.Create(context.TODO(), newDefaultIngressController)
+			if err != nil {
+				if k8serr.IsAlreadyExists(err) {
+					log.Info("default ingresscontroller already exists on cluster. Enter retry...")
+					for i := 0; i < 30; i++ {
+						if i == 30 {
+							log.Error(err, "out of retries")
+							return reconcile.Result{}, err
+						}
+						log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
+						time.Sleep(time.Duration(1) * time.Second)
+
+						err = r.client.Create(context.TODO(), newDefaultIngressController)
+						if err != nil {
+							log.Info("not able to create new default ingresscontroller" + err.Error())
+							continue
+						}
+						// if err not nil then successful
+						log.Info("successfully created default ingresscontroller")
+						break
+					}
+				} else {
+					log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
+					return reconcile.Result{}, err
+				}
+			}
+			continue
+		}
+
+		newIngressControllerName := getIngressName(appingress.DNSName)
+		// check to see if ingress with same name exists on cluster
+		for _, ingresscontroller := range ingressControllerList.Items {
+			if ingresscontroller.Name == newIngressControllerName {
+				err := r.client.Delete(context.TODO(), &ingresscontroller)
+				if err != nil {
+					log.Error(err, "failed to delete existing ingresscontroller")
+					return reconcile.Result{}, err
+				}
+			}
+		}
+		// create the ingress
+		newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("failed to generate information for ingresscontroller with domain %s", appingress.DNSName))
+		}
+		err = r.client.Create(context.TODO(), newIngressController)
+		if err != nil {
+			if k8serr.IsAlreadyExists(err) {
+				log.Info("default ingresscontroller already exists on cluster. Enter retry...")
+				for i := 0; i < 30; i++ {
+					if i == 30 {
+						log.Error(err, "out of retries")
+						return reconcile.Result{}, err
+					}
+					log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
+					time.Sleep(time.Duration(1) * time.Second)
+
+					err = r.client.Create(context.TODO(), newIngressController)
+					if err != nil {
+						log.Info("not able to create new default ingresscontroller" + err.Error())
+						continue
+					}
+					// if err not nil then successful
+					log.Info("create successful. Breaking out of for loop")
+					break
+				}
+			} else {
+				log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
+				return reconcile.Result{}, err
+			}
+		}
+		log.Info("successfully created new ingresscontroller")
 	}
 
 	// get region
@@ -284,7 +424,67 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 		return reconcile.Result{}, nil
 	}
+
 	return reconcile.Result{}, nil
+}
+
+// getIngressName takes the domain name and returns the first part
+func getIngressName(dnsName string) string {
+	firstPeriodIndex := strings.Index(dnsName, ".")
+	newIngressName := dnsName[:firstPeriodIndex]
+	return newIngressName
+}
+
+// newApplicationIngressControllerCR creates a new IngressController CR
+func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName string, certificate *corev1.LocalObjectReference, matchLabels map[string]string) (*operatorv1.IngressController, error) {
+	loadBalancerScope := operatorv1.LoadBalancerScope("")
+	switch scope {
+	case "internal":
+		loadBalancerScope = operatorv1.InternalLoadBalancer
+	case "external":
+		loadBalancerScope = operatorv1.ExternalLoadBalancer
+	default:
+		return &operatorv1.IngressController{}, errors.New("ErrCreatingIngressController")
+	}
+
+	return &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ingressControllerCRName,
+			Namespace: ingressControllerNamespace,
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: certificate,
+			Domain:             dnsName,
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: loadBalancerScope,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+		},
+	}, nil
+}
+
+// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
+func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
+	// check to see if these fields are empty to ensure no nil pointer error
+	if string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) == "" || ingressController.Spec.Domain == "" || ingressController.Spec.DefaultCertificate.Name == "" || ingressController.Namespace == "" {
+		return false
+	}
+
+	if string(publishingStrategyIngress.Listening) != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		return false
+	}
+	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
+		return false
+	}
+	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		return false
+	}
+	return true
 }
 
 func RemoveLBFromMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {

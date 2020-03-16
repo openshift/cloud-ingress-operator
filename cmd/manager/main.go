@@ -17,6 +17,7 @@ import (
 	"github.com/openshift/cloud-ingress-operator/version"
 
 	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -120,6 +121,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err := awsproviderapi.SchemeBuilder.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+	if err := operatorv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}
