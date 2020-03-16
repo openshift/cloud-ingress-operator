@@ -153,7 +153,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		if appingress.Default == true {
 			// delete the default appingress on cluster
 			for _, ingresscontroller := range ingressControllerList.Items {
-				if ingresscontroller.Name == "default" {
+				if ingresscontroller.Name == defaultIngressName {
 					err := r.client.Delete(context.TODO(), &ingresscontroller)
 					if err != nil {
 						log.Error(err, "failed to delete existing ingresscontroller")
@@ -162,7 +162,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				}
 			}
 			log.Info(fmt.Sprintf("in default loop, appingress is: %v", appingress))
-			newDefaultIngressController, err := newApplicationIngressControllerCR("default", string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+			newDefaultIngressController, err := newApplicationIngressControllerCR(defaultIngressName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to generate information for default ingresscontroller with domain %s", appingress.DNSName))
 				return reconcile.Result{}, err
