@@ -262,6 +262,14 @@ objects:
           mediatype: ''
         publisher: Red Hat
         sourceType: grpc
+    - apiVersion: operators.coreos.com/v1
+      kind: OperatorGroup
+      metadata:
+        name: ${REPO_NAME}
+        namespace: openshift-${REPO_NAME}
+      spec:
+        targetNamespaces:
+        - openshift-${REPO_NAME}
     - apiVersion: operators.coreos.com/v1alpha1
       kind: Subscription
       metadata:
@@ -276,6 +284,7 @@ objects:
       kind: APIScheme
       metadata:
         name: rh-api
+        namespace: openshift-cloud-ingress-operator
       spec:
         managementAPIServerIngress:
           enabled: true
