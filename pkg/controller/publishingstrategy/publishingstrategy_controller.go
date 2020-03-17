@@ -192,11 +192,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 					return reconcile.Result{}, err
 				}
 			}
+			log.Info("successfully created new default ingresscontroller")
 			continue
 		}
 
 		newIngressControllerName := getIngressName(appingress.DNSName)
-		// check to see if ingress with same name exists on cluster
+		// if ingress with same name exists on cluster then delete
 		for _, ingresscontroller := range ingressControllerList.Items {
 			if ingresscontroller.Name == newIngressControllerName {
 				err := r.client.Delete(context.TODO(), &ingresscontroller)
@@ -238,6 +239,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			}
 		}
 		log.Info("successfully created new ingresscontroller")
+		continue
 	}
 
 	// get region
@@ -482,6 +484,11 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		return false
+	}
+
+	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
+	if !isRouteSelectorEqual {
 		return false
 	}
 	return true
