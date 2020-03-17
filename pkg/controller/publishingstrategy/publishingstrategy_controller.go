@@ -118,12 +118,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// create temp list of applicationIngress
+	// create list of applicationIngress
 	var ingressNotOnCluster []cloudingressv1alpha1.ApplicationIngress
 
 	exisitingIngressMap := convertIngressControllerToMap(ingressControllerList.Items)
 
-	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
+	// loop through every applicationingress in publishing strategy
 	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
 		if !checkExistingIngress(exisitingIngressMap, &publishingStrategyIngress) {
 			ingressNotOnCluster = append(ingressNotOnCluster, publishingStrategyIngress)
