@@ -118,33 +118,19 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// create temp list of applicationIngress
-	var ingressNotOnClusterList []cloudingressv1alpha1.ApplicationIngress
-	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
+	// create list of applicationIngress
+	var ingressNotOnCluster []cloudingressv1alpha1.ApplicationIngress
+
+	exisitingIngressMap := convertIngressControllerToMap(ingressControllerList.Items)
+
+	// loop through every applicationingress in publishing strategy
 	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
-		for _, ingressController := range ingressControllerList.Items {
-			if !isOnCluster(&publishingStrategyIngress, &ingressController) {
-				ingressNotOnClusterList = append(ingressNotOnClusterList, publishingStrategyIngress)
-			}
+		if !checkExistingIngress(exisitingIngressMap, &publishingStrategyIngress) {
+			ingressNotOnCluster = append(ingressNotOnCluster, publishingStrategyIngress)
 		}
 	}
 
-	// unique only
-	ingressList := instance.Spec.ApplicationIngress
-	for _, v := range ingressNotOnClusterList {
-		skip := false
-		for _, u := range ingressList {
-			if v.DNSName == u.DNSName {
-				skip = true
-				break
-			}
-		}
-		if !skip {
-			ingressList = append(ingressList, v)
-		}
-	}
-
-	for _, appingress := range ingressList {
+	for _, appingress := range ingressNotOnCluster {
 
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
@@ -192,11 +178,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 					return reconcile.Result{}, err
 				}
 			}
+			log.Info("successfully created new default ingresscontroller")
 			continue
 		}
 
 		newIngressControllerName := getIngressName(appingress.DNSName)
-		// check to see if ingress with same name exists on cluster
+		// if ingress with same name exists on cluster then delete
 		for _, ingresscontroller := range ingressControllerList.Items {
 			if ingresscontroller.Name == newIngressControllerName {
 				err := r.client.Delete(context.TODO(), &ingresscontroller)
@@ -238,6 +225,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			}
 		}
 		log.Info("successfully created new ingresscontroller")
+		continue
 	}
 
 	// get region
@@ -468,20 +456,44 @@ func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName s
 	}, nil
 }
 
-// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
-func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
-	// check to see if these fields are empty to ensure no nil pointer error
-	if string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) == "" || ingressController.Spec.Domain == "" || ingressController.Spec.DefaultCertificate.Name == "" || ingressController.Namespace == "" {
+// convertIngressControllerToMap takes in on cluster ingresscontroller list and returns them as a map with key Spec.Domain and value operatorv1.IngressController
+func convertIngressControllerToMap(existingIngress []operatorv1.IngressController) map[string]operatorv1.IngressController {
+	ingressMap := make(map[string]operatorv1.IngressController)
+
+	for _, ingress := range existingIngress {
+		ingressMap[ingress.Spec.Domain] = ingress
+	}
+	return ingressMap
+}
+
+// checkExistingIngress returns false if applicationIngress do not match any existing ingresscontroller on cluster
+func checkExistingIngress(existingMap map[string]operatorv1.IngressController, publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress) bool {
+	if _, ok := existingMap[publishingStrategyIngress.DNSName]; !ok {
 		return false
 	}
+	if !isOnCluster(publishingStrategyIngress, existingMap[publishingStrategyIngress.DNSName]) {
+		return false
+	}
+	return true
+}
 
-	if string(publishingStrategyIngress.Listening) != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
+func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController operatorv1.IngressController) bool {
+
+	listening := string(publishingStrategyIngress.Listening)
+	capListening := strings.Title(strings.ToLower(listening))
+	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
 		return false
 	}
 	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		return false
+	}
+
+	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
+	if !isRouteSelectorEqual {
 		return false
 	}
 	return true
