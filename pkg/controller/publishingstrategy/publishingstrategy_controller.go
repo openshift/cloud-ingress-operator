@@ -170,8 +170,8 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			if err != nil {
 				if k8serr.IsAlreadyExists(err) {
 					log.Info("default ingresscontroller already exists on cluster. Enter retry...")
-					for i := 0; i < 30; i++ {
-						if i == 30 {
+					for i := 0; i < 60; i++ {
+						if i == 60 {
 							log.Error(err, "out of retries")
 							return reconcile.Result{}, err
 						}
@@ -214,7 +214,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		err = r.client.Create(context.TODO(), newIngressController)
 		if err != nil {
 			if k8serr.IsAlreadyExists(err) {
-				log.Info("default ingresscontroller already exists on cluster. Enter retry...")
+				log.Info("ingresscontroller already exists on cluster. Enter retry...")
 				for i := 0; i < 30; i++ {
 					if i == 30 {
 						log.Error(err, "out of retries")

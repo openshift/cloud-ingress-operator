@@ -111,7 +111,6 @@ spec:
                 - certificate
                 - default
                 - dnsName
-                - routeSelector
                 type: object
               type: array
             defaultAPIServerIngress:

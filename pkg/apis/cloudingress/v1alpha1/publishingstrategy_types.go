@@ -34,7 +34,7 @@ type ApplicationIngress struct {
 	Default       bool                   `json:"default"`
 	DNSName       string                 `json:"dnsName"`
 	Certificate   corev1.SecretReference `json:"certificate"`
-	RouteSelector metav1.LabelSelector   `json:"routeSelector"`
+	RouteSelector metav1.LabelSelector   `json:"routeSelector,omitempty"`
 }
 
 // Listening defines internal or external api and ingress
