@@ -119,32 +119,18 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	}
 
 	// create temp list of applicationIngress
-	var ingressNotOnClusterList []cloudingressv1alpha1.ApplicationIngress
+	var ingressNotOnCluster []cloudingressv1alpha1.ApplicationIngress
+
+	exisitingIngressMap := convertIngressControllerToMap(ingressControllerList.Items)
+
 	// loop through every applicationingress in publishing strategy and every ingresscontroller in cluster
 	for _, publishingStrategyIngress := range instance.Spec.ApplicationIngress {
-		for _, ingressController := range ingressControllerList.Items {
-			if !isOnCluster(&publishingStrategyIngress, &ingressController) {
-				ingressNotOnClusterList = append(ingressNotOnClusterList, publishingStrategyIngress)
-			}
+		if !checkExistingIngress(exisitingIngressMap, &publishingStrategyIngress) {
+			ingressNotOnCluster = append(ingressNotOnCluster, publishingStrategyIngress)
 		}
 	}
 
-	// unique only
-	ingressList := instance.Spec.ApplicationIngress
-	for _, v := range ingressNotOnClusterList {
-		skip := false
-		for _, u := range ingressList {
-			if v.DNSName == u.DNSName {
-				skip = true
-				break
-			}
-		}
-		if !skip {
-			ingressList = append(ingressList, v)
-		}
-	}
-
-	for _, appingress := range ingressList {
+	for _, appingress := range ingressNotOnCluster {
 
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
@@ -470,25 +456,58 @@ func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName s
 	}, nil
 }
 
-// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
-func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
-	// check to see if these fields are empty to ensure no nil pointer error
-	if string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) == "" || ingressController.Spec.Domain == "" || ingressController.Spec.DefaultCertificate.Name == "" || ingressController.Namespace == "" {
+// convertIngressControllerToMap takes in on cluster ingresscontroller list and returns them as a map with key Spec.Domain and value operatorv1.IngressController
+func convertIngressControllerToMap(existingIngress []operatorv1.IngressController) map[string]operatorv1.IngressController {
+	ingressMap := make(map[string]operatorv1.IngressController)
+
+	for _, ingress := range existingIngress {
+		ingressMap[ingress.Spec.Domain] = ingress
+	}
+	return ingressMap
+}
+
+// checkExistingIngress returns false if applicationIngress do not match any existing ingresscontroller on cluster
+func checkExistingIngress(existingMap map[string]operatorv1.IngressController, publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress) bool {
+	fmt.Printf("publishingStrategy dns name %s \n\n\n\n\n\n", publishingStrategyIngress.DNSName)
+	fmt.Printf("ingress contained with publishingStrategy dns name %v \n\n\n\n\n\n", existingMap[publishingStrategyIngress.DNSName])
+
+	if _, ok := existingMap[publishingStrategyIngress.DNSName]; !ok {
+		fmt.Println("inside of false")
 		return false
 	}
+	if !isOnCluster(publishingStrategyIngress, existingMap[publishingStrategyIngress.DNSName]) {
+		fmt.Println("inside of second false")
+		return false
+	}
+	fmt.Println("inside of true")
+	return true
+}
 
-	if string(publishingStrategyIngress.Listening) != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+// doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
+func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController operatorv1.IngressController) bool {
+
+	listening := string(publishingStrategyIngress.Listening)
+	capListening := strings.Title(strings.ToLower(listening))
+	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		log.Info(fmt.Sprintf("not on cluster %s", string(publishingStrategyIngress.Listening)))
+		log.Info(fmt.Sprintf("on cluster %s", string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope)))
+		log.Info("got here 2")
 		return false
 	}
 	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
+		log.Info(fmt.Sprintf("not on cluster DNS %s", publishingStrategyIngress.DNSName))
+		log.Info(fmt.Sprintf("on cluster DNS %s", ingressController.Spec.Domain))
+		log.Info("got here 3")
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		log.Info("got here 4")
 		return false
 	}
 
 	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
 	if !isRouteSelectorEqual {
+		log.Info("got here 5")
 		return false
 	}
 	return true
