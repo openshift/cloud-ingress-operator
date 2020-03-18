@@ -136,7 +136,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
 		}
-		// default=true
+
 		if appingress.Default == true {
 			err := r.defaultIngressHandle(reqLogger, appingress, ingressControllerList, newCertificate)
 			if err != nil {
@@ -387,6 +387,7 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(logger logr.Logger, a
 	return nil
 }
 
+// nonDefaultIngressHandle will delete the existing non-default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
 func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(logger logr.Logger, appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
 
 	newIngressControllerName := getIngressName(appingress.DNSName)
@@ -409,8 +410,8 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(logger logr.Logger
 	if err != nil {
 		if k8serr.IsAlreadyExists(err) {
 			log.Info("ingresscontroller already exists on cluster. Enter retry...")
-			for i := 0; i < 30; i++ {
-				if i == 30 {
+			for i := 0; i < 60; i++ {
+				if i == 60 {
 					log.Error(err, "out of retries")
 					return err
 				}
