@@ -10,7 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
-	"github.com/go-logr/logr"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
@@ -138,7 +137,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 
 		if appingress.Default == true {
-			err := r.defaultIngressHandle(reqLogger, appingress, ingressControllerList, newCertificate)
+			err := r.defaultIngressHandle(appingress, ingressControllerList, newCertificate)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to handle default ingresscontroller %v", appingress))
 				return reconcile.Result{}, err
@@ -146,7 +145,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			continue
 		}
 
-		err := r.nonDefaultIngressHandle(reqLogger, appingress, ingressControllerList, newCertificate)
+		err := r.nonDefaultIngressHandle(appingress, ingressControllerList, newCertificate)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to handle non-default ingresscontroller %v", appingress))
 		}
@@ -341,7 +340,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 }
 
 // defaultIngressHandle will delete the existing default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
-func (r *ReconcilePublishingStrategy) defaultIngressHandle(logger logr.Logger, appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
+func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
 	// delete the default appingress on cluster
 	for _, ingresscontroller := range ingressControllerList.Items {
 		if ingresscontroller.Name == defaultIngressName {
@@ -388,7 +387,7 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(logger logr.Logger, a
 }
 
 // nonDefaultIngressHandle will delete the existing non-default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
-func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(logger logr.Logger, appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
+func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
 
 	newIngressControllerName := getIngressName(appingress.DNSName)
 	// if ingress with same name exists on cluster then delete
