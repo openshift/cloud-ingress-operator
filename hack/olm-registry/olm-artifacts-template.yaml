@@ -1,245 +1,113 @@
 apiVersion: v1
 kind: Template
 parameters:
-- name: REGISTRY_IMG
-  required: true
-- name: CHANNEL
-  required: true
-- name: IMAGE_TAG
-  required: true
-- name: REPO_NAME
-  value: cloud-ingress-operator
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_1
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_2
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_3
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_4
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_5
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_6
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_7
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_8
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_9
-  required: true
-metadata:
-  name: selectorsyncset-template
+- {name: REGISTRY_IMG, required: true}
+- {name: CHANNEL, required: true}
+- {name: IMAGE_TAG, required: true}
+- {name: REPO_NAME, value: cloud-ingress-operator, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_1, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_2, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_3, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_4, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_5, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_6, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_7, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_8, required: true}
+- {name: ALLOWED_CIDR_BLOCKS_9, required: true}
+metadata: {name: selectorsyncset-template}
 objects:
 - apiVersion: hive.openshift.io/v1alpha1
   kind: SelectorSyncSet
   metadata:
-    labels:
-      managed.openshift.io/gitHash: ${IMAGE_TAG}
-      managed.openshift.io/gitRepoName: ${REPO_NAME}
-      managed.openshift.io/osd: 'true'
+    labels: {managed.openshift.io/gitHash: '${IMAGE_TAG}', managed.openshift.io/gitRepoName: '${REPO_NAME}',
+      managed.openshift.io/osd: 'true'}
     name: cloud-ingress-operator
   spec:
     clusterDeploymentSelector:
-      matchLabels:
-        api.openshift.com/managed: 'true'
-    resourceApplyMode: sync
+      matchLabels: {api.openshift.com/managed: 'true'}
+    resourceApplyMode: Sync
     resources:
     - kind: Namespace
       apiVersion: v1
-      metadata:
-        name: openshift-cloud-ingress-operator
+      metadata: {name: openshift-cloud-ingress-operator}
     - apiVersion: cloudcredential.openshift.io/v1
       kind: CredentialsRequest
-      metadata:
-        name: cloud-ingress-operator-credentials
-        namespace: openshift-cloud-ingress-operator
+      metadata: {name: cloud-ingress-operator-credentials, namespace: openshift-cloud-ingress-operator}
       spec:
-        secretRef:
-          name: cloud-ingress-operator-credentials
-          namespace: openshift-cloud-ingress-operator
+        secretRef: {name: cloud-ingress-operator-credentials, namespace: openshift-cloud-ingress-operator}
         providerSpec:
           apiVersion: cloudcredential.openshift.io/v1
           kind: AWSProviderSpec
           statementEntries:
           - effect: Allow
             resource: '*'
-            action:
-            - elasticloadbalancing:*
-            - ec2:DescribeAccountAttributes
-            - ec2:DescribeAddresses
-            - ec2:DescribeInternetGateways
-            - ec2:DescribeSecurityGroups
-            - ec2:DescribeSubnets
-            - ec2:DescribeVpcs
-            - ec2:DescribeVpcClassicLink
-            - ec2:DescribeInstances
-            - ec2:DescribeNetworkInterfaces
-            - ec2:DescribeClassicLinkInstances
-            - ec2:DescribeRouteTables
-            - ec2:AuthorizeSecurityGroupEgress
-            - ec2:AuthorizeSecurityGroupIngress
-            - ec2:CreateSecurityGroup
-            - ec2:DeleteSecurityGroup
-            - ec2:DescribeInstanceAttribute
-            - ec2:DescribeInstanceStatus
-            - ec2:DescribeNetworkAcls
-            - ec2:DescribeSecurityGroups
-            - ec2:RevokeSecurityGroupEgress
-            - ec2:RevokeSecurityGroupIngress
-            - ec2:DescribeTags
-            - ec2:CreateTags
-            - ec2:DeleteTags
-            - route53:ChangeResourceRecordSets
-            - route53:GetHostedZone
-            - route53:GetHostedZoneCount
-            - route53:ListHostedZones
-            - route53:ListHostedZonesByName
-            - route53:ListResourceRecordSets
-            - route53:UpdateHostedZoneComment
+            action: ['elasticloadbalancing:*', 'ec2:DescribeAccountAttributes', 'ec2:DescribeAddresses',
+              'ec2:DescribeInternetGateways', 'ec2:DescribeSecurityGroups', 'ec2:DescribeSubnets',
+              'ec2:DescribeVpcs', 'ec2:DescribeVpcClassicLink', 'ec2:DescribeInstances',
+              'ec2:DescribeNetworkInterfaces', 'ec2:DescribeClassicLinkInstances',
+              'ec2:DescribeRouteTables', 'ec2:AuthorizeSecurityGroupEgress', 'ec2:AuthorizeSecurityGroupIngress',
+              'ec2:CreateSecurityGroup', 'ec2:DeleteSecurityGroup', 'ec2:DescribeInstanceAttribute',
+              'ec2:DescribeInstanceStatus', 'ec2:DescribeNetworkAcls', 'ec2:DescribeSecurityGroups',
+              'ec2:RevokeSecurityGroupEgress', 'ec2:RevokeSecurityGroupIngress', 'ec2:DescribeTags',
+              'ec2:CreateTags', 'ec2:DeleteTags', 'route53:ChangeResourceRecordSets',
+              'route53:GetHostedZone', 'route53:GetHostedZoneCount', 'route53:ListHostedZones',
+              'route53:ListHostedZonesByName', 'route53:ListResourceRecordSets', 'route53:UpdateHostedZoneComment']
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
-      metadata:
-        creationTimestamp: null
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
+      metadata: {creationTimestamp: null, name: cloud-ingress-operator, namespace: openshift-cloud-ingress-operator}
       rules:
-      - apiGroups:
-        - machine.openshift.io
-        resources:
-        - machines
-        - machinesets
-        verbs:
-        - get
-        - list
-        - watch
-        - patch
-        - update
-      - apiGroups:
-        - config.openshift.io
-        resources:
-        - infrastructures
-        - apiservers
-        verbs:
-        - list
-        - get
-        - watch
-      - apiGroups:
-        - config.openshift.io
-        resources:
-        - apiservers
-        verbs:
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - cloudingress.managed.openshift.io
-        resources:
-        - '*'
-        - apischemes
-        - publishingstrategies
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - ''
-        resources:
-        - pods
-        - services
-        - services/finalizers
-        - endpoints
-        - persistentvolumeclaims
-        - events
-        - configmaps
-        - secrets
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - apps
-        resources:
-        - deployments
-        - daemonsets
-        - replicasets
-        - statefulsets
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - monitoring.coreos.com
-        resources:
-        - servicemonitors
-        verbs:
-        - get
-        - create
-      - apiGroups:
-        - apps
-        resourceNames:
-        - cloud-ingress-operator
-        resources:
-        - deployments/finalizers
-        verbs:
-        - update
-      - apiGroups:
-        - ''
-        resources:
-        - pods
-        verbs:
-        - get
-      - apiGroups:
-        - apps
-        resources:
-        - replicasets
-        - deployments
-        verbs:
-        - get
+      - apiGroups: [machine.openshift.io]
+        resources: [machines, machinesets]
+        verbs: [get, list, watch, patch, update]
+      - apiGroups: [operator.openshift.io]
+        resources: [ingresscontrollers]
+        verbs: [get, list, watch, delete, create]
+      - apiGroups: [config.openshift.io]
+        resources: [infrastructures, apiservers]
+        verbs: [list, get, watch]
+      - apiGroups: [config.openshift.io]
+        resources: [apiservers]
+        verbs: [patch, update, watch]
+      - apiGroups: [cloudingress.managed.openshift.io]
+        resources: ['*', apischemes, publishingstrategies]
+        verbs: [create, delete, get, list, patch, update, watch]
+      - apiGroups: ['']
+        resources: [pods, services, services/finalizers, endpoints, persistentvolumeclaims,
+          events, configmaps, secrets]
+        verbs: [create, delete, get, list, patch, update, watch]
+      - apiGroups: [apps]
+        resources: [deployments, daemonsets, replicasets, statefulsets]
+        verbs: [create, delete, get, list, patch, update, watch]
+      - apiGroups: [monitoring.coreos.com]
+        resources: [servicemonitors]
+        verbs: [get, create]
+      - apiGroups: [apps]
+        resourceNames: [cloud-ingress-operator]
+        resources: [deployments/finalizers]
+        verbs: [update]
+      - apiGroups: ['']
+        resources: [pods]
+        verbs: [get]
+      - apiGroups: [apps]
+        resources: [replicasets, deployments]
+        verbs: [get]
     - kind: ClusterRoleBinding
       apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: cloud-ingress-operator
+      metadata: {name: cloud-ingress-operator}
       subjects:
-      - kind: ServiceAccount
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-        name: cloud-ingress-operator
+      - {kind: ServiceAccount, name: cloud-ingress-operator, namespace: openshift-cloud-ingress-operator}
+      roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cloud-ingress-operator}
     - kind: RoleBinding
       apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
+      metadata: {name: cloud-ingress-operator, namespace: openshift-cloud-ingress-operator}
       subjects:
-      - kind: ServiceAccount
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        kind: Role
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-        apiGroup: rbac.authorization.k8s.io
+      - {kind: ServiceAccount, name: cloud-ingress-operator, namespace: openshift-cloud-ingress-operator}
+      roleRef: {kind: Role, name: cloud-ingress-operator, namespace: openshift-cloud-ingress-operator,
+        apiGroup: rbac.authorization.k8s.io}
     - apiVersion: operators.coreos.com/v1alpha1
       kind: CatalogSource
       metadata:
-        labels:
-          opsrc-datastore: 'true'
-          opsrc-provider: redhat
+        labels: {opsrc-datastore: 'true', opsrc-provider: redhat}
         name: ${REPO_NAME}-registry
         namespace: openshift-${REPO_NAME}
       spec:
@@ -249,81 +117,52 @@ objects:
             preferredDuringSchedulingIgnoredDuringExecution:
             - preference:
                 matchExpressions:
-                - key: node-role.kubernetes.io/infra
-                  operator: Exists
+                - {key: node-role.kubernetes.io/infra, operator: Exists}
               weight: 1
         tolerations:
-        - effect: NoSchedule
-          key: node-role.kubernetes.io/infra
-          operator: Exists
+        - {effect: NoSchedule, key: node-role.kubernetes.io/infra, operator: Exists}
         displayName: ${REPO_NAME}
-        icon:
-          base64data: ''
-          mediatype: ''
+        icon: {base64data: '', mediatype: ''}
         publisher: Red Hat
         sourceType: grpc
     - apiVersion: operators.coreos.com/v1
       kind: OperatorGroup
-      metadata:
-        name: ${REPO_NAME}
-        namespace: openshift-${REPO_NAME}
+      metadata: {name: '${REPO_NAME}', namespace: 'openshift-${REPO_NAME}'}
       spec:
-        targetNamespaces:
-        - openshift-${REPO_NAME}
+        targetNamespaces: ['openshift-${REPO_NAME}']
     - apiVersion: operators.coreos.com/v1alpha1
       kind: Subscription
-      metadata:
-        name: ${REPO_NAME}
-        namespace: openshift-${REPO_NAME}
-      spec:
-        channel: ${CHANNEL}
-        name: ${REPO_NAME}
-        source: ${REPO_NAME}-registry
-        sourceNamespace: openshift-${REPO_NAME}
+      metadata: {name: '${REPO_NAME}', namespace: 'openshift-${REPO_NAME}'}
+      spec: {channel: '${CHANNEL}', name: '${REPO_NAME}', source: '${REPO_NAME}-registry',
+        sourceNamespace: 'openshift-${REPO_NAME}'}
     - apiVersion: cloudingress.managed.openshift.io/v1alpha1
       kind: APIScheme
-      metadata:
-        name: rh-api
-        namespace: openshift-cloud-ingress-operator
+      metadata: {name: rh-api, namespace: openshift-cloud-ingress-operator}
       spec:
         managementAPIServerIngress:
           enabled: true
           dnsName: rh-api
-          allowedCIDRBlocks:
-          - ${ALLOWED_CIDR_BLOCKS_1}
-          - ${ALLOWED_CIDR_BLOCKS_2}
-          - ${ALLOWED_CIDR_BLOCKS_3}
-          - ${ALLOWED_CIDR_BLOCKS_4}
-          - ${ALLOWED_CIDR_BLOCKS_5}
-          - ${ALLOWED_CIDR_BLOCKS_6}
-          - ${ALLOWED_CIDR_BLOCKS_7}
-          - ${ALLOWED_CIDR_BLOCKS_8}
-          - ${ALLOWED_CIDR_BLOCKS_9}
+          allowedCIDRBlocks: ['${ALLOWED_CIDR_BLOCKS_1}', '${ALLOWED_CIDR_BLOCKS_2}',
+            '${ALLOWED_CIDR_BLOCKS_3}', '${ALLOWED_CIDR_BLOCKS_4}', '${ALLOWED_CIDR_BLOCKS_5}',
+            '${ALLOWED_CIDR_BLOCKS_6}', '${ALLOWED_CIDR_BLOCKS_7}', '${ALLOWED_CIDR_BLOCKS_8}',
+            '${ALLOWED_CIDR_BLOCKS_9}']
 - apiVersion: hive.openshift.io/v1alpha1
   kind: SelectorSyncSet
   metadata:
-    labels:
-      managed.openshift.io/gitHash: ${IMAGE_TAG}
-      managed.openshift.io/gitRepoName: ${REPO_NAME}
-      managed.openshift.io/osd: 'true'
+    labels: {managed.openshift.io/gitHash: '${IMAGE_TAG}', managed.openshift.io/gitRepoName: '${REPO_NAME}',
+      managed.openshift.io/osd: 'true'}
     name: cloud-ingress-operator-crds
   spec:
     clusterDeploymentSelector:
-      matchLabels:
-        api.openshift.com/managed: 'true'
-    resourceApplyMode: sync
+      matchLabels: {api.openshift.com/managed: 'true'}
+    resourceApplyMode: Sync
     resources:
     - apiVersion: apiextensions.k8s.io/v1beta1
       kind: CustomResourceDefinition
-      metadata:
-        name: apischemes.cloudingress.managed.openshift.io
+      metadata: {name: apischemes.cloudingress.managed.openshift.io}
       spec:
         group: cloudingress.managed.openshift.io
-        names:
-          kind: APIScheme
-          listKind: APISchemeList
-          plural: apischemes
-          singular: apischeme
+        names: {kind: APIScheme, listKind: APISchemeList, plural: apischemes, singular: apischeme}
         scope: Namespaced
         subresources:
           status: {}
@@ -331,19 +170,17 @@ objects:
           openAPIV3Schema:
             description: APIScheme is the Schema for the APISchemes API
             properties:
-              apiVersion:
-                description: 'APIVersion defines the versioned schema of this representation
-                  of an object. Servers should convert recognized schemas to the latest
-                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
-                type: string
-              kind:
-                description: 'Kind is a string value representing the REST resource
+              apiVersion: {description: 'APIVersion defines the versioned schema of
+                  this representation of an object. Servers should convert recognized
+                  schemas to the latest internal value, and may reject unrecognized
+                  values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources',
+                type: string}
+              kind: {description: 'Kind is a string value representing the REST resource
                   this object represents. Servers may infer this from the endpoint
                   the client submits requests to. Cannot be updated. In CamelCase.
-                  More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
-                type: string
-              metadata:
-                type: object
+                  More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds',
+                type: string}
+              metadata: {type: object}
               spec:
                 description: APISchemeSpec defines the desired state of APIScheme
                 properties:
@@ -354,48 +191,34 @@ objects:
                       tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
                     properties:
                       allowedCIDRBlocks:
-                        items:
-                          type: string
+                        items: {type: string}
                         type: array
-                      dnsName:
-                        type: string
-                      enabled:
-                        type: boolean
-                    required:
-                    - allowedCIDRBlocks
-                    - dnsName
-                    - enabled
+                      dnsName: {type: string}
+                      enabled: {type: boolean}
+                    required: [allowedCIDRBlocks, dnsName, enabled]
                     type: object
-                required:
-                - managementAPIServerIngress
+                required: [managementAPIServerIngress]
                 type: object
               status:
                 description: APISchemeStatus defines the observed state of APIScheme
                 properties:
-                  cloudLoadBalancerDNSName:
-                    description: 'INSERT ADDITIONAL STATUS FIELD - define observed
-                      state of cluster Important: Run "operator-sdk generate k8s"
-                      to regenerate code after modifying this file Add custom validation
-                      using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
-                    type: string
+                  cloudLoadBalancerDNSName: {description: 'INSERT ADDITIONAL STATUS
+                      FIELD - define observed state of cluster Important: Run "operator-sdk
+                      generate k8s" to regenerate code after modifying this file Add
+                      custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html',
+                    type: string}
                 type: object
             type: object
         version: v1alpha1
         versions:
-        - name: v1alpha1
-          served: true
-          storage: true
+        - {name: v1alpha1, served: true, storage: true}
     - apiVersion: apiextensions.k8s.io/v1beta1
       kind: CustomResourceDefinition
-      metadata:
-        name: publishingstrategies.cloudingress.managed.openshift.io
+      metadata: {name: publishingstrategies.cloudingress.managed.openshift.io}
       spec:
         group: cloudingress.managed.openshift.io
-        names:
-          kind: PublishingStrategy
-          listKind: PublishingStrategyList
-          plural: publishingstrategies
-          singular: publishingstrategy
+        names: {kind: PublishingStrategy, listKind: PublishingStrategyList, plural: publishingstrategies,
+          singular: publishingstrategy}
         scope: Namespaced
         subresources:
           status: {}
@@ -404,19 +227,17 @@ objects:
             description: PublishingStrategy is the Schema for the publishingstrategies
               API
             properties:
-              apiVersion:
-                description: 'APIVersion defines the versioned schema of this representation
-                  of an object. Servers should convert recognized schemas to the latest
-                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-                type: string
-              kind:
-                description: 'Kind is a string value representing the REST resource
+              apiVersion: {description: 'APIVersion defines the versioned schema of
+                  this representation of an object. Servers should convert recognized
+                  schemas to the latest internal value, and may reject unrecognized
+                  values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources',
+                type: string}
+              kind: {description: 'Kind is a string value representing the REST resource
                   this object represents. Servers may infer this from the endpoint
                   the client submits requests to. Cannot be updated. In CamelCase.
-                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-                type: string
-              metadata:
-                type: object
+                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds',
+                type: string}
+              metadata: {type: object}
               spec:
                 description: PublishingStrategySpec defines the desired state of PublishingStrategy
                 properties:
@@ -430,25 +251,16 @@ objects:
                           description: SecretReference represents a Secret Reference.
                             It has enough information to retrieve secret in any namespace
                           properties:
-                            name:
-                              description: Name is unique within a namespace to reference
-                                a secret resource.
-                              type: string
-                            namespace:
-                              description: Namespace defines the space within which
-                                the secret name must be unique.
-                              type: string
+                            name: {description: Name is unique within a namespace
+                                to reference a secret resource., type: string}
+                            namespace: {description: Namespace defines the space within
+                                which the secret name must be unique., type: string}
                           type: object
-                        default:
-                          description: Default defines default value of ingress when
-                            cluster installs
-                          type: boolean
-                        dnsName:
-                          type: string
-                        listening:
-                          description: Listening defines application ingress as internal
-                            or external
-                          type: string
+                        default: {description: Default defines default value of ingress
+                            when cluster installs, type: boolean}
+                        dnsName: {type: string}
+                        listening: {description: Listening defines application ingress
+                            as internal or external, type: string}
                         routeSelector:
                           description: A label selector is a label query over a set
                             of resources. The result of matchLabels and matchExpressions
@@ -463,15 +275,11 @@ objects:
                                   that contains values, a key, and an operator that
                                   relates the key and values.
                                 properties:
-                                  key:
-                                    description: key is the label key that the selector
-                                      applies to.
-                                    type: string
-                                  operator:
-                                    description: operator represents a key's relationship
-                                      to a set of values. Valid operators are In,
-                                      NotIn, Exists and DoesNotExist.
-                                    type: string
+                                  key: {description: key is the label key that the
+                                      selector applies to., type: string}
+                                  operator: {description: 'operator represents a key''s
+                                      relationship to a set of values. Valid operators
+                                      are In, NotIn, Exists and DoesNotExist.', type: string}
                                   values:
                                     description: values is an array of string values.
                                       If the operator is In or NotIn, the values array
@@ -479,17 +287,13 @@ objects:
                                       or DoesNotExist, the values array must be empty.
                                       This array is replaced during a strategic merge
                                       patch.
-                                    items:
-                                      type: string
+                                    items: {type: string}
                                     type: array
-                                required:
-                                - key
-                                - operator
+                                required: [key, operator]
                                 type: object
                               type: array
                             matchLabels:
-                              additionalProperties:
-                                type: string
+                              additionalProperties: {type: string}
                               description: matchLabels is a map of {key,value} pairs.
                                 A single {key,value} in the matchLabels map is equivalent
                                 to an element of matchExpressions, whose key field
@@ -497,32 +301,21 @@ objects:
                                 contains only "value". The requirements are ANDed.
                               type: object
                           type: object
-                      required:
-                      - certificate
-                      - default
-                      - dnsName
-                      - routeSelector
+                      required: [certificate, default, dnsName]
                       type: object
                     type: array
                   defaultAPIServerIngress:
                     description: DefaultAPIServerIngress defines whether API is internal
                       or external
                     properties:
-                      listening:
-                        description: Listening defines internal or external ingress
-                        type: string
+                      listening: {description: Listening defines internal or external
+                          ingress, type: string}
                     type: object
-                required:
-                - applicationIngress
-                - defaultAPIServerIngress
+                required: [applicationIngress, defaultAPIServerIngress]
                 type: object
-              status:
-                description: PublishingStrategyStatus defines the observed state of
-                  PublishingStrategy
-                type: object
+              status: {description: PublishingStrategyStatus defines the observed
+                  state of PublishingStrategy, type: object}
             type: object
         version: v1alpha1
         versions:
-        - name: v1alpha1
-          served: true
-          storage: true
+        - {name: v1alpha1, served: true, storage: true}
