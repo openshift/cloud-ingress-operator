@@ -135,97 +135,20 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
 		}
-		// default=true
+
 		if appingress.Default == true {
-			// delete the default appingress on cluster
-			for _, ingresscontroller := range ingressControllerList.Items {
-				if ingresscontroller.Name == defaultIngressName {
-					err := r.client.Delete(context.TODO(), &ingresscontroller)
-					if err != nil {
-						log.Error(err, "failed to delete existing ingresscontroller")
-						return reconcile.Result{}, err
-					}
-				}
-			}
-			newDefaultIngressController, err := newApplicationIngressControllerCR(defaultIngressName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+			err := r.defaultIngressHandle(appingress, ingressControllerList, newCertificate)
 			if err != nil {
-				log.Error(err, fmt.Sprintf("failed to generate information for default ingresscontroller with domain %s", appingress.DNSName))
+				log.Error(err, fmt.Sprintf("failed to handle default ingresscontroller %v", appingress))
 				return reconcile.Result{}, err
 			}
-			err = r.client.Create(context.TODO(), newDefaultIngressController)
-			if err != nil {
-				if k8serr.IsAlreadyExists(err) {
-					log.Info("default ingresscontroller already exists on cluster. Enter retry...")
-					for i := 0; i < 60; i++ {
-						if i == 60 {
-							log.Error(err, "out of retries")
-							return reconcile.Result{}, err
-						}
-						log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
-						time.Sleep(time.Duration(1) * time.Second)
-
-						err = r.client.Create(context.TODO(), newDefaultIngressController)
-						if err != nil {
-							log.Info("not able to create new default ingresscontroller" + err.Error())
-							continue
-						}
-						// if err not nil then successful
-						log.Info("successfully created default ingresscontroller")
-						break
-					}
-				} else {
-					log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
-					return reconcile.Result{}, err
-				}
-			}
-			log.Info("successfully created new default ingresscontroller")
 			continue
 		}
 
-		newIngressControllerName := getIngressName(appingress.DNSName)
-		// if ingress with same name exists on cluster then delete
-		for _, ingresscontroller := range ingressControllerList.Items {
-			if ingresscontroller.Name == newIngressControllerName {
-				err := r.client.Delete(context.TODO(), &ingresscontroller)
-				if err != nil {
-					log.Error(err, "failed to delete existing ingresscontroller")
-					return reconcile.Result{}, err
-				}
-			}
-		}
-		// create the ingress
-		newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+		err := r.nonDefaultIngressHandle(appingress, ingressControllerList, newCertificate)
 		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to generate information for ingresscontroller with domain %s", appingress.DNSName))
+			log.Error(err, fmt.Sprintf("failed to handle non-default ingresscontroller %v", appingress))
 		}
-		err = r.client.Create(context.TODO(), newIngressController)
-		if err != nil {
-			if k8serr.IsAlreadyExists(err) {
-				log.Info("ingresscontroller already exists on cluster. Enter retry...")
-				for i := 0; i < 30; i++ {
-					if i == 30 {
-						log.Error(err, "out of retries")
-						return reconcile.Result{}, err
-					}
-					log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
-					time.Sleep(time.Duration(1) * time.Second)
-
-					err = r.client.Create(context.TODO(), newIngressController)
-					if err != nil {
-						log.Info("not able to create new default ingresscontroller" + err.Error())
-						continue
-					}
-					// if err not nil then successful
-					log.Info("create successful. Breaking out of for loop")
-					break
-				}
-			} else {
-				log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
-				return reconcile.Result{}, err
-			}
-		}
-		log.Info("successfully created new ingresscontroller")
-		continue
 	}
 
 	// get region
@@ -414,6 +337,102 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// defaultIngressHandle will delete the existing default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
+func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
+	// delete the default appingress on cluster
+	for _, ingresscontroller := range ingressControllerList.Items {
+		if ingresscontroller.Name == defaultIngressName {
+			err := r.client.Delete(context.TODO(), &ingresscontroller)
+			if err != nil {
+				log.Error(err, "failed to delete existing ingresscontroller")
+				return err
+			}
+		}
+	}
+	newDefaultIngressController, err := newApplicationIngressControllerCR(defaultIngressName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to generate information for default ingresscontroller with domain %s", appingress.DNSName))
+		return err
+	}
+	err = r.client.Create(context.TODO(), newDefaultIngressController)
+	if err != nil {
+		if k8serr.IsAlreadyExists(err) {
+			log.Info("default ingresscontroller already exists on cluster. Enter retry...")
+			for i := 0; i < 60; i++ {
+				if i == 60 {
+					log.Error(err, "out of retries")
+					return err
+				}
+				log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
+				time.Sleep(time.Duration(1) * time.Second)
+
+				err = r.client.Create(context.TODO(), newDefaultIngressController)
+				if err != nil {
+					log.Info("not able to create new default ingresscontroller" + err.Error())
+					continue
+				}
+				// if err not nil then successful
+				log.Info("successfully created default ingresscontroller")
+				break
+			}
+		} else {
+			log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
+			return err
+		}
+	}
+	log.Info("successfully created new default ingresscontroller")
+	return nil
+}
+
+// nonDefaultIngressHandle will delete the existing non-default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
+func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
+
+	newIngressControllerName := getIngressName(appingress.DNSName)
+	// if ingress with same name exists on cluster then delete
+	for _, ingresscontroller := range ingressControllerList.Items {
+		if ingresscontroller.Name == newIngressControllerName {
+			err := r.client.Delete(context.TODO(), &ingresscontroller)
+			if err != nil {
+				log.Error(err, "failed to delete existing ingresscontroller")
+				return err
+			}
+		}
+	}
+	// create the ingress
+	newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to generate information for ingresscontroller with domain %s", appingress.DNSName))
+	}
+	err = r.client.Create(context.TODO(), newIngressController)
+	if err != nil {
+		if k8serr.IsAlreadyExists(err) {
+			log.Info("ingresscontroller already exists on cluster. Enter retry...")
+			for i := 0; i < 60; i++ {
+				if i == 60 {
+					log.Error(err, "out of retries")
+					return err
+				}
+				log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
+				time.Sleep(time.Duration(1) * time.Second)
+
+				err = r.client.Create(context.TODO(), newIngressController)
+				if err != nil {
+					log.Info("not able to create new ingresscontroller" + err.Error())
+					continue
+				}
+				// if err not nil then successful
+				log.Info("create successful. Breaking out of for loop")
+				break
+			}
+		} else {
+			log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
+			return err
+		}
+	}
+	log.Info("successfully created new ingresscontroller")
+	return nil
 }
 
 // getIngressName takes the domain name and returns the first part
