@@ -8,6 +8,7 @@ include functions.mk
 default: generate-syncset gobuild
 
 # Extend Makefile after here
+CONTAINER_ENGINE?=docker
 
 # Build the docker image
 .PHONY: container-build
@@ -27,7 +28,7 @@ operator-sdk-generate:
 .PHONY: generate-syncset
 generate-syncset:
 	if [ "${IN_CONTAINER}" == "true" ]; then \
-		docker run --rm -v `pwd -P`:`pwd -P` python:2.7.15 /bin/sh -c "cd `pwd`; pip install oyaml; `pwd`/${GEN_SYNCSET}"; \
+		$(CONTAINER_ENGINE) run --rm -v `pwd -P`:`pwd -P` python:2.7.15 /bin/sh -c "cd `pwd`; pip install oyaml; `pwd`/${GEN_SYNCSET}"; \
 	else \
 		${GEN_SYNCSET}; \
 	fi
