@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
@@ -130,7 +129,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	ownerTags, err := utils.AWSOwnerTag(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the cluster owner tags")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster owner tags", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster owner tags", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -138,7 +137,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	region, err := utils.GetClusterRegion(r.client)
 	if err != nil && region != "" {
 		reqLogger.Error(err, "Couldn't get the cluster's region")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's AWS region", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's AWS region", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -153,7 +152,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	})
 	if err != nil {
 		reqLogger.Error(err, "Failed to get AWS client")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't create an AWS client", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create an AWS client", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -163,7 +162,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	subnets, err := utils.GetMasterNodeSubnets(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the subnets used by master nodes")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -171,7 +170,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	subnetIDs, err := awsClient.SubnetNameToSubnetIDLookup([]string{subnets["public"]})
 	if err != nil {
 		reqLogger.Error(err, "Couldn't turn subnet names into subnet IDs")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't turn subnet names into subnet IDs", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't turn subnet names into subnet IDs", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -182,7 +181,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			reqLogger.Info("Zero length subnets, but no error set.")
 			err = fmt.Errorf("Zero length subnets")
 		}
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -190,14 +189,14 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't obtain the cluster's base domain")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the cluster's base domain", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's base domain", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 	masterNodeInstances, err := utils.GetClusterMasterInstancesIDs(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't detect the AWS instances for master nodes")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't find the cluster's AWS instances for master nodes", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't find the cluster's AWS instances for master nodes", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -207,7 +206,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	vpcs, err := awsClient.SubnetIDToVPCLookup(subnetIDs)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get the VPC in use by master nodes")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't get the VPC id for master nodes", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the VPC id for master nodes", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
@@ -228,41 +227,41 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		Tags:                 ownerTags,
 	}
 	// Now try to make sure all the things for Admin API are present in AWS
-	err = ensureAdminAPIEndpoint(reqLogger, instance, awsClient, lb, cidrAccess)
+	err = ensureAdminAPIEndpoint(instance, awsClient, lb, cidrAccess)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
 
 	// And now, tell the APIServer/cluster object about it.
-	err = r.addAdminAPIToAPIServerObject(reqLogger, clusterBaseDomain, instance)
+	err = r.addAdminAPIToAPIServerObject(clusterBaseDomain, instance)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't update APIServer/cluster object")
-		SetAPISchemeStatus(reqLogger, instance, "Couldn't reconcile", "Couldn't update APIServer/cluster object", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't update APIServer/cluster object", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	SetAPISchemeStatus(reqLogger, instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
+	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 	r.client.Status().Update(context.TODO(), instance)
 
 	return reconcile.Result{}, nil
 }
 
-func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
+func ensureCloudLoadBalancer(awsAPI *awsclient.AwsClient, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
 	var awsObj *awsclient.AWSLoadBalancer
 	found := false
 	var err error
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		found, awsObj, err = awsAPI.DoesELBExist(lb.EndpointName)
 		if err != nil {
-			reqLogger.Info("Couldn't determine if the Admin API ELB exists due to error: " + err.Error())
+			log.Info("Couldn't determine if the Admin API ELB exists due to error: " + err.Error())
 			if i == config.MaxAPIRetries {
-				reqLogger.Info("Out of retries")
+				log.Info("Out of retries")
 				return nil, err
 			}
-			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
 			// We have a successful response from the API
@@ -270,20 +269,20 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 		}
 	}
 	if found {
-		reqLogger.Info(fmt.Sprintf("ELB exists for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
+		log.Info(fmt.Sprintf("ELB exists for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
 	} else {
-		reqLogger.Info("Need to create ELB for Admin API")
+		log.Info("Need to create ELB for Admin API")
 		for i := 1; i <= config.MaxAPIRetries; i++ {
 			awsObj, err = awsAPI.CreateClassicELB(lb.EndpointName, lb.Subnets, 6443, lb.Tags)
 			if err != nil {
 				if i == config.MaxAPIRetries {
-					reqLogger.Info("Out of retries")
+					log.Info("Out of retries")
 					return nil, err
 				}
-				reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+				log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 				time.Sleep(time.Duration(i) * time.Second)
 			} else {
-				reqLogger.Info(fmt.Sprintf("Created ELB for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
+				log.Info(fmt.Sprintf("Created ELB for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
 				break
 			}
 		}
@@ -291,57 +290,57 @@ func ensureCloudLoadBalancer(reqLogger logr.Logger, awsAPI *awsclient.AwsClient,
 	return awsObj, nil
 }
 
-func ensureCIDRAccess(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, cidrAccess *CIDRAccess) error {
+func ensureCIDRAccess(crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, cidrAccess *CIDRAccess) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 
 		err := awsAPI.EnsureCIDRAccess(cidrAccess.LoadBalancer.EndpointName, cidrAccess.SecurityGroupName, cidrAccess.SecurityGroupVPCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrAccess.Tags)
 		if err != nil {
-			reqLogger.Info("Error ensuring CIDR access for the security group: " + err.Error())
+			log.Info("Error ensuring CIDR access for the security group: " + err.Error())
 			if i == config.MaxAPIRetries {
-				reqLogger.Info("Out of retries")
+				log.Info("Out of retries")
 				return err
 			}
-			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
-			reqLogger.Info("Security Group CIDR access ensured")
+			log.Info("Security Group CIDR access ensured")
 			break
 		}
 	}
 	return nil
 }
 
-func ensureLoadBalancerInstances(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer) error {
+func ensureLoadBalancerInstances(awsAPI *awsclient.AwsClient, lb *LoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		err := awsAPI.AddLoadBalancerInstances(lb.EndpointName, lb.MachineInstances)
 		if err != nil {
-			reqLogger.Info(fmt.Sprintf("Couldn't add instances %s to ELB %s: %s", lb.MachineInstances, lb.EndpointName, err.Error()))
+			log.Info(fmt.Sprintf("Couldn't add instances %s to ELB %s: %s", lb.MachineInstances, lb.EndpointName, err.Error()))
 			if i == config.MaxAPIRetries {
-				reqLogger.Info("Out of retries")
+				log.Info("Out of retries")
 				return err
 			}
-			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
-			reqLogger.Info(fmt.Sprintf("Added instances %s to ELB", lb.MachineInstances))
+			log.Info(fmt.Sprintf("Added instances %s to ELB", lb.MachineInstances))
 			break
 		}
 	}
 	return nil
 }
 
-func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
+func ensureDNSRecord(awsAPI *awsclient.AwsClient, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
 	// Private zone
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		// Append a . to get the zone name
 		err := awsAPI.UpsertARecord(lb.BaseDomain+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
 		if err != nil {
-			reqLogger.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
+			log.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
 			if i == config.MaxAPIRetries {
-				reqLogger.Info("Out of retries for private zone")
+				log.Info("Out of retries for private zone")
 				return err
 			}
-			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
 			break
@@ -356,12 +355,12 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *Loa
 		// Append a . to get the zone name
 		err := awsAPI.UpsertARecord(publicZone+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
 		if err != nil {
-			reqLogger.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
+			log.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
 			if i == config.MaxAPIRetries {
-				reqLogger.Info("Out of retries for public zone")
+				log.Info("Out of retries for public zone")
 				return err
 			}
-			reqLogger.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
+			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
 			time.Sleep(time.Duration(i) * time.Second)
 		} else {
 			break
@@ -372,28 +371,28 @@ func ensureDNSRecord(reqLogger logr.Logger, awsAPI *awsclient.AwsClient, lb *Loa
 
 // ensureAdminAPIEndpoint will ensure the Admin API endpoint exists. Returns any error
 // This function is idempotent
-func ensureAdminAPIEndpoint(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
+func ensureAdminAPIEndpoint(crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
 
 	// First, let's ensure an ELB exists
-	awsObj, err := ensureCloudLoadBalancer(reqLogger, awsAPI, lb)
+	awsObj, err := ensureCloudLoadBalancer(awsAPI, lb)
 	if err != nil {
 		// This is actually fatal due to the retries in ensureCloudLoadBalancer
 		return err
 	}
 	// Now, ensure CIDR access
-	err = ensureCIDRAccess(reqLogger, crObject, awsAPI, cidrAccess)
+	err = ensureCIDRAccess(crObject, awsAPI, cidrAccess)
 	if err != nil {
 		// This is actually fatal
 		return err
 	}
 	// Add the "master" instances are attached to the ELB
-	err = ensureLoadBalancerInstances(reqLogger, awsAPI, lb)
+	err = ensureLoadBalancerInstances(awsAPI, lb)
 	if err != nil {
 		// This is actually fatal
 		return err
 	}
 	// Public and Private zones
-	err = ensureDNSRecord(reqLogger, awsAPI, lb, awsObj)
+	err = ensureDNSRecord(awsAPI, lb, awsObj)
 	if err != nil {
 		// This is actually fatal
 		return err
@@ -450,7 +449,7 @@ func ensureAdminAPIEndpoint(reqLogger logr.Logger, crObject *cloudingressv1alpha
 //       - rh-api.<cluster-domain>
 //       servingCertificate:
 //         name: rh-api-endpoint-cert-bundle-secret <-- openshift-config namespace
-func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(logger logr.Logger, clusterBaseDomainName string, instance *cloudingressv1alpha1.APIScheme) error {
+func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(clusterBaseDomainName string, instance *cloudingressv1alpha1.APIScheme) error {
 	// Where the new endpoint is listening at
 	adminEndpoint := instance.Spec.ManagementAPIServerIngress.DNSName + "." + clusterBaseDomainName
 	api := &configv1.APIServer{}
@@ -468,7 +467,7 @@ func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(logger logr.Logger, cl
 		for _, name := range namedCerts.Names {
 			if name == adminEndpoint {
 				// No work to do
-				logger.Info(fmt.Sprintf("No need to update APIServer/cluster: %s already present", adminEndpoint))
+				log.Info(fmt.Sprintf("No need to update APIServer/cluster: %s already present", adminEndpoint))
 				return nil
 			} else if name == "api."+clusterBaseDomainName {
 				// This is where our primary API endpoint is, and where we need to add it.
@@ -486,7 +485,7 @@ func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(logger logr.Logger, cl
 }
 
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
-func SetAPISchemeStatus(reqLogger logr.Logger, crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
+func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
 	crObject.Status.Conditions = utils.SetAPISchemeCondition(
 		crObject.Status.Conditions,
 		ctype,
