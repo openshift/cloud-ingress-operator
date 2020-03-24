@@ -10,23 +10,7 @@ parameters:
 - name: REPO_NAME
   value: cloud-ingress-operator
   required: true
-- name: ALLOWED_CIDR_BLOCKS_1
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_2
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_3
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_4
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_5
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_6
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_7
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_8
-  required: true
-- name: ALLOWED_CIDR_BLOCKS_9
+- name: ALLOWED_CIDR_BLOCKS
   required: true
 metadata:
   name: selectorsyncset-template
@@ -299,16 +283,7 @@ objects:
         managementAPIServerIngress:
           enabled: true
           dnsName: rh-api
-          allowedCIDRBlocks:
-          - ${ALLOWED_CIDR_BLOCKS_1}
-          - ${ALLOWED_CIDR_BLOCKS_2}
-          - ${ALLOWED_CIDR_BLOCKS_3}
-          - ${ALLOWED_CIDR_BLOCKS_4}
-          - ${ALLOWED_CIDR_BLOCKS_5}
-          - ${ALLOWED_CIDR_BLOCKS_6}
-          - ${ALLOWED_CIDR_BLOCKS_7}
-          - ${ALLOWED_CIDR_BLOCKS_8}
-          - ${ALLOWED_CIDR_BLOCKS_9}
+          allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
 - apiVersion: hive.openshift.io/v1alpha1
   kind: SelectorSyncSet
   metadata:
