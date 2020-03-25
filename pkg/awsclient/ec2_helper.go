@@ -49,13 +49,17 @@ Outer:
 			*ingressRule.IpProtocol != "tcp" {
 			continue
 		}
-		for _, cidrBlock := range cidrBlocks {
-			// Note: For now, we assume that ingressRule.IpRange is length 1 as that
-			// appears to be the usage inside AWS.
-			if *ingressRule.IpRanges[0].CidrIp == cidrBlock {
-				seenExpectedRules[cidrBlock] = true
-				// No need to continue on this ingressRule, because we seen it
-				continue Outer
+		// Since each ingressRule can have 0 or more IP Ranges defined, iterate through
+		// them for matches
+		for _, ipRange := range ingressRule.IpRanges {
+			for _, cidrBlock := range cidrBlocks {
+				// Note: For now, we assume that ingressRule.IpRange is length 1 as that
+				// appears to be the usage inside AWS.
+				if *ipRange.CidrIp == cidrBlock {
+					seenExpectedRules[cidrBlock] = true
+					// No need to continue on this ingressRule, because we seen it
+					continue Outer
+				}
 			}
 		}
 		// If we didn't encounter our rule in the expected list of CIDR blocks, then
