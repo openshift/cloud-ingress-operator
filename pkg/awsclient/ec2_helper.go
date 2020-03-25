@@ -53,8 +53,6 @@ Outer:
 		// them for matches
 		for _, ipRange := range ingressRule.IpRanges {
 			for _, cidrBlock := range cidrBlocks {
-				// Note: For now, we assume that ingressRule.IpRange is length 1 as that
-				// appears to be the usage inside AWS.
 				if *ipRange.CidrIp == cidrBlock {
 					seenExpectedRules[cidrBlock] = true
 					// No need to continue on this ingressRule, because we seen it
