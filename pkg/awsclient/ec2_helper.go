@@ -40,31 +40,59 @@ func (c *AwsClient) EnsureCIDRAccess(loadBalancerName, securityGroupName, vpcID 
 	for _, cidrBlock := range cidrBlocks {
 		seenExpectedRules[cidrBlock] = false
 	}
-	// For each ingress rule for the security group,
-Outer:
-	for _, ingressRule := range securityGroup.IpPermissions {
-		// Only care about 6443/TCP -> 6443/TCP
-		if *ingressRule.FromPort != 6443 &&
-			*ingressRule.ToPort != 6443 &&
-			*ingressRule.IpProtocol != "tcp" {
-			continue
-		}
-		for _, cidrBlock := range cidrBlocks {
-			// Note: For now, we assume that ingressRule.IpRange is length 1 as that
-			// appears to be the usage inside AWS.
-			if *ingressRule.IpRanges[0].CidrIp == cidrBlock {
-				seenExpectedRules[cidrBlock] = true
-				// No need to continue on this ingressRule, because we seen it
-				continue Outer
+	// Structure to determine which rules we have seen in the AWS side of the
+	// Security Group that aren't in the authoritative list ('cidrBlocks'). As they
+	// are observed in the following loop, they are set to "false" to mean they SHOULD be removed
+	// The remaining CIDR blocks (expressed as the key) with a true value represent
+	// Security Group ingress rules to remove.
+	cidrBlocksToKeep := make(map[string]bool)
+
+	for _, desiredCidrBlock := range cidrBlocks {
+		// Search for desiredCidrBlock in AWS
+		for _, ipPermission := range securityGroup.IpPermissions {
+			// Only care about 6443/TCP -> 6443/TCP
+			if *ipPermission.FromPort != 6443 &&
+				*ipPermission.ToPort != 6443 &&
+				*ipPermission.IpProtocol != "tcp" {
+				continue
+			}
+			for _, ingressRule := range ipPermission.IpRanges {
+				// By default, we should want to remove the rule unless in the check immediately
+				// following we determine that we wish to have this rule.
+				if !cidrBlocksToKeep[*ingressRule.CidrIp] {
+					// This looks weird, but the way this works is that map[string]bool have a
+					// default of false for any absent string key. Since we always want to default
+					// to removal we need to set all cidr blocks to false. However, since we
+					// encounter each one multiple times (after they might be set true, below), we
+					// only want to do this if they're NOT true (eg, decided to keep it).
+					cidrBlocksToKeep[*ingressRule.CidrIp] = false
+				}
+				if *ingressRule.CidrIp == desiredCidrBlock {
+					// The desired CIDR block is in fact in AWS.
+					seenExpectedRules[desiredCidrBlock] = true
+					cidrBlocksToKeep[*ingressRule.CidrIp] = true
+				}
 			}
 		}
-		// If we didn't encounter our rule in the expected list of CIDR blocks, then
-		// we should remove it
-		// Note: This isn't the end of the story since it's still possible that we
-		// have a rule that should have been added and wasn't in the permissions
-		// for this security group.
-		rulesToRemove = append(rulesToRemove, ingressRule)
 	}
+	// Turn the CIDR blocks to remove map into a slice of *ec2.IpPermission objects
+	// for use later passing to the removal method
+	for cidrBlock, removeThisBlock := range cidrBlocksToKeep {
+		if !removeThisBlock {
+			rulesToRemove = append(rulesToRemove, &ec2.IpPermission{
+				FromPort:   aws.Int64(6443),
+				ToPort:     aws.Int64(6443),
+				IpProtocol: aws.String("tcp"),
+				IpRanges: []*ec2.IpRange{
+					{
+						CidrIp:      aws.String(cidrBlock),
+						Description: aws.String("Approved CIDR Block from cloud-ingress-operator configuration"),
+					},
+				},
+			})
+		}
+	}
+
 	for cidrBlock, seen := range seenExpectedRules {
 		if !seen {
 			rulesToAdd = append(rulesToAdd, &ec2.IpPermission{
@@ -111,9 +139,6 @@ func (c *AwsClient) removeIngressRulesFromSecurityGroup(securityGroup *ec2.Secur
 		return nil
 	}
 	i := &ec2.RevokeSecurityGroupIngressInput{
-		FromPort:      aws.Int64(6443),
-		ToPort:        aws.Int64(6443),
-		IpProtocol:    aws.String("tcp"),
 		IpPermissions: ipPermissions,
 		GroupId:       securityGroup.GroupId,
 	}
