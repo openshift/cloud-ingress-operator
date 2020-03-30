@@ -363,7 +363,6 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingre
 					log.Error(err, "out of retries")
 					return err
 				}
-				log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
 				time.Sleep(time.Duration(1) * time.Second)
 
 				err = r.client.Create(context.TODO(), newDefaultIngressController)
@@ -412,7 +411,6 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 					log.Error(err, "out of retries")
 					return err
 				}
-				log.Info(fmt.Sprintf("sleeping %d second before retrying again", i))
 				time.Sleep(time.Duration(1) * time.Second)
 
 				err = r.client.Create(context.TODO(), newIngressController)
