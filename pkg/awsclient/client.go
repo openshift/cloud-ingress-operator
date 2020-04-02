@@ -113,6 +113,39 @@ type Client interface {
 	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
 	// CreateTags to apply tags to EC2 resources
 	CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+
+	// Helper extensions
+	// ec2
+	SubnetNameToSubnetIDLookup([]string) ([]string, error)
+	SubnetIDToVPCLookup([]string) ([]string, error)
+	ApplyTagsToResources([]string, map[string]string) error
+	setLoadBalancerSecurityGroup(string, *ec2.SecurityGroup) error
+	findSecurityGroupByName(string) (*ec2.SecurityGroup, error)
+	findSecurityGroupByID(string) (*ec2.SecurityGroup, error)
+	createSecurityGroup(string, string, map[string]string) (*ec2.SecurityGroup, error)
+	removeIngressRulesFromSecurityGroup(*ec2.SecurityGroup, []*ec2.IpPermission) error
+	addIngressRulesToSecurityGroup(*ec2.SecurityGroup, []*ec2.IpPermission) error
+	EnsureCIDRAccess(string, string, string, []string, map[string]string) error
+
+	// elb/elbv2
+	MapToELBTags(map[string]string) []*elb.Tag
+	CreateClassicELB(string, []string, int64, map[string]string) (*AWSLoadBalancer, error)
+	RemoveLoadBalancerListeners(string) error
+	AddLoadBalancerListeners(string, int64) error
+	removeListenersFromELB(string) error
+	addListenersToELB(string, []*elb.Listener) error
+	AddLoadBalancerInstances(string, []string) error
+	RemoveInstancesFromLoadBalancer(string, []string) error
+	DoesELBExist(string) (bool, *AWSLoadBalancer, error)
+	ListAllNLBs() ([]LoadBalancerV2, error)
+	DeleteExternalLoadBalancer(string) error
+	CreateNetworkLoadBalancer(string, string, string) ([]LoadBalancerV2, error)
+	CreateListenerForNLB(string, string) error
+	GetTargetGroupArn(string) (string, error)
+	addHealthCheck(string, string, string, int64) error
+
+	// route53
+	UpsertARecord(string, string, string, string, string, bool) error
 }
 
 type AwsClient struct {

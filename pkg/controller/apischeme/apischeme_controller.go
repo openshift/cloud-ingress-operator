@@ -29,6 +29,7 @@ import (
 )
 
 var log = logf.Log.WithName("controller_apischeme")
+var awsClient awsclient.Client
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -145,11 +146,13 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	reqLogger.Info(fmt.Sprintf("Region: %s, Owner tags: +%v", region, ownerTags))
 	// We expect this secret to exist in the same namespace Account CR's are created
 	// TODO: Get the region of the cluster
-	awsClient, err := awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
-		SecretName: config.AWSSecretName,
-		NameSpace:  config.OperatorNamespace,
-		AwsRegion:  region,
-	})
+	if awsClient == nil {
+		awsClient, err = awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
+			SecretName: config.AWSSecretName,
+			NameSpace:  config.OperatorNamespace,
+			AwsRegion:  region,
+		})
+	}
 	if err != nil {
 		reqLogger.Error(err, "Failed to get AWS client")
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create an AWS client", cloudingressv1alpha1.ConditionError)
@@ -249,7 +252,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	return reconcile.Result{}, nil
 }
 
-func ensureCloudLoadBalancer(awsAPI *awsclient.AwsClient, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
+func ensureCloudLoadBalancer(awsAPI awsclient.Client, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
 	var awsObj *awsclient.AWSLoadBalancer
 	found := false
 	var err error
@@ -290,7 +293,7 @@ func ensureCloudLoadBalancer(awsAPI *awsclient.AwsClient, lb *LoadBalancer) (*aw
 	return awsObj, nil
 }
 
-func ensureCIDRAccess(crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, cidrAccess *CIDRAccess) error {
+func ensureCIDRAccess(crObject *cloudingressv1alpha1.APIScheme, awsAPI awsclient.Client, cidrAccess *CIDRAccess) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 
 		err := awsAPI.EnsureCIDRAccess(cidrAccess.LoadBalancer.EndpointName, cidrAccess.SecurityGroupName, cidrAccess.SecurityGroupVPCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrAccess.Tags)
@@ -310,7 +313,7 @@ func ensureCIDRAccess(crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclien
 	return nil
 }
 
-func ensureLoadBalancerInstances(awsAPI *awsclient.AwsClient, lb *LoadBalancer) error {
+func ensureLoadBalancerInstances(awsAPI awsclient.Client, lb *LoadBalancer) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		err := awsAPI.AddLoadBalancerInstances(lb.EndpointName, lb.MachineInstances)
 		if err != nil {
@@ -329,7 +332,7 @@ func ensureLoadBalancerInstances(awsAPI *awsclient.AwsClient, lb *LoadBalancer) 
 	return nil
 }
 
-func ensureDNSRecord(awsAPI *awsclient.AwsClient, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
+func ensureDNSRecord(awsAPI awsclient.Client, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
 	// Private zone
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		// Append a . to get the zone name
@@ -371,7 +374,7 @@ func ensureDNSRecord(awsAPI *awsclient.AwsClient, lb *LoadBalancer, awsObj *awsc
 
 // ensureAdminAPIEndpoint will ensure the Admin API endpoint exists. Returns any error
 // This function is idempotent
-func ensureAdminAPIEndpoint(crObject *cloudingressv1alpha1.APIScheme, awsAPI *awsclient.AwsClient, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
+func ensureAdminAPIEndpoint(crObject *cloudingressv1alpha1.APIScheme, awsAPI awsclient.Client, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
 
 	// First, let's ensure an ELB exists
 	awsObj, err := ensureCloudLoadBalancer(awsAPI, lb)
@@ -426,7 +429,7 @@ func ensureAdminAPIEndpoint(crObject *cloudingressv1alpha1.APIScheme, awsAPI *aw
 //       - api.<cluster-domain>
 //       - rh-adpi.<cluster-domain>  <-- Add this
 //       servingCertificate:
-//         name: <cluster-name-primary-cert-bundle-secret
+//         name: <cluster-name>-primary-cert-bundle-secret
 //
 // For completeness, option 2 looks like
 //
