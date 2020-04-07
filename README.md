@@ -54,6 +54,44 @@ Note: the `namespace` attribute for `secretRef` is not currently used; certifica
 
 It is possible to add additional applicationIngresses, however at this time, OSD supports the default plus an additional.
 
+## Testing
+
+### Manual testing of default and nondefault ingresscontroller
+
+Due to a race condition with the [cluster-ingress-operator] (https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
+
+- Pause syncset to the cluster [SOP] (https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md) 
+- Check to see which ingresscontrollers are present on the cluster with `oc get ingresscontrollers -n openshift-ingress-operator`
+- Apply a sample `PublishingStrategy` CR with these specs
+
+```yaml
+spec:
+  defaultAPIServerIngress:
+    listening: external
+  applicationIngress:
+    - listening: external
+      default: true
+      dnsName: "apps.sample.default.domain"
+      certificate:
+        secretRef:
+          name: foo
+    - listening: internal
+      default: false
+      dnsName: "apps2.sample.nondefault.domain"
+      certificate:
+        secretRef:
+          name: bar
+      routeSelector:
+        labelSelector:
+          matchLabels:
+            foo: bar
+```
+- Looking at `applicationIngress`, the expected result will be the creation of 2 ingresscontrollers, `default` and `apps2`. The `default` ingresscontroller will 
+have all the attributes of the first `applicationIngress`, and `apps2` will have the attributes of the second `applicationIngress`. To check these results, 
+run `oc get ingresscontrollers -n openshift-ingress-operator` and view each `ingresscontroller` as yaml.
+- NOTE: it might take up to 60 seconds for these changes to apply due to a race condition.
+
+
 # Development
 
 The operator is built with [operator-sdk](https://github.com/operator-framework/operator-sdk). There is a tight dependency on the AWS cluster provider but the dependency is pinned to the [OpenShift fork](https://github.com/openshift/cluster-api-provider-aws) for access to v1beta1 API features.
