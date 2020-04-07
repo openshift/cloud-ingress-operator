@@ -58,9 +58,9 @@ It is possible to add additional applicationIngresses, however at this time, OSD
 
 ### Manual testing of default and nondefault ingresscontroller
 
-Due to a race condition with the [cluster-ingress-operator] (https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
+Due to a race condition with the [cluster-ingress-operator](https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
 
-- Pause syncset to the cluster [SOP] (https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md) 
+- Pause syncset to the cluster [SOP](https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md) 
 - Check to see which ingresscontrollers are present on the cluster with `oc get ingresscontrollers -n openshift-ingress-operator`
 - Apply a sample `PublishingStrategy` CR with these specs
 
