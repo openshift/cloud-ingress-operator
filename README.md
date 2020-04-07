@@ -61,7 +61,8 @@ It is possible to add additional applicationIngresses, however at this time, OSD
 Due to a race condition with the [cluster-ingress-operator](https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
 
 - Pause syncset to the cluster [SOP](https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md) 
-- Check to see which ingresscontrollers are present on the cluster with `oc get ingresscontrollers -n openshift-ingress-operator`
+- Check the inital state of the ingresscontrollers on cluster before the test by running `oc get ingresscontrollers -n openshift-ingress-operator`
+  - In this test, we assume there is only one ingresscontroller called `default`.
 - Apply a sample `PublishingStrategy` CR with these specs
 
 ```yaml
@@ -87,8 +88,7 @@ spec:
             foo: bar
 ```
 - Looking at `applicationIngress`, the expected result will be the creation of 2 ingresscontrollers, `default` and `apps2`. The `default` ingresscontroller will 
-have all the attributes of the first `applicationIngress`, and `apps2` will have the attributes of the second `applicationIngress`. To check these results, 
-run `oc get ingresscontrollers -n openshift-ingress-operator` and view each `ingresscontroller` as yaml.
+have all the attributes of the first `applicationIngress` replacing the old `default` ingresscontroller, and `apps2` will have the attributes of the second `applicationIngress`. To check these results, run `oc get ingresscontrollers -n openshift-ingress-operator` and view each `ingresscontroller` as yaml.
 - NOTE: it might take up to 60 seconds for these changes to apply due to a race condition.
 
 
