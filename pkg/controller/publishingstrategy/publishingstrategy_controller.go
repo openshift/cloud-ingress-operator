@@ -507,9 +507,11 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 		return false
 	}
 
-	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
-	if !isRouteSelectorEqual {
-		return false
+	if publishingStrategyIngress.RouteSelector.MatchLabels != nil {
+		isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
+		if !isRouteSelectorEqual {
+			return false
+		}
 	}
 	return true
 }
