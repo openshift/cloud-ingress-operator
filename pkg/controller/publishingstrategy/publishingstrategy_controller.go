@@ -202,6 +202,9 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		// delete the external NLB
 		for _, loadBalancer := range loadBalancerInfo {
 			if loadBalancer.Scheme == "internet-facing" {
+				// TODO: Could/should we use loadBalancer.LoadBalancerName here instead? Would that be
+				// guaranteed to match the LoadBalancerRefenece.Name from AWSMachineProviderConfig.LoadBalancers[]?
+				// See the NOTEs in RemoveAWSLBFromMasterMachines.
 				extDNSName = loadBalancer.DNSName
 				log.Info("Trying to remove external LB", "LB", extDNSName)
 				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)

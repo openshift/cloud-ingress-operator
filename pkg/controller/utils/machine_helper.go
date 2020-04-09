@@ -17,6 +17,8 @@ var log = logf.Log.WithName("machine_helper")
 // RemoveAWSLBFromMasterMachines removes a Load Balancer (with name elbName) from
 // the spec.providerSpec.value.loadBalancers list for each of the master machine
 // objects in a cluster
+// NOTE: elbName is a LoadBalancerV2.DNSName, like meta-test3-s4rbc-ext-37788604c6ec10c7.elb.us-east-1.amazonaws.com
+// This is in contrast with AddAWSLBToMasterMachines, where it is a short name.
 func RemoveAWSLBFromMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
 		providerSpecDecoded, err := getAWSDecodedProviderSpec(machine)
@@ -27,6 +29,12 @@ func RemoveAWSLBFromMasterMachines(kclient client.Client, elbName string, master
 		lbList := providerSpecDecoded.LoadBalancers
 		newLBList := []awsproviderapi.LoadBalancerReference{}
 		for _, lb := range lbList {
+			// NOTE: Since elbName has unpredictable gorp on the end of it, we match by prefix.
+			// Technically this could break:
+			//   if one LB's short name was a prefix of another's
+			//   and this were called with the shorter one
+			//   we would remove both.
+			// As written, that can't happen with this operator, so we're accepting the risk.
 			if !strings.HasPrefix(elbName, lb.Name) {
 				log.Info("Machine's LB does not match LB to remove", "Machine LB", lb.Name, "LB to remove", elbName)
 				log.Info("Keeping machine's LB in machine object", "LB", lb.Name, "Machine", machine.Name)
@@ -45,6 +53,8 @@ func RemoveAWSLBFromMasterMachines(kclient client.Client, elbName string, master
 // AddAWSLBToMasterMachines adds a Load Balancer (with name elbName) to the
 // spec.providerSpec.value.loadBalancers list for each of the master machine
 // objects in a cluster
+// NOTE: elbName is a short name, as would be found in a LoadBalancerReference.Name. This is in contrast with
+// RemoveAWSLBFromMasterMachines, where it is a DNSName.
 func AddAWSLBToMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
 		providerSpecDecoded, err := getAWSDecodedProviderSpec(machine)
