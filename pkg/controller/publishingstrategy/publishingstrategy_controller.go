@@ -198,23 +198,23 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 
 		var intDNSName string
 		var intHostedZoneID string
-		var extDNSName string
+		var lbName string
 		// delete the external NLB
 		for _, loadBalancer := range loadBalancerInfo {
 			if loadBalancer.Scheme == "internet-facing" {
-				extDNSName = loadBalancer.DNSName
-				log.Info("Trying to remove external LB", "LB", extDNSName)
+				lbName = loadBalancer.LoadBalancerName
+				log.Info("Trying to remove external LB", "LB", lbName)
 				err = awsClient.DeleteExternalLoadBalancer(loadBalancer.LoadBalancerArn)
 				if err != nil {
 					log.Error(err, "error deleting external LB")
 					return reconcile.Result{}, err
 				}
-				err := utils.RemoveAWSLBFromMasterMachines(r.client, extDNSName, masterList)
+				err := utils.RemoveAWSLBFromMasterMachines(r.client, lbName, masterList)
 				if err != nil {
 					log.Error(err, "Error removing external LB from master machine objects")
 					return reconcile.Result{}, err
 				}
-				log.Info("Load balancer removed from master machine objects", "LB", extDNSName)
+				log.Info("Load balancer removed from master machine objects", "LB", lbName)
 				log.Info(fmt.Sprintf("external LB %v deleted", loadBalancer.LoadBalancerArn))
 			}
 			// get internal dnsName and HostID for UpsertCNAME func

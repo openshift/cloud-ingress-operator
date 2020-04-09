@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"reflect"
-	"strings"
 
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,7 +26,7 @@ func RemoveAWSLBFromMasterMachines(kclient client.Client, elbName string, master
 		lbList := providerSpecDecoded.LoadBalancers
 		newLBList := []awsproviderapi.LoadBalancerReference{}
 		for _, lb := range lbList {
-			if !strings.HasPrefix(elbName, lb.Name) {
+			if lb.Name != elbName {
 				log.Info("Machine's LB does not match LB to remove", "Machine LB", lb.Name, "LB to remove", elbName)
 				log.Info("Keeping machine's LB in machine object", "LB", lb.Name, "Machine", machine.Name)
 				newLBList = append(newLBList, lb)
