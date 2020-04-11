@@ -128,7 +128,7 @@ func TestMasterInstanceIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Couldn't get master instance IDs %v", err)
 	}
-	if len(ids) == 0 {
+	if len(ids) != len(masterNames) {
 		t.Fatalf("Expected %d instance IDs, but got %d back", len(masterNames), len(ids))
 	}
 	// TODO(lseelye): It'd be nice if this matched up with the actual provider
