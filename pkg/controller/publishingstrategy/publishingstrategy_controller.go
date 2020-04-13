@@ -258,7 +258,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			}
 		}
 
-		// create a new external NLB (TODO: add tags)
+		// create a new external NLB
 		infrastructureName, err := utils.GetClusterName(r.client)
 		if err != nil {
 			log.Error(err, "cannot get infrastructure name")
@@ -289,6 +289,11 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		if len(newNLBs) != 1 {
 			log.Error(err, "more than one NLB or no NLB detected, but we expect one")
 			return reconcile.Result{}, err
+		}
+
+		err = awsClient.AddTagsForNLB(newNLBs[0].LoadBalancerArn, infrastructureName)
+		if err != nil {
+			log.Error(err, "Couldn't add tags for external NLB")
 		}
 
 		// ATTEMPT TO USE EXISTING TG
