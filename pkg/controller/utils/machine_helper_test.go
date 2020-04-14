@@ -161,16 +161,19 @@ func TestRemoveAWSELB(t *testing.T) {
 	clusterName := "test-remove"
 
 	tests := []struct {
-		nameToRemove string
-		shouldFail   bool
+		nameToRemove       string // name of the load balancer to remove
+		skipPreCheck       bool   // Skip the pre-test load balancer validation of name/types?
+		loadBalancersAtEnd int    // how many load balancers should the machine object have when the test is done?
 	}{
 		{
-			nameToRemove: fmt.Sprintf("%s-%s-ext", clusterName, testutils.ClusterTokenId),
-			shouldFail:   false, // pass
+			nameToRemove:       fmt.Sprintf("%s-%s-ext", clusterName, testutils.ClusterTokenId),
+			skipPreCheck:       false,
+			loadBalancersAtEnd: 1,
 		},
 		{
-			nameToRemove: "missing",
-			shouldFail:   true,
+			nameToRemove:       "missing",
+			skipPreCheck:       true, // the test doesn't want to check for the presence of this token since it's never meant to be there.
+			loadBalancersAtEnd: 2,    // since "missing" is never there, we should still have 2
 		},
 	}
 	for _, test := range tests {
@@ -182,7 +185,6 @@ func TestRemoveAWSELB(t *testing.T) {
 
 		objs := []runtime.Object{machineList}
 		mocks := testutils.NewTestMock(t, objs)
-		// Validate 2 LB for machine
 
 		// each Machine ought to have 2 NLBs at the start, so let's check
 		for _, machine := range machineList.Items {
@@ -203,30 +205,29 @@ func TestRemoveAWSELB(t *testing.T) {
 			if l != 2 {
 				t.Fatalf("Before the test we expect to have 2 load balancers, but got %d", l)
 			}
-			// check for our LB by name and type unless we need it to be missing
-			if !test.shouldFail {
+			// Pre-check: check for our LB by name and type unless we need it to be missing
+			if !test.skipPreCheck {
 				found := false
 				for i := 0; i < l; i++ {
 					if lbNames[i] == test.nameToRemove && lbTypes[i] == awsproviderapi.NetworkLoadBalancerType {
 						found = true
+						break
 					}
 				}
 				if !found {
 					t.Fatalf("Machine %s doesn't have a network load balancer named %s. It has %s", machine.GetName(), test.nameToRemove, lbNames)
 				}
 			}
+			// End of pre-check
 		}
 
 		// Make change
 		err := RemoveAWSLBFromMasterMachines(mocks.FakeKubeClient, test.nameToRemove, machineList)
 		if err != nil {
-			if !test.shouldFail {
-				t.Fatalf("Unexpected test couldn't remove LB %s from Machine: %v", test.nameToRemove, err)
-			}
+			t.Fatalf("Unexpected test couldn't remove LB %s from Machine: %v", test.nameToRemove, err)
 		}
 
 		// Validate test.nameToRemove is missing
-
 		for _, machine := range machineList.Items {
 			// reload the object to make sure we're not just working with the "in-memory"
 			// representation, that being, the un-saved one.
@@ -243,23 +244,13 @@ func TestRemoveAWSELB(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Couldn't load the LB info for %s: %v", machineInfo.Name, err)
 			}
-			var expectedCount int
-			if test.shouldFail {
-				expectedCount = 2
-			} else {
-				expectedCount = 1
+			if l != test.loadBalancersAtEnd {
+				t.Fatalf("Test to remove load balancer named '%s': Expected to have %d load balancers afterwards, but got %d. Load balancers = %s", test.nameToRemove, test.loadBalancersAtEnd, l, lbNames)
 			}
-			if l != expectedCount {
-				t.Fatalf("Test to remove %s (should fail = %t) Expected to have %d LB, but got %d", test.nameToRemove, test.shouldFail, expectedCount, l)
-			}
-			found := false
 			for _, lbName := range lbNames {
 				if lbName == test.nameToRemove {
-					found = true
+					t.Fatalf("Machine %s still has load balancer named %s", machineInfo.Name, test.nameToRemove)
 				}
-			}
-			if found {
-				t.Fatalf("Machine %s still has load balancer named %s", machineInfo.Name, test.nameToRemove)
 			}
 		}
 	}
