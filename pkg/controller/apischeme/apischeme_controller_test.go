@@ -13,8 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
-
 func TestMasterNodeSubnets(t *testing.T) {
 	tests := []struct {
 		region       string

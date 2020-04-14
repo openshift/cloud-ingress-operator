@@ -133,11 +133,19 @@ func TestAddAWSLBToMasters(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Couldn't reload the test machine (named %s): %v", machineInfo.Name, err)
 		}
-		l, _, lbTypes, err := testutils.ValidateMachineLB(&machine)
+		l, lbNames, lbTypes, err := testutils.ValidateMachineLB(&machine)
 		if err != nil {
 			t.Fatalf("Can't lookup LB info: %v", err)
 		}
-
+		foundNewName := false
+		for _, lbName := range lbNames {
+			if lbName == elbname {
+				foundNewName = true
+			}
+		}
+		if !foundNewName {
+			t.Fatalf("Tried to add a new load balancer named %s but didn't actually find it in the %d LoadBalancers for Machine %s", elbname, l, machine.GetName())
+		}
 		if l != 3 {
 			t.Fatalf("After the test we expect to have 3 load balancers, but got %d", l)
 		}
