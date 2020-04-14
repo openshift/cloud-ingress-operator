@@ -114,7 +114,7 @@ func CreateMachineObj(name, clusterid, role, region, zone string) machineapi.Mac
 		IAMInstanceProfile: &awsprovider.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
 		Placement:          awsprovider.Placement{Region: region, AvailabilityZone: zone},
-		LoadBalancers:      []awsprovider.LoadBalancerReference{
+		LoadBalancers: []awsprovider.LoadBalancerReference{
 			{
 				// <clustername>-<id>-ext
 				Name: fmt.Sprintf("%s-%s-ext", clusterid, ClusterTokenId),
