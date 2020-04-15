@@ -61,6 +61,9 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 	if err != nil {
 		return subnets, err
 	}
+	if len(machineList.Items) == 0 {
+		return subnets, fmt.Errorf("Did not find any master Machine objects")
+	}
 
 	// get the AZ from a Master object's providerSpec.
 	codec, err := awsproviderapi.NewCodec()
