@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
-  name: cluster-config-v1-reader
+  name: cluster-config-v1-reader-cio
   namespace: kube-system
 rules:
 - apiGroups:

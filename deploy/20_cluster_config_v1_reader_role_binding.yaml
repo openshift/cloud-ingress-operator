@@ -13,4 +13,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: cluster-config-v1-reader
+  name: cluster-config-v1-reader-cio
