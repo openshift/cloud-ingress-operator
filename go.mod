@@ -18,6 +18,7 @@ require (
 	k8s.io/utils v0.0.0-20191217005138-9e5e9d854fcc
 	sigs.k8s.io/cluster-api-provider-aws v0.0.0-00010101000000-000000000000
 	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/yaml v1.2.0
 )
 
 // Pinned to kubernetes-1.16.2

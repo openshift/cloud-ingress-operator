@@ -7,12 +7,25 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
+
+	"sigs.k8s.io/yaml"
 )
+
+// installConfig represents the bare minimum requirement to get the AWS cluster region from the install-config
+// See https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+type installConfig struct {
+	Platform struct {
+		AWS struct {
+			Region string `json:"region"`
+		} `json:"aws"`
+	} `json:"platform"`
+}
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
 
@@ -97,7 +110,8 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 	if err != nil {
 		return "", err
 	} else if infra.Status.PlatformStatus == nil {
-		return "", fmt.Errorf("Expected to have a PlatformStatus for Infrastructure/cluster, but it was nil")
+		// Try the deprecated configmap. See https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+		return readClusterRegionFromConfigMap(kclient)
 	}
 	return infra.Status.PlatformStatus.AWS.Region, nil
 }
@@ -162,4 +176,37 @@ func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
 
 	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
 	return m, nil
+}
+
+func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
+	cm, err := getClusterConfigMap(kclient)
+	if err != nil {
+		return "", err
+	}
+	return parseClusterRegionFromConfigMap(cm)
+}
+
+func getClusterConfigMap(kclient client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	ns := types.NamespacedName{
+		Namespace: "kube-system",
+		Name:      "cluster-config-v1",
+	}
+	err := kclient.Get(context.TODO(), ns, cm)
+	return cm, err
+}
+
+func parseClusterRegionFromConfigMap(cm *corev1.ConfigMap) (string, error) {
+	if cm == nil || cm.Data == nil {
+		return "", fmt.Errorf("unexpected nil configmap or nil configmap Data")
+	}
+	data, ok := cm.Data["install-config"]
+	if !ok {
+		return "", fmt.Errorf("Missing install-config in configmap")
+	}
+	var ic installConfig
+	if err := yaml.Unmarshal([]byte(data), &ic); err != nil {
+		return "", fmt.Errorf("Invalid install-config: %v\njson:%s", err, data)
+	}
+	return ic.Platform.AWS.Region, nil
 }
