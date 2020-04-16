@@ -23,6 +23,25 @@ func TestClusterBaseDomain(t *testing.T) {
 	}
 }
 
+// BZ https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+func TestOldClusterNoInfrastructureBackfill(t *testing.T) {
+	clustername := "oldtest"
+	// legacy infra obj has this extra bits, but the configmap does not
+	extrabits := "cmld7"
+	oldInfraObj := testutils.CreatOldInfraObject("oldtest-cmld7", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+	oldCM := testutils.CreateLegacyClusterConfig(fmt.Sprintf("%s.%s", clustername, testutils.DefaultClusterDomain),
+		fmt.Sprintf("%s-%s", clustername, extrabits), testutils.DefaultRegionName, 0, 0)
+	objs := []runtime.Object{oldInfraObj, oldCM}
+	mocks := testutils.NewTestMock(t, objs)
+	region, err := GetClusterRegion(mocks.FakeKubeClient)
+	if err != nil {
+		t.Fatalf("Error: Couldn't get region. Expected to get %s: %v", testutils.DefaultRegionName, err)
+	}
+	if region != testutils.DefaultRegionName {
+		t.Fatalf("Expected region to be %s, but got %s", testutils.DefaultRegionName, region)
+	}
+}
+
 func TestGetClusterPlatform(t *testing.T) {
 	infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
 	objs := []runtime.Object{infraObj}

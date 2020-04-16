@@ -38,6 +38,59 @@ type Mocks struct {
 	Scheme         *runtime.Scheme
 }
 
+// legacyConfig maps a full ConfigMap install-config as a sprintf template.
+// Refer to CreateLegacyClusterConfig for usage
+const legacyConfig string = `apiVersion: v1
+baseDomain: %s
+compute:
+- hyperthreading: Enabled
+  name: worker
+  platform:
+    aws:
+      rootVolume:
+        iops: 100
+        size: 32
+        type: gp2
+      type: m5.xlarge
+      zones:
+      - %s
+      - %s
+      - %s
+  replicas: %d
+controlPlane:
+  hyperthreading: Enabled1234
+  name: master
+  platform:
+    aws:
+      rootVolume:
+        iops: 1000
+        size: 350
+        type: io1
+      type: m5.xlarge
+      zones:
+      - %s
+      - %s
+      - %s
+  replicas: %d
+metadata:
+  creationTimestamp: null
+  name: %s
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14
+    hostPrefix: 23
+  machineCIDR: 10.0.0.0/16
+  networkType: OpenShiftSDN
+  serviceNetwork:
+  - 172.30.0.0/16
+platform:
+  aws:
+    region: %s
+pullSecret: ""
+sshKey: |
+  ssh-rsa nothingreal
+`
+
 // NewMockTest sets up for a new mock test, pass in some localObjs to seed the fake Kubernetes environment
 func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	mockctrl := gomock.NewController(t)
@@ -51,7 +104,6 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	if err := cloudingressv1alpha1.SchemeBuilder.AddToScheme(s); err != nil {
 		t.Fatalf("Couldn't add cloudingressv1alpha1 scheme: (%v)", err)
 	}
-
 	ret := &Mocks{
 		FakeKubeClient: fake.NewFakeClientWithScheme(s, localObjs...),
 		MockCtrl:       mockctrl,
@@ -157,6 +209,46 @@ func CreateMachineObj(name, clusterid, role, region, zone string) machineapi.Mac
 		},
 	}
 	return ret
+}
+
+// CreateLegacyClusterConfig creates kube-config/configmaps/cluster-config-v1
+// To test https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+func CreateLegacyClusterConfig(clusterdomain, infraName, region string, workerCount, masterCount int) *corev1.ConfigMap {
+	yamlConfig := fmt.Sprintf(legacyConfig, clusterdomain, DefaultAzName, DefaultAzName, DefaultAzName, workerCount,
+		DefaultAzName, DefaultAzName, DefaultAzName, masterCount, infraName, region)
+	fmt.Printf("Sprintf'd YAML Config = %s\n", yamlConfig)
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "kube-system",
+			Name:      "cluster-config-v1",
+		},
+		Data: map[string]string{
+			"install-config": yamlConfig,
+		},
+	}
+}
+
+// CreatOldInfraObject creates an Infrastructure object that is missing information
+// eg for https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+func CreatOldInfraObject(infraName, apiInternalURL, apiURL, region string) *configv1.Infrastructure {
+	return &configv1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "",
+		},
+		Spec: configv1.InfrastructureSpec{
+			CloudConfig: configv1.ConfigMapFileReference{
+				Name: "",
+			},
+		},
+		Status: configv1.InfrastructureStatus{
+			InfrastructureName:   infraName,
+			APIServerInternalURL: apiInternalURL,
+			APIServerURL:         apiURL,
+			Platform:             configv1.AWSPlatformType,
+			// Note: Absent PlatformStatus is intentional
+		},
+	}
 }
 
 // CreateInfraObject creates an configv1.Infrastructure object
