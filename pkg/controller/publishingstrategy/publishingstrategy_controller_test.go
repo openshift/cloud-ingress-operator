@@ -54,6 +54,25 @@ func mockIngressControllerList() *operatorv1.IngressControllerList {
 					},
 				},
 			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: operatorv1.IngressControllerSpec{
+					Domain: "example-domain-3",
+					DefaultCertificate: &corev1.LocalObjectReference{
+						Name: "",
+					},
+				},
+				Status: operatorv1.IngressControllerStatus{
+					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+						Type: operatorv1.LoadBalancerServiceStrategyType,
+						// LoadBalancer: &operatorv1.LoadBalancerStrategy{
+						// 	Scope: operatorv1.LoadBalancerScope("Internal"),
+						// },
+					},
+				},
+			},
 		},
 	}
 }
@@ -113,6 +132,17 @@ func mockApplicationIngress() *cloudingressv1alpha1.ApplicationIngress {
 	}
 }
 
+func mockApplicationIngressExternal() *cloudingressv1alpha1.ApplicationIngress {
+	return &cloudingressv1alpha1.ApplicationIngress{
+		Listening: cloudingressv1alpha1.External,
+		Default:   true,
+		DNSName:   "example-domain-3",
+		Certificate: corev1.SecretReference{
+			Name: "",
+		},
+	}
+}
+
 func mockApplicationIngressNotOnCluster() *cloudingressv1alpha1.ApplicationIngress {
 	return &cloudingressv1alpha1.ApplicationIngress{
 		Listening: cloudingressv1alpha1.External,
@@ -160,7 +190,7 @@ func TestConvertIngressControllerToMap(t *testing.T) {
 
 	convert := convertIngressControllerToMap(mockIngressControllerList().Items)
 
-	expected := map[string]operatorv1.IngressController{"example-domain": mockIngressControllerList().Items[0], "example-non-default-domain": mockIngressControllerList().Items[1]}
+	expected := map[string]operatorv1.IngressController{"example-domain": mockIngressControllerList().Items[0], "example-non-default-domain": mockIngressControllerList().Items[1], "example-domain-3": mockIngressControllerList().Items[2]}
 
 	equal := reflect.DeepEqual(convert, expected)
 	if !equal {
@@ -182,6 +212,16 @@ func TestIsOnCluster(t *testing.T) {
 	notOnCluster := isOnCluster(mockApplicationIngress(), mockIngressControllerList().Items[1])
 	if notOnCluster == true {
 		t.Errorf("got true but expect false \n")
+	}
+}
+
+// nil
+func TestIsOnClusterNil(t *testing.T) {
+	onCluster := isOnCluster(mockApplicationIngressExternal(), mockIngressControllerList().Items[2])
+	if !onCluster {
+		t.Logf("compare domain %s, %s", mockIngressControllerList().Items[2].Spec.Domain, mockApplicationIngressExternal().DNSName)
+		t.Logf("compare certificate %s, %s", mockIngressControllerList().Items[2].Spec.DefaultCertificate.Name, mockApplicationIngressExternal().Certificate.Name)
+		t.Errorf("got false but expect true")
 	}
 }
 

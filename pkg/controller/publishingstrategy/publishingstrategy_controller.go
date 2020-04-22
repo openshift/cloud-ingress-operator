@@ -494,24 +494,29 @@ func checkExistingIngress(existingMap map[string]operatorv1.IngressController, p
 
 // doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
 func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController operatorv1.IngressController) bool {
-
-	listening := string(publishingStrategyIngress.Listening)
-	capListening := strings.Title(strings.ToLower(listening))
-	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
-		return false
-	}
 	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
 		return false
 	}
-
 	if publishingStrategyIngress.RouteSelector.MatchLabels != nil {
 		isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
 		if !isRouteSelectorEqual {
 			return false
 		}
+	}
+
+	listening := string(publishingStrategyIngress.Listening)
+	capListening := strings.Title(strings.ToLower(listening))
+	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "Internal" {
+		return false
+	}
+	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "External" {
+		return true
+	}
+	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		return false
 	}
 	return true
 }
