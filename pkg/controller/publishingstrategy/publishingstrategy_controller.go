@@ -116,6 +116,23 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
+	// and delete all non-default ingresses
+	for _, ingressController := range ingressControllerList.Items {
+		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
+			log.Info(fmt.Sprintf("ingresscontroller to be deleted: %v", ingressController))
+			err := r.client.Delete(context.TODO(), &ingressController)
+			if err != nil {
+				log.Error(err, "failed to delete ingresscontroller")
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	// wait 60 seconds for deletion to be completed
+	log.Info("waited 60 seconds for necessary ingresscontroller deletions")
+	time.Sleep(time.Duration(60) * time.Second)
+
 	// create list of applicationIngress
 	var ingressNotOnCluster []cloudingressv1alpha1.ApplicationIngress
 
@@ -129,7 +146,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	}
 
 	for _, appingress := range ingressNotOnCluster {
-
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
 		}
@@ -142,7 +158,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			}
 			continue
 		}
-
 		err := r.nonDefaultIngressHandle(appingress, ingressControllerList, newCertificate)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to handle non-default ingresscontroller %v", appingress))
@@ -333,7 +348,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 		return reconcile.Result{}, nil
 	}
-
 	return reconcile.Result{}, nil
 }
 
@@ -357,7 +371,6 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingre
 	err = r.client.Create(context.TODO(), newDefaultIngressController)
 	if err != nil {
 		if k8serr.IsAlreadyExists(err) {
-			log.Info("default ingresscontroller already exists on cluster. Enter retry...")
 			for i := 0; i < 60; i++ {
 				if i == 60 {
 					log.Error(err, "out of retries")
@@ -367,11 +380,10 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingre
 
 				err = r.client.Create(context.TODO(), newDefaultIngressController)
 				if err != nil {
-					log.Info("not able to create new default ingresscontroller" + err.Error())
 					continue
 				}
 				// if err not nil then successful
-				log.Info("successfully created default ingresscontroller")
+				log.Info(fmt.Sprintf("successfully created default ingresscontroller for %s", newDefaultIngressController.Spec.Domain))
 				break
 			}
 		} else {
@@ -379,13 +391,11 @@ func (r *ReconcilePublishingStrategy) defaultIngressHandle(appingress cloudingre
 			return err
 		}
 	}
-	log.Info("successfully created new default ingresscontroller")
 	return nil
 }
 
 // nonDefaultIngressHandle will delete the existing non-default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
 func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList, newCertificate *corev1.LocalObjectReference) error {
-
 	newIngressControllerName := getIngressName(appingress.DNSName)
 	// if ingress with same name exists on cluster then delete
 	for _, ingresscontroller := range ingressControllerList.Items {
@@ -404,30 +414,9 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 	}
 	err = r.client.Create(context.TODO(), newIngressController)
 	if err != nil {
-		if k8serr.IsAlreadyExists(err) {
-			log.Info("ingresscontroller already exists on cluster. Enter retry...")
-			for i := 0; i < 60; i++ {
-				if i == 60 {
-					log.Error(err, "out of retries")
-					return err
-				}
-				time.Sleep(time.Duration(1) * time.Second)
-
-				err = r.client.Create(context.TODO(), newIngressController)
-				if err != nil {
-					log.Info("not able to create new ingresscontroller" + err.Error())
-					continue
-				}
-				// if err not nil then successful
-				log.Info("create successful. Breaking out of for loop")
-				break
-			}
-		} else {
-			log.Error(err, fmt.Sprintf("failed to create new ingresscontroller with domain %s", appingress.DNSName))
-			return err
-		}
+		log.Error(err, fmt.Sprintf("got error trying to create %s", newIngressController.GetName()))
+		return err
 	}
-	log.Info("successfully created new ingresscontroller")
 	return nil
 }
 
@@ -454,6 +443,9 @@ func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName s
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ingressControllerCRName,
 			Namespace: ingressControllerNamespace,
+			Annotations: map[string]string{
+				"Owner": "cloud-ingress-operator",
+			},
 		},
 		Spec: operatorv1.IngressControllerSpec{
 			DefaultCertificate: certificate,
