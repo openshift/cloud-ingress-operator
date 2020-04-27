@@ -9,12 +9,13 @@ spec:
   applicationIngress:
     - listening: external
       default: true
-      dnsName: "*.apps"
+      dnsName: "apps.default1.domain"
       certificate:
-        secretRef:
-          name: foo
-          namespace: bar
-      routeSelector:
-        labelSelector:
-          matchLabels:
-            foo: bar
+        name: foo
+        namespace: bar
+    - listening: internal
+      default: false
+      dnsName: "apps2.non-default.domain"
+      certificate:
+        name: foo
+        namespace: bar
