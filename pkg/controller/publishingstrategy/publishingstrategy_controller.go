@@ -116,17 +116,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
-	// and delete all non-default ingresses
-	for _, ingressController := range ingressControllerList.Items {
-		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
-			log.Info(fmt.Sprintf("ingresscontroller to be deleted: %v", ingressController))
-			err := r.client.Delete(context.TODO(), &ingressController)
-			if err != nil {
-				log.Error(err, "failed to delete ingresscontroller")
-				return reconcile.Result{}, err
-			}
-		}
+	err = r.deleteIngressWithAnnotation(ingressControllerList)
+	if err != nil {
+		log.Error(err, "Cannot delete ingresscontroller with annotation")
+		return reconcile.Result{}, err
 	}
 
 	// wait 60 seconds for deletion to be completed
@@ -349,6 +342,22 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+// get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
+// and delete all non-default ingresses
+func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(ingressControllerList *operatorv1.IngressControllerList) error {
+	for _, ingressController := range ingressControllerList.Items {
+		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
+			log.Info(fmt.Sprintf("ingresscontroller to be deleted: %v", ingressController))
+			err := r.client.Delete(context.TODO(), &ingressController)
+			if err != nil {
+				log.Error(err, "failed to delete ingresscontroller")
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // defaultIngressHandle will delete the existing default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
