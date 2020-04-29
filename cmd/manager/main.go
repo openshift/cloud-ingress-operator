@@ -146,8 +146,6 @@ func main() {
 		log.Error(err, "Failed to configure OSD metrics")
 	}
 
-	localmetrics.MetricDefaultIngressController.Set(1)
-
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
