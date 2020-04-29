@@ -2,4 +2,5 @@ kind: Namespace
 apiVersion: v1
 metadata:
   name: openshift-cloud-ingress-operator
-
+  labels:
+    openshift.io/cluster-monitoring: "true"
