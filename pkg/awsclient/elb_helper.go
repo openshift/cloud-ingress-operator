@@ -267,6 +267,31 @@ func (c *AwsClient) CreateListenerForNLB(targetGroupArn, loadBalancerArn string)
 	return nil
 }
 
+// AddTagsForNLB creates needed tags for an NLB
+func (c *AwsClient) AddTagsForNLB(resourceARN string, clusterName string) error {
+	i := &elbv2.AddTagsInput{
+		ResourceArns: []*string{
+			aws.String(resourceARN), // ext nlb resources arn
+		},
+		Tags: []*elbv2.Tag{
+			{
+				Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+				Value: aws.String("owned"),
+			},
+			{
+				Key:   aws.String("Name"),
+				Value: aws.String(clusterName + "-ext"), //in form of samn-test-qb58m-ext
+			},
+		},
+	}
+
+	_, err := c.AddTagsV2(i)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetTargetGroupArn by passing in targetGroup Name
 func (c *AwsClient) GetTargetGroupArn(targetGroupName string) (string, error) {
 	i := &elbv2.DescribeTargetGroupsInput{

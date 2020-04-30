@@ -84,6 +84,8 @@ type Client interface {
 	CreateListenerV2(*elbv2.CreateListenerInput) (*elbv2.CreateListenerOutput, error)
 	// describes the targetGroup for NLB
 	DescribeTargetGroupsV2(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
+	// add tags for an NLB
+	AddTagsV2(*elbv2.AddTagsInput) (*elbv2.AddTagsOutput, error)
 
 	/*
 	 * Route 53-related Functions
@@ -287,6 +289,10 @@ func (c *AwsClient) RegisterInstancesWithLoadBalancer(i *elb.RegisterInstancesWi
 
 func (c *AwsClient) DescribeTargetGroupsV2(i *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
 	return c.elbv2Client.DescribeTargetGroups(i)
+}
+
+func (c *AwsClient) AddTagsV2(i *elbv2.AddTagsInput) (*elbv2.AddTagsOutput, error) {
+	return c.elbv2Client.AddTags(i)
 }
 
 func (c *AwsClient) ChangeResourceRecordSets(i *route53.ChangeResourceRecordSetsInput) (*route53.ChangeResourceRecordSetsOutput, error) {
