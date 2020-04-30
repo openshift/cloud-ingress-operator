@@ -103,6 +103,9 @@ func mockNonDefaultIngressController() *operatorv1.IngressController {
 	return &operatorv1.IngressController{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "non-default",
+			Annotations: map[string]string{
+				"Owner": "cloud-ingress-operator",
+			},
 		},
 		Spec: operatorv1.IngressControllerSpec{
 			Domain: "example-nonDefault-domain",
@@ -361,5 +364,35 @@ func TestIngressHandle(t *testing.T) {
 	err = r.nonDefaultIngressHandle(mockPublishingStrategy().Spec.ApplicationIngress[1], list, newCertificate)
 	if err != nil {
 		t.Fatalf("couldn't handle non-default ingress")
+	}
+}
+
+// TestDeleteIngressWithAnnotation tests the deleteIngressWithAnnotation
+func TestDeleteIngressWithAnnotation(t *testing.T) {
+	// set up schemes
+	ctx := context.TODO()
+	r := newTestReconciler()
+	s := scheme.Scheme
+
+	if err := operatorv1.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
+	}
+
+	err := r.client.Create(ctx, mockNonDefaultIngressController())
+	if err != nil {
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	list := &operatorv1.IngressControllerList{}
+	opts := client.ListOptions{}
+
+	err = r.client.List(ctx, list, &opts)
+	if err != nil {
+		t.Errorf("couldn't get ingresscontroller list %s", err)
+	}
+
+	err = r.deleteIngressWithAnnotation(list)
+	if err != nil {
+		t.Fatalf("couldn't delete ingress with annotation")
 	}
 }
