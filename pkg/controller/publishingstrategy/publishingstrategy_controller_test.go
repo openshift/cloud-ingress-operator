@@ -108,7 +108,29 @@ func mockNonDefaultIngressController() *operatorv1.IngressController {
 			},
 		},
 		Spec: operatorv1.IngressControllerSpec{
-			Domain: "example-nonDefault-domain",
+			Domain: "apps2.exaple-nondefault-domain-to-pass-in",
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "",
+			},
+		},
+		Status: operatorv1.IngressControllerStatus{
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.LoadBalancerScope("Internal"),
+				},
+			},
+		},
+	}
+}
+
+func mockNonDefaultIngressNoAnnotation() *operatorv1.IngressController {
+	return &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "non-default-no-annotation",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			Domain: "apps2.exaple-nondefault-domain-with-no-annotation",
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: "",
 			},
@@ -345,10 +367,6 @@ func TestIngressHandle(t *testing.T) {
 	if err != nil {
 		t.Errorf("couldn't get ingresscontroller list %s", err)
 	}
-
-	t.Logf("appIngress %v", mockPublishingStrategy().Spec.ApplicationIngress[1])
-
-	t.Logf("before list %v", list)
 	// given a new defaultIngressController that does not exist on cluster
 	// the result should be this new default ingresscontroller
 
@@ -378,21 +396,75 @@ func TestDeleteIngressWithAnnotation(t *testing.T) {
 		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
 	}
 
+	if err := apis.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add route scheme (%v)", err)
+	}
+
+	err := r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
+	if err != nil {
+		t.Errorf("couldn't create ingress without annotation")
+	}
+
+	err = r.client.Create(ctx, mockNonDefaultIngressController())
+	if err != nil {
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	err = r.client.Create(ctx, mockPublishingStrategy())
+	if err != nil {
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	ingressControllerList := &operatorv1.IngressControllerList{}
+	opts := client.ListOptions{}
+
+	err = r.client.List(ctx, ingressControllerList, &opts)
+	if err != nil {
+		t.Errorf("couldn't get ingresscontroller list %s", err)
+	}
+
+	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
+	if err != nil {
+		t.Fatalf("couldn't delete ingress")
+	}
+
+	// if ingress without annotation hit method, then it should not be removed
+	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
+	if err != nil {
+		t.Fatalf("couldn't delete ingress")
+	}
+
+	if ingressControllerList.Items[0].Spec.Domain != "apps2.exaple-nondefault-domain-with-no-annotation" {
+		t.Fatalf("expect nondefault ingress to be on cluster but it is not")
+	}
+}
+
+func TestContains(t *testing.T) {
+	// set up schemes
+	ctx := context.TODO()
+	r := newTestReconciler()
+	s := scheme.Scheme
+
+	if err := operatorv1.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
+	}
+
 	err := r.client.Create(ctx, mockNonDefaultIngressController())
 	if err != nil {
 		t.Errorf("couldn't create ingresscontroller %s", err)
 	}
 
-	list := &operatorv1.IngressControllerList{}
-	opts := client.ListOptions{}
-
-	err = r.client.List(ctx, list, &opts)
-	if err != nil {
-		t.Errorf("couldn't get ingresscontroller list %s", err)
+	if err := apis.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add route scheme (%v)", err)
 	}
 
-	err = r.deleteIngressWithAnnotation(list)
+	err = r.client.Create(ctx, mockPublishingStrategy())
 	if err != nil {
-		t.Fatalf("couldn't delete ingress with annotation")
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	checkContains := contains(mockPublishingStrategy().Spec.ApplicationIngress, mockNonDefaultIngressController())
+	if !checkContains {
+		t.Errorf("expect true but got false")
 	}
 }

@@ -116,7 +116,8 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	err = r.deleteIngressWithAnnotation(ingressControllerList)
+	// delete non-default with proper annotation if not publishingStratagy CR
+	err = r.deleteIngressWithAnnotation(instance.Spec.ApplicationIngress, ingressControllerList)
 	if err != nil {
 		log.Error(err, "Cannot delete ingresscontroller with annotation")
 		return reconcile.Result{}, err
@@ -351,18 +352,33 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 
 // get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
 // and delete all non-default ingresses
-func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(ingressControllerList *operatorv1.IngressControllerList) error {
-	for _, ingressController := range ingressControllerList.Items {
-		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
-			log.Info(fmt.Sprintf("ingresscontroller to be deleted: %v", ingressController))
-			err := r.client.Delete(context.TODO(), &ingressController)
+func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) error {
+	// get all non-default ingresscontroller on cluster that are not on publishingStrategy CR
+	for _, ingress := range ingressControllerList.Items {
+		if !contains(appIngressList, &ingress) {
+			err := r.client.Delete(context.TODO(), &ingress)
 			if err != nil {
-				log.Error(err, "failed to delete ingresscontroller")
+				log.Error(err, "Failed to delete ingresscontroller")
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// contains check if an individual non-default ingress on cluster matches with any non-default applicationingress
+func contains(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
+	for _, app := range appIngressList {
+		if app.Default == true {
+			return true
+		}
+		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
+			if ingressController.Spec.Domain == app.DNSName {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // defaultIngressHandle will delete the existing default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
@@ -421,6 +437,8 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 			}
 		}
 	}
+	log.Info("sleep 30 seconds before creating new non-default ingress")
+	time.Sleep(time.Duration(30) * time.Second)
 	// create the ingress
 	newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
 	if err != nil {
