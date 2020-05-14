@@ -238,14 +238,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	// And now, tell the APIServer/cluster object about it.
-	err = r.addAdminAPIToAPIServerObject(clusterBaseDomain, instance)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't update APIServer/cluster object")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't update APIServer/cluster object", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
 	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 	r.client.Status().Update(context.TODO(), instance)
 
