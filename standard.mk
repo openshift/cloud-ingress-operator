@@ -34,7 +34,7 @@ GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPAT
 CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
 
 # ex, -v
-TESTOPTS :=
+TESTOPTS := -timeout 1m
 
 ALLOW_DIRTY_CHECKOUT?=false
 
