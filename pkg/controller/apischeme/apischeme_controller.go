@@ -125,7 +125,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Does the Service exist already?
 	found := &corev1.Service{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Status.CloudLoadBalancerDNSName, Namespace: "openshift-kube-apiserver"}, found)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Spec.ManagementAPIServerIngress.DNSName, Namespace: "openshift-kube-apiserver"}, found)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// need to create it
@@ -136,6 +136,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 				return reconcile.Result{}, err
 			}
 			// Reconcile again to get the new Service and give AWS time to create the ELB
+			reqLogger.Info("Service was just created, so let's try to requeue to set it up")
 			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		} else if err != nil {
 			reqLogger.Error(err, "Couldn't get the Service")
@@ -224,8 +225,16 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
-			Namespace: "openshift-apiserver",
+			Namespace: "openshift-kube-apiserver",
 			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "APIScheme",
+					APIVersion: "v1alpha1",
+					Name:       instance.GetName(),
+					UID:        instance.GetUID(),
+				},
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
