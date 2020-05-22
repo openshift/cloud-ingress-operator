@@ -120,4 +120,4 @@ if __name__ == '__main__':
 
     # write template file ordering by keys
     with open(arguments.destination,'w') as outfile:
-        yaml.dump(template_data, outfile)
+        yaml.dump(template_data, outfile, default_flow_style=False)
