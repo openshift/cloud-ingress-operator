@@ -100,8 +100,6 @@ type LoadBalancer struct {
 func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	reqLogger.Info("Reconciling APIScheme")
-
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
@@ -142,6 +140,20 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			reqLogger.Error(err, "Couldn't get the Service")
 			return reconcile.Result{}, err
 		}
+	}
+	// Reconcile the access list in the Service
+	if !sliceEquals(found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks) {
+		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
+		reqLogger.Info(fmt.Sprintf("Mismatch between %s/service/%s LoadBalancerSourceRanges and AllowedCIDRBlocks. Updating...", found.GetNamespace(), found.GetName()))
+		found.Spec.LoadBalancerSourceRanges = instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
+		err = r.client.Update(context.TODO(), found)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s LoadBalancerSourceRanges", found.GetNamespace(), found.GetName()))
+			return reconcile.Result{}, err
+		}
+		// let's re-queue just in case
+		reqLogger.Info("Requeuing after svc update")
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
 	region, err := utils.GetClusterRegion(r.client)
@@ -209,8 +221,8 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 	r.client.Status().Update(context.TODO(), instance)
-
-	return reconcile.Result{}, nil
+	reqLogger.Info("Reconciling in 60 seconds...")
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
@@ -222,19 +234,14 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 		"apiserver": "true",
 		"app":       "openshift-kube-apiserver",
 	}
+	// Note: This owner reference should nbnot be expected to work
+	//ref := metav1.NewControllerRef(instance, instance.GetObjectKind().GroupVersionKind())
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
 			Namespace: "openshift-kube-apiserver",
 			Labels:    labels,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					Kind:       "APIScheme",
-					APIVersion: "v1alpha1",
-					Name:       instance.GetName(),
-					UID:        instance.GetUID(),
-				},
-			},
+			//OwnerReferences: []metav1.OwnerReference{*ref},
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -301,4 +308,17 @@ func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, messag
 		message,
 		utils.UpdateConditionNever)
 	crObject.Status.State = ctype
+}
+
+func sliceEquals(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := 0; i < len(left); i++ {
+		if left[i] != right[i] {
+			fmt.Printf("Mismatch %s != %s\n", left[i], right[i])
+			return false
+		}
+	}
+	return true
 }
