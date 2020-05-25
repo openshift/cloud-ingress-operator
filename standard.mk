@@ -20,8 +20,7 @@ COMMIT_NUMBER=$(shell git rev-list `git rev-list --parents HEAD | egrep "^[a-f0-
 CURRENT_COMMIT=$(shell git rev-parse --short=7 HEAD)
 OPERATOR_VERSION=$(VERSION_MAJOR).$(VERSION_MINOR).$(COMMIT_NUMBER)-$(CURRENT_COMMIT)
 
-IMG?=$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):v$(OPERATOR_VERSION)
-OPERATOR_IMAGE_URI=${IMG}
+OPERATOR_IMAGE_URI=$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):v$(OPERATOR_VERSION)
 OPERATOR_IMAGE_URI_LATEST=$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):latest
 OPERATOR_DOCKERFILE ?=build/Dockerfile
 
@@ -31,7 +30,7 @@ unexport GOFLAGS
 GOENV=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
 
-CONTAINER_ENGINE=$(shell which podman 2>/dev/null || which docker 2>/dev/null)
+CONTAINER_ENGINE=$(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 
 # ex, -v
 TESTOPTS := -timeout 1m
@@ -51,13 +50,13 @@ isclean:
 
 .PHONY: build
 build: isclean envtest
-	${CONTAINER_ENGINE} build . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
-	${CONTAINER_ENGINE} tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
+	$(CONTAINER_ENGINE) build . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
+	$(CONTAINER_ENGINE) tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: push
 push:
-	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI)
-	${CONTAINER_ENGINE} push $(OPERATOR_IMAGE_URI_LATEST)
+	$(CONTAINER_ENGINE) push $(OPERATOR_IMAGE_URI)
+	$(CONTAINER_ENGINE) push $(OPERATOR_IMAGE_URI_LATEST)
 
 .PHONY: skopeo-push
 skopeo-push: container-build
@@ -77,19 +76,23 @@ build-catalog-image:
 
 .PHONY: gocheck
 gocheck: ## Lint code
-	gofmt -s -l $$(go list -f '{{ .Dir }}' ./... ) | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d $$(go list -f '{{ .Dir }}' ./... ); exit 1; fi
+	gofmt -s -l . | grep ".*\.go"; if [ "$$?" = "0" ]; then gofmt -s -d .; exit 1; fi
 	go vet ./cmd/... ./pkg/...
 
 .PHONY: gobuild
 gobuild: gocheck gotest ## Build binary
-	${GOENV} go build ${GOBUILDFLAGS} -o ${BINFILE} ${MAINPACKAGE}
+	$(GOENV) go build $(GOBUILDFLAGS) -o $(BINFILE) $(MAINPACKAGE)
 
 .PHONY: gotest
 gotest:
-	go test $(TESTOPTS) $$(go list -mod=readonly -e ./...)
+	go test $(TESTOPTS) ./...
+
+.PHONY: coverage
+coverage:
+	hack/codecov.sh
 
 .PHONY: envtest
-envtest:
+envtest: isclean
 	@# test that the env target can be evaluated, required by osd-operators-registry
 	@eval $$($(MAKE) env --no-print-directory) || (echo 'Unable to evaulate output of `make env`.  This breaks osd-operators-registry.' >&2 && exit 1)
 
