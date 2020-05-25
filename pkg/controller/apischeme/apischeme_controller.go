@@ -221,7 +221,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 	r.client.Status().Update(context.TODO(), instance)
-	reqLogger.Info("Reconciling in 60 seconds...")
 	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
