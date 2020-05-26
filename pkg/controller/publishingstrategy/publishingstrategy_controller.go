@@ -353,8 +353,11 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 // get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
 // and delete all non-default ingresses
 func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) error {
-	// get all non-default ingresscontroller on cluster that are not on publishingStrategy CR
 	for _, ingress := range ingressControllerList.Items {
+		// if ingress does not have correct annotations, continue to next one
+		if _, ok := ingress.Annotations["Owner"]; !ok {
+			continue
+		}
 		if !contains(appIngressList, &ingress) {
 			err := r.client.Delete(context.TODO(), &ingress)
 			if err != nil {
@@ -370,7 +373,7 @@ func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList
 func contains(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
 	for _, app := range appIngressList {
 		if app.Default == true {
-			return true
+			continue
 		}
 		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
 			if ingressController.Spec.Domain == app.DNSName {

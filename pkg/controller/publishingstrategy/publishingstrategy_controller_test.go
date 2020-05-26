@@ -2,6 +2,7 @@ package publishingstrategy
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -400,14 +401,14 @@ func TestDeleteIngressWithAnnotation(t *testing.T) {
 		t.Fatalf("Unable to add route scheme (%v)", err)
 	}
 
-	err := r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
-	if err != nil {
-		t.Errorf("couldn't create ingress without annotation")
-	}
-
-	err = r.client.Create(ctx, mockNonDefaultIngressController())
+	err := r.client.Create(ctx, mockNonDefaultIngressController())
 	if err != nil {
 		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	err = r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
+	if err != nil {
+		t.Errorf("couldn't create ingress without annotation")
 	}
 
 	err = r.client.Create(ctx, mockPublishingStrategy())
@@ -422,19 +423,20 @@ func TestDeleteIngressWithAnnotation(t *testing.T) {
 	if err != nil {
 		t.Errorf("couldn't get ingresscontroller list %s", err)
 	}
-
-	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
-	if err != nil {
-		t.Fatalf("couldn't delete ingress")
-	}
-
 	// if ingress without annotation hit method, then it should not be removed
 	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
 	if err != nil {
 		t.Fatalf("couldn't delete ingress")
 	}
 
-	if ingressControllerList.Items[0].Spec.Domain != "apps2.exaple-nondefault-domain-with-no-annotation" {
+	err = r.client.List(ctx, ingressControllerList, &opts)
+	if err != nil {
+		t.Errorf("couldn't get ingresscontroller list %s", err)
+	}
+
+	t.Logf(fmt.Sprintf("ingress list: %v", ingressControllerList.Items))
+
+	if ingressControllerList.Items[1].Spec.Domain != "apps2.exaple-nondefault-domain-with-no-annotation" {
 		t.Fatalf("expect nondefault ingress to be on cluster but it is not")
 	}
 }
@@ -449,7 +451,7 @@ func TestContains(t *testing.T) {
 		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
 	}
 
-	err := r.client.Create(ctx, mockNonDefaultIngressController())
+	err := r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
 	if err != nil {
 		t.Errorf("couldn't create ingresscontroller %s", err)
 	}
@@ -463,8 +465,8 @@ func TestContains(t *testing.T) {
 		t.Errorf("couldn't create ingresscontroller %s", err)
 	}
 
-	checkContains := contains(mockPublishingStrategy().Spec.ApplicationIngress, mockNonDefaultIngressController())
-	if !checkContains {
-		t.Errorf("expect true but got false")
+	checkContains := contains(mockPublishingStrategy().Spec.ApplicationIngress, mockNonDefaultIngressNoAnnotation())
+	if checkContains {
+		t.Errorf("expect false but got true")
 	}
 }
