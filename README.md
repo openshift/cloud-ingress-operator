@@ -1,6 +1,13 @@
 # cloud-ingress-operator
 
-Cloud-ingress-operator is designed to assist in toggling OpenShift Dedicated 4.x clusters "private" and "public" through the use of custom Kubernetes resources.
+[![Go Report Card](https://goreportcard.com/badge/github.com/openshift/cloud-ingress-operator)](https://goreportcard.com/report/github.com/openshift/cloud-ingress-operator)
+[![GoDoc](https://godoc.org/github.com/openshift/cloud-ingress-operator?status.svg)](https://godoc.org/github.com/openshift/cloud-ingress-operator)
+[![codecov](https://codecov.io/gh/openshift/cloud-ingress-operator/branch/master/graph/badge.svg)](https://codecov.io/gh/openshift/cloud-ingress-operator)
+[![License](https://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+
+## Summary
+
+cloud-ingress-operator is designed to assist in toggling OpenShift Dedicated 4.x clusters "private" and "public" through the use of custom Kubernetes resources.
 
 There are two pieces of the cluster which can be toggled in this way: The default API server (`api.<cluster-domain>`) and the ingresses (the default being `*.apps.<cluster-domain>`, and up to one additional, named `*.apps2.<cluster-domain>`). These may be handled independently of one another in the manner described below.
 
@@ -60,7 +67,7 @@ It is possible to add additional applicationIngresses, however at this time, OSD
 
 Due to a race condition with the [cluster-ingress-operator](https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
 
-- Pause syncset to the cluster [SOP](https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md) 
+- Pause syncset to the cluster [SOP](https://github.com/openshift/ops-sop/blob/master/v4/howto/pause-syncset.md)
 - Check the inital state of the ingresscontrollers on cluster before the test by running `oc get ingresscontrollers -n openshift-ingress-operator`
   - In this test, we assume there is only one ingresscontroller called `default`.
 - Apply a sample `PublishingStrategy` CR with these specs
@@ -87,7 +94,7 @@ spec:
           matchLabels:
             foo: bar
 ```
-- Looking at `applicationIngress`, the expected result will be the creation of 2 ingresscontrollers, `default` and `apps2`. The `default` ingresscontroller will 
+- Looking at `applicationIngress`, the expected result will be the creation of 2 ingresscontrollers, `default` and `apps2`. The `default` ingresscontroller will
 have all the attributes of the first `applicationIngress` replacing the old `default` ingresscontroller, and `apps2` will have the attributes of the second `applicationIngress`. To check these results, run `oc get ingresscontrollers -n openshift-ingress-operator` and view each `ingresscontroller` as yaml.
 - NOTE: it might take up to 60 seconds for these changes to apply due to a race condition.
 
