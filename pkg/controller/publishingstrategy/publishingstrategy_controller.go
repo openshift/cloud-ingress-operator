@@ -358,6 +358,13 @@ func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList
 		if _, ok := ingress.Annotations["Owner"]; !ok {
 			continue
 		}
+		// if ingress is default, skip it since we are only looking at non-default ingresses
+		if ingress.Name == "default" {
+			continue
+		}
+		// only delete the ingress that does not exist on publishingStrategy
+		// true means the ingress (on cluster) exists on the publishingStrategy CR as well, so no deletion
+		// false means the ingress (on cluster) do not exist on the CR, so delete to have desired result
 		if !contains(appIngressList, &ingress) {
 			err := r.client.Delete(context.TODO(), &ingress)
 			if err != nil {
@@ -370,18 +377,28 @@ func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList
 }
 
 // contains check if an individual non-default ingress on cluster matches with any non-default applicationingress
+// return true if ingress (on cluster) matches with any applicationIngress in PublishingStrategy CR
+// return false if ingress (on cluster) DOES NOT match with ANY applicationIngress in PublishingStrategy CR
+// this helps to determine if ingress needs to be deleted or not. The end goal is to have all ApplicationIngress on PublishingStrategy CR on cluster
 func contains(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressController *operatorv1.IngressController) bool {
+	var isContained bool
 	for _, app := range appIngressList {
+		log.Info(fmt.Sprintf("app being processed %s", app.DNSName))
+		// if the ApplicationIngress (on CR) is default then set bool to false
+		// eg. ingresscontroller (on cluster): apps2
+		//     appIngressList (in CR) : [default]
+		// since apps2 does NOT exist in appIngressList, set bool to false and ready for deletion
 		if app.Default == true {
-			continue
+			isContained = false
 		}
+		// set bool to true if it is non-default and have the proper annotations
 		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
 			if ingressController.Spec.Domain == app.DNSName {
-				return true
+				isContained = true
 			}
 		}
 	}
-	return false
+	return isContained
 }
 
 // defaultIngressHandle will delete the existing default ingresscontroller, and create a new one with fields from publishingstrategySpec.ApplicationIngress
