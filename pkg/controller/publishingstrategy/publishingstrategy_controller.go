@@ -457,8 +457,7 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 			}
 		}
 	}
-	log.Info("sleep 30 seconds before creating new non-default ingress")
-	time.Sleep(time.Duration(30) * time.Second)
+
 	// create the ingress
 	newIngressController, err := newApplicationIngressControllerCR(newIngressControllerName, string(appingress.Listening), appingress.DNSName, newCertificate, appingress.RouteSelector.MatchLabels)
 	if err != nil {
@@ -466,8 +465,23 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 	}
 	err = r.client.Create(context.TODO(), newIngressController)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("got error trying to create %s", newIngressController.GetName()))
-		return err
+		if k8serr.IsAlreadyExists(err) {
+			for i := 1; i < 60; i++ {
+				if i == 60 {
+					log.Error(err, "out of retries to create non-default ingress")
+				}
+				time.Sleep(time.Duration(i) * time.Second)
+				err = r.client.Create(context.TODO(), newIngressController)
+				if err != nil {
+					continue
+				}
+				log.Info(fmt.Sprintf("successfully created non-default ingresscontroller for %s", newIngressController.Spec.Domain))
+				break
+			}
+		} else {
+			log.Error(err, fmt.Sprintf("got error trying to create %s", newIngressController.GetName()))
+			return err
+		}
 	}
 	return nil
 }
@@ -544,13 +558,12 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
 		return false
 	}
-	if publishingStrategyIngress.RouteSelector.MatchLabels != nil {
-		isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector, publishingStrategyIngress.RouteSelector)
+	if publishingStrategyIngress.RouteSelector.MatchLabels != nil || ingressController.Spec.RouteSelector != nil {
+		isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
 		if !isRouteSelectorEqual {
 			return false
 		}
 	}
-
 	listening := string(publishingStrategyIngress.Listening)
 	capListening := strings.Title(strings.ToLower(listening))
 	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "Internal" {
