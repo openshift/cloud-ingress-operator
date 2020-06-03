@@ -273,7 +273,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 			log.Error(err, "cannot get infrastructure name")
 			return reconcile.Result{}, err
 		}
-		extNLBName := infrastructureName + "-test"
+		extNLBName := infrastructureName + "-ext"
 
 		// Get both public and private subnet names for master Machines
 		// Note: master Machines have only one listed (private one) in their spec, but
