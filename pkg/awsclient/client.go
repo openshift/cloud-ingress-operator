@@ -47,6 +47,25 @@ type Client interface {
 	 * ELB-related Functions
 	 */
 
+	// Apply a SecurityGroup to a Load Balancer
+	ApplySecurityGroupsToLoadBalancer(*elb.ApplySecurityGroupsToLoadBalancerInput) (*elb.ApplySecurityGroupsToLoadBalancerOutput, error)
+	// Health check for the load balancer
+	ConfigureHealthCheck(*elb.ConfigureHealthCheckInput) (*elb.ConfigureHealthCheckOutput, error)
+	// ELB - to make the api endpoint, and toggle the customer ones
+	CreateLoadBalancer(*elb.CreateLoadBalancerInput) (*elb.CreateLoadBalancerOutput, error)
+	// for making api. public, and creation of rh-api.
+	CreateLoadBalancerListeners(*elb.CreateLoadBalancerListenersInput) (*elb.CreateLoadBalancerListenersOutput, error)
+	// remove instances from an ELB (when the Node goes away)
+	DeregisterInstancesFromLoadBalancer(*elb.DeregisterInstancesFromLoadBalancerInput) (*elb.DeregisterInstancesFromLoadBalancerOutput, error)
+	// list all (or 1) load balancer to see if we need to create rh-api, and to identify api. AWS identifier
+	DescribeLoadBalancers(*elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error)
+	// to check if it's been annotated with a k8s ownership tag
+	DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error)
+	// for making the api. endpoint private (just delete the listeners so it doesn't need to be recreated)
+	DeleteLoadBalancerListeners(*elb.DeleteLoadBalancerListenersInput) (*elb.DeleteLoadBalancerListenersOutput, error)
+	// add instances to an ELB (when the Node comes up)
+	RegisterInstancesWithLoadBalancer(*elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error)
+
 	/*
 	 * ELBv2-related Functions
 	 */
@@ -81,20 +100,51 @@ type Client interface {
 	/*
 	 * EC2-related Functions
 	 */
+	// EC2 - to create the security group for the new admin api
+	// we can get the instance IDs from Node objects.
+	AuthorizeSecurityGroupIngress(*ec2.AuthorizeSecurityGroupIngressInput) (*ec2.AuthorizeSecurityGroupIngressOutput, error)
+	// for rh-api.
+	CreateSecurityGroup(*ec2.CreateSecurityGroupInput) (*ec2.CreateSecurityGroupOutput, error)
+	// for removing a formerly approved CIDR block from the rh-api. security group
+	DeleteSecurityGroup(*ec2.DeleteSecurityGroupInput) (*ec2.DeleteSecurityGroupOutput, error)
+	// to determine if we need to create the rh-api. security group
+	DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
+	// for removing a formerly approved CIDR block from the rh-api. security group
+	RevokeSecurityGroupIngress(*ec2.RevokeSecurityGroupIngressInput) (*ec2.RevokeSecurityGroupIngressOutput, error)
 	// DescribeSubnets to find subnet for master nodes for incoming elb
 	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+	// CreateTags to apply tags to EC2 resources
+	CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
 
 	// Helper extensions
 	// ec2
 	SubnetNameToSubnetIDLookup([]string) ([]string, error)
+	SubnetIDToVPCLookup([]string) ([]string, error)
+	ApplyTagsToResources([]string, map[string]string) error
+	setLoadBalancerSecurityGroup(string, *ec2.SecurityGroup) error
+	findSecurityGroupByName(string) (*ec2.SecurityGroup, error)
+	findSecurityGroupByID(string) (*ec2.SecurityGroup, error)
+	createSecurityGroup(string, string, map[string]string) (*ec2.SecurityGroup, error)
+	removeIngressRulesFromSecurityGroup(*ec2.SecurityGroup, []*ec2.IpPermission) error
+	addIngressRulesToSecurityGroup(*ec2.SecurityGroup, []*ec2.IpPermission) error
+	EnsureCIDRAccess(string, string, string, []string, map[string]string) error
 
 	// elb/elbv2
+	MapToELBTags(map[string]string) []*elb.Tag
+	CreateClassicELB(string, []string, int64, map[string]string) (*AWSLoadBalancer, error)
+	RemoveLoadBalancerListeners(string) error
+	AddLoadBalancerListeners(string, int64) error
+	removeListenersFromELB(string) error
+	addListenersToELB(string, []*elb.Listener) error
+	AddLoadBalancerInstances(string, []string) error
+	RemoveInstancesFromLoadBalancer(string, []string) error
 	DoesELBExist(string) (bool, *AWSLoadBalancer, error)
 	ListAllNLBs() ([]LoadBalancerV2, error)
 	DeleteExternalLoadBalancer(string) error
 	CreateNetworkLoadBalancer(string, string, string) ([]LoadBalancerV2, error)
 	CreateListenerForNLB(string, string) error
 	GetTargetGroupArn(string) (string, error)
+	addHealthCheck(string, string, string, int64) error
 
 	// route53
 	UpsertARecord(string, string, string, string, string, bool) error
