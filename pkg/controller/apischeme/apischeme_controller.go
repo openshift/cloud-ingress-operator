@@ -12,8 +12,9 @@ import (
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 
-	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -78,33 +79,19 @@ type ReconcileAPIScheme struct {
 // LoadBalancer contains the relevant information to create a Load Balancer
 // TODO: Move this into pkg/client
 type LoadBalancer struct {
-	EndpointName     string            // FQDN of what it should be called
-	BaseDomain       string            // What is the base domain (DNS zone) for the EndpointName record?
-	Subnets          []string          // On which subnets it should operate (provider-native IDs)
-	Tags             map[string]string // Map of tags to apply to the Load Balancer
-	MachineInstances []string          // What are the cloud provider instance IDs that should receive traffic?
-}
-
-// CIDRAccess represents the information needed to ensure proper access to the named LoadBalancer
-// TODO: Move this into pkg/client
-type CIDRAccess struct {
-	LoadBalancer         *LoadBalancer     // For what LoadBalancer does these CIDR restrictions apply?
-	SecurityGroupName    string            // What should the Security Group be called?
-	SecurityGroupVPCName string            // To what VPC should the Security Group be attached?
-	Tags                 map[string]string // Tags to apply to the Security Group and (non-LoadBalancer) related assets?
+	EndpointName string // FQDN of what it should be called
+	BaseDomain   string // What is the base domain (DNS zone) for the EndpointName record?
 }
 
 // Reconcile will ensure that the rh-api management api endpoint is created and ready.
 // Rough Steps:
-// 1. Create AWS ELB (CreatingLoadBalancer)
-// 2. Create Security Group with allowed CIDR blocks (UpdatingCIDRAllownaces)
-// 3. Add master Node EC2 instances to the load balancer as listeners (6443/TCP) (UpdatingLoadBalancerListeners)
-// 4. Update APIServer object to add a record for the rh-api endpoint (UpdatingAPIServer)
-// 5. Ready for work (Ready)
+// 1. Create Service
+// 2. Add DNS CNAME from rh-api to the ELB created by AWS provider
+// 3. Ready for work (Ready)
 func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
-	reqLogger.Info("Reconciling APIScheme")
+	reqLogger.Info("Reconciling APIScheme", "request", request)
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
@@ -114,9 +101,11 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			reqLogger.Error(err, "Couldn't find the APIScheme object")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		reqLogger.Error(err, "Error reading APIScheme object")
 		return reconcile.Result{}, err
 	}
 	// If the management API isn't enabled, we have nothing to do!
@@ -124,15 +113,45 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
 	// depend on rh-api.
 	if !instance.Spec.ManagementAPIServerIngress.Enabled {
+		reqLogger.Info("APISchme is not enabled.")
 		return reconcile.Result{}, nil
 	}
 
-	ownerTags, err := utils.AWSOwnerTag(r.client)
+	// Does the Service exist already?
+	found := &corev1.Service{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Spec.ManagementAPIServerIngress.DNSName, Namespace: "openshift-kube-apiserver"}, found)
 	if err != nil {
-		reqLogger.Error(err, "Couldn't get the cluster owner tags")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster owner tags", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
+		if errors.IsNotFound(err) {
+			// need to create it
+			dep := r.newServiceFor(instance)
+			reqLogger.Info("Service not found. Creating", "service", dep)
+			err = r.client.Create(context.TODO(), dep)
+			if err != nil {
+				reqLogger.Error(err, "Failure to create new Service")
+				return reconcile.Result{}, err
+			}
+			// Reconcile again to get the new Service and give AWS time to create the ELB
+			reqLogger.Info("Service was just created, so let's try to requeue to set it up")
+			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		} else if err != nil {
+			reqLogger.Error(err, "Couldn't get the Service")
+			return reconcile.Result{}, err
+		}
+	}
+	reqLogger.Info("Service was found!", "service", found)
+	// Reconcile the access list in the Service
+	if !sliceEquals(found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks) {
+		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
+		reqLogger.Info(fmt.Sprintf("Mismatch between %s/service/%s LoadBalancerSourceRanges and AllowedCIDRBlocks. Updating...", found.GetNamespace(), found.GetName()))
+		found.Spec.LoadBalancerSourceRanges = instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
+		err = r.client.Update(context.TODO(), found)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s LoadBalancerSourceRanges", found.GetNamespace(), found.GetName()))
+			return reconcile.Result{}, err
+		}
+		// let's re-queue just in case
+		reqLogger.Info("Requeuing after svc update")
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
 	region, err := utils.GetClusterRegion(r.client)
@@ -142,10 +161,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-
-	reqLogger.Info(fmt.Sprintf("Region: %s, Owner tags: +%v", region, ownerTags))
-	// We expect this secret to exist in the same namespace Account CR's are created
-	// TODO: Get the region of the cluster
 	if awsClient == nil {
 		awsClient, err = awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
 			SecretName: config.AWSSecretName,
@@ -159,35 +174,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	// Get both public and private subnet names for master Machines
-	// Note: master Machines have only one listed (private one) in their sepc, but
-	// this returns both public and private. We need the public one.
-	subnets, err := utils.GetMasterNodeSubnets(r.client)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't get the subnets used by master nodes")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	// Turn the public subnet name into a subnet ID
-	subnetIDs, err := awsClient.SubnetNameToSubnetIDLookup([]string{subnets["public"]})
-	if err != nil {
-		reqLogger.Error(err, "Couldn't turn subnet names into subnet IDs")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't turn subnet names into subnet IDs", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	if len(subnetIDs) == 0 {
-		if err != nil {
-			reqLogger.Error(err, "Zero length subnets")
-		} else {
-			reqLogger.Info("Zero length subnets, but no error set.")
-			err = fmt.Errorf("Zero length subnets")
-		}
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's subnets", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
 
 	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
 	if err != nil {
@@ -196,41 +182,36 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	masterNodeInstances, err := utils.GetClusterMasterInstancesIDs(r.client)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't detect the AWS instances for master nodes")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't find the cluster's AWS instances for master nodes", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
+	// Get the ELB-to-be's name from Service's UID
+	elbName := strings.ReplaceAll("a"+string(found.ObjectMeta.UID), "-", "")
+	if len(elbName) > 32 {
+		// truncate to 32 characters
+		elbName = elbName[0:32]
 	}
 
-	// In theory this could return more than one VPC for master nodes. That would be
-	// odd since the security group is associated with a single VPC.
-	vpcs, err := awsClient.SubnetIDToVPCLookup(subnetIDs)
+	reqLogger.Info("Checking to see if the ELB exists in AWS", "elbName", elbName)
+	exists, elb, err := awsClient.DoesELBExist(elbName)
 	if err != nil {
-		reqLogger.Error(err, "Couldn't get the VPC in use by master nodes")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the VPC id for master nodes", cloudingressv1alpha1.ConditionError)
+		reqLogger.Error(err, "Couldn't get ELB info from AWS. Is it not ready yet?")
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get ELB info from AWS. Is it not ready yet?", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
 	}
-	if len(vpcs) > 1 {
-		reqLogger.Info(fmt.Sprintf("Multiple VPCs detected for master nodes. Using %s for security group", vpcs[0]))
+	if !exists {
+		// It isn't bad that it doesn't exist, if there's no error, so re-queue
+		reqLogger.Info("AWS ELB isn't ready yet. Requeueing.")
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 	lb := &LoadBalancer{
-		EndpointName:     instance.Spec.ManagementAPIServerIngress.DNSName,
-		Subnets:          subnetIDs,
-		Tags:             ownerTags,
-		MachineInstances: masterNodeInstances,
-		BaseDomain:       clusterBaseDomain,
+		EndpointName: instance.Spec.ManagementAPIServerIngress.DNSName,
+		BaseDomain:   clusterBaseDomain,
 	}
-	cidrAccess := &CIDRAccess{
-		LoadBalancer:         lb,
-		SecurityGroupName:    config.AdminAPISecurityGroupName,
-		SecurityGroupVPCName: vpcs[0],
-		Tags:                 ownerTags,
-	}
-	// Now try to make sure all the things for Admin API are present in AWS
-	err = ensureAdminAPIEndpoint(instance, awsClient, lb, cidrAccess)
+
+	reqLogger.Info("Making sure the DNS entry exists", "lb", lb, "elb", elb)
+
+	err = ensureDNSRecord(awsClient, lb, elb)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
@@ -240,88 +221,40 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 
 	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 	r.client.Status().Update(context.TODO(), instance)
-
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
-func ensureCloudLoadBalancer(awsAPI awsclient.Client, lb *LoadBalancer) (*awsclient.AWSLoadBalancer, error) {
-	var awsObj *awsclient.AWSLoadBalancer
-	found := false
-	var err error
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		found, awsObj, err = awsAPI.DoesELBExist(lb.EndpointName)
-		if err != nil {
-			log.Info("Couldn't determine if the Admin API ELB exists due to error: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries")
-				return nil, err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			// We have a successful response from the API
-			break
-		}
+func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
+	labels := map[string]string{
+		"app":          "cloud-ingress-operator-" + instance.Spec.ManagementAPIServerIngress.DNSName,
+		"apischeme_cr": instance.GetName(),
 	}
-	if found {
-		log.Info(fmt.Sprintf("ELB exists for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
-	} else {
-		log.Info("Need to create ELB for Admin API")
-		for i := 1; i <= config.MaxAPIRetries; i++ {
-			awsObj, err = awsAPI.CreateClassicELB(lb.EndpointName, lb.Subnets, 6443, lb.Tags)
-			if err != nil {
-				if i == config.MaxAPIRetries {
-					log.Info("Out of retries")
-					return nil, err
-				}
-				log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-				time.Sleep(time.Duration(i) * time.Second)
-			} else {
-				log.Info(fmt.Sprintf("Created ELB for Admin API in DNS zone %s with DNS name %s", awsObj.DNSZoneId, awsObj.DNSName))
-				break
-			}
-		}
+	selector := map[string]string{
+		"apiserver": "true",
+		"app":       "openshift-kube-apiserver",
 	}
-	return awsObj, nil
-}
-
-func ensureCIDRAccess(crObject *cloudingressv1alpha1.APIScheme, awsAPI awsclient.Client, cidrAccess *CIDRAccess) error {
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-
-		err := awsAPI.EnsureCIDRAccess(cidrAccess.LoadBalancer.EndpointName, cidrAccess.SecurityGroupName, cidrAccess.SecurityGroupVPCName, crObject.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrAccess.Tags)
-		if err != nil {
-			log.Info("Error ensuring CIDR access for the security group: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			log.Info("Security Group CIDR access ensured")
-			break
-		}
+	// Note: This owner reference should nbnot be expected to work
+	//ref := metav1.NewControllerRef(instance, instance.GetObjectKind().GroupVersionKind())
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
+			Namespace: "openshift-kube-apiserver",
+			Labels:    labels,
+			//OwnerReferences: []metav1.OwnerReference{*ref},
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Protocol:   "TCP",
+					Port:       6443,
+					TargetPort: intstr.FromInt(6443),
+				},
+			},
+			Selector:                 selector,
+			Type:                     corev1.ServiceTypeLoadBalancer,
+			LoadBalancerSourceRanges: instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks,
+		},
 	}
-	return nil
-}
-
-func ensureLoadBalancerInstances(awsAPI awsclient.Client, lb *LoadBalancer) error {
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := awsAPI.AddLoadBalancerInstances(lb.EndpointName, lb.MachineInstances)
-		if err != nil {
-			log.Info(fmt.Sprintf("Couldn't add instances %s to ELB %s: %s", lb.MachineInstances, lb.EndpointName, err.Error()))
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			log.Info(fmt.Sprintf("Added instances %s to ELB", lb.MachineInstances))
-			break
-		}
-	}
-	return nil
 }
 
 func ensureDNSRecord(awsAPI awsclient.Client, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
@@ -364,121 +297,6 @@ func ensureDNSRecord(awsAPI awsclient.Client, lb *LoadBalancer, awsObj *awsclien
 	return nil
 }
 
-// ensureAdminAPIEndpoint will ensure the Admin API endpoint exists. Returns any error
-// This function is idempotent
-func ensureAdminAPIEndpoint(crObject *cloudingressv1alpha1.APIScheme, awsAPI awsclient.Client, lb *LoadBalancer, cidrAccess *CIDRAccess) error {
-
-	// First, let's ensure an ELB exists
-	awsObj, err := ensureCloudLoadBalancer(awsAPI, lb)
-	if err != nil {
-		// This is actually fatal due to the retries in ensureCloudLoadBalancer
-		return err
-	}
-	// Now, ensure CIDR access
-	err = ensureCIDRAccess(crObject, awsAPI, cidrAccess)
-	if err != nil {
-		// This is actually fatal
-		return err
-	}
-	// Add the "master" instances are attached to the ELB
-	err = ensureLoadBalancerInstances(awsAPI, lb)
-	if err != nil {
-		// This is actually fatal
-		return err
-	}
-	// Public and Private zones
-	err = ensureDNSRecord(awsAPI, lb, awsObj)
-	if err != nil {
-		// This is actually fatal
-		return err
-	}
-	// Finally, ensure the DNS name is present in the zone
-	return nil
-}
-
-// addAdminAPIToApiServerObject will add the +domainName+ to the
-// ApiServer/cluster object for the admin api endpoint
-// Two ways to do this:
-// 1. Re-use the existing certificate, but add a new hostname for the apiserver
-// to listen on
-// 2. Add a new TLS certificate and hostname
-// We will use option 1 and trust that the existing TLS cert has an entry for
-// +domainName+
-// Option 1 will look like this:
-//
-// apiVersion: config.openshift.io/v1
-// kind: APIServer
-// metadata:
-//   name: cluster
-// spec:
-//   clientCA:
-//     name: ""
-//   servingCerts:
-//     defaultServingCertificate:
-//       name: ""
-//     namedCertificates:
-//     - names:
-//       - api.<cluster-domain>
-//       - rh-adpi.<cluster-domain>  <-- Add this
-//       servingCertificate:
-//         name: <cluster-name>-primary-cert-bundle-secret
-//
-// For completeness, option 2 looks like
-//
-// apiVersion: config.openshift.io/v1
-// kind: APIServer
-// metadata:
-//   name: cluster
-// spec:
-//   clientCA:
-//     name: ""
-//   servingCerts:
-//     defaultServingCertificate:
-//       name: ""
-//     namedCertificates:
-//     - names:
-//       - api.<cluster-domain>
-//       servingCertificate:
-//         name: <cluster-name>-primary-cert-bundle-secret
-//     - names: <-- Add this
-//       - rh-api.<cluster-domain>
-//       servingCertificate:
-//         name: rh-api-endpoint-cert-bundle-secret <-- openshift-config namespace
-func (r *ReconcileAPIScheme) addAdminAPIToAPIServerObject(clusterBaseDomainName string, instance *cloudingressv1alpha1.APIScheme) error {
-	// Where the new endpoint is listening at
-	adminEndpoint := instance.Spec.ManagementAPIServerIngress.DNSName + "." + clusterBaseDomainName
-	api := &configv1.APIServer{}
-	ns := types.NamespacedName{
-		Namespace: "",
-		Name:      "cluster",
-	}
-	err := r.client.Get(context.TODO(), ns, api)
-	if err != nil {
-		return err
-	}
-	// FIXME: Check so there's no duplicate addresses added
-	needToAdd := false
-	for i, namedCerts := range api.Spec.ServingCerts.NamedCertificates {
-		for _, name := range namedCerts.Names {
-			if name == adminEndpoint {
-				// No work to do
-				log.Info(fmt.Sprintf("No need to update APIServer/cluster: %s already present", adminEndpoint))
-				return nil
-			} else if name == "api."+clusterBaseDomainName {
-				// This is where our primary API endpoint is, and where we need to add it.
-				// "This" meaning the particular namedCerts as in spec.servingCerts.namedCertificates[]
-				needToAdd = true
-			}
-		}
-		if needToAdd {
-			// By here, we know we have to append the name.
-			api.Spec.ServingCerts.NamedCertificates[i].Names = append(api.Spec.ServingCerts.NamedCertificates[i].Names, adminEndpoint)
-			return r.client.Update(context.TODO(), api)
-		}
-	}
-	return nil
-}
-
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
 func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
 	crObject.Status.Conditions = utils.SetAPISchemeCondition(
@@ -489,4 +307,17 @@ func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, messag
 		message,
 		utils.UpdateConditionNever)
 	crObject.Status.State = ctype
+}
+
+func sliceEquals(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := 0; i < len(left); i++ {
+		if left[i] != right[i] {
+			fmt.Printf("Mismatch %s != %s\n", left[i], right[i])
+			return false
+		}
+	}
+	return true
 }
