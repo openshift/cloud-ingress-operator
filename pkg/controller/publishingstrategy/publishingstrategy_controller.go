@@ -466,8 +466,8 @@ func (r *ReconcilePublishingStrategy) nonDefaultIngressHandle(appingress cloudin
 	err = r.client.Create(context.TODO(), newIngressController)
 	if err != nil {
 		if k8serr.IsAlreadyExists(err) {
-			for i := 1; i < 60; i++ {
-				if i == 60 {
+			for i := 1; i < 24; i++ {
+				if i == 24 {
 					log.Error(err, "out of retries to create non-default ingress")
 				}
 				time.Sleep(time.Duration(i) * time.Second)
@@ -558,12 +558,6 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
 		return false
 	}
-	if publishingStrategyIngress.RouteSelector.MatchLabels != nil || ingressController.Spec.RouteSelector != nil {
-		isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
-		if !isRouteSelectorEqual {
-			return false
-		}
-	}
 	listening := string(publishingStrategyIngress.Listening)
 	capListening := strings.Title(strings.ToLower(listening))
 	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "Internal" {
@@ -573,6 +567,16 @@ func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngr
 		return true
 	}
 	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		return false
+	}
+	if publishingStrategyIngress.RouteSelector.MatchLabels == nil {
+		return true
+	}
+	if (publishingStrategyIngress.RouteSelector.MatchLabels == nil) != (ingressController.Spec.RouteSelector == nil) {
+		return false
+	}
+	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
+	if !isRouteSelectorEqual {
 		return false
 	}
 	return true
