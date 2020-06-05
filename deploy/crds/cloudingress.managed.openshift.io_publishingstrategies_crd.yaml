@@ -128,6 +128,8 @@ spec:
         status:
           description: PublishingStrategyStatus defines the observed state of PublishingStrategy
           type: object
+      required:
+      - spec
       type: object
   version: v1alpha1
   versions:

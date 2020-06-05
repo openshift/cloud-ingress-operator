@@ -56,7 +56,7 @@ type APIScheme struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   APISchemeSpec   `json:"spec,omitempty"`
+	Spec   APISchemeSpec   `json:"spec"`
 	Status APISchemeStatus `json:"status,omitempty"`
 }
 

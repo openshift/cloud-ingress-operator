@@ -29,8 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_apischeme")
-var awsClient awsclient.Client
+var (
+	log       = logf.Log.WithName("controller_apischeme")
+	awsClient awsclient.Client
+)
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -90,8 +92,7 @@ type LoadBalancer struct {
 // 3. Ready for work (Ready)
 func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-
-	reqLogger.Info("Reconciling APIScheme", "request", request)
+	reqLogger.Info("Reconciling APIScheme")
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
@@ -113,7 +114,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
 	// depend on rh-api.
 	if !instance.Spec.ManagementAPIServerIngress.Enabled {
-		reqLogger.Info("APISchme is not enabled.")
+		reqLogger.Info("Not enabled", "instance", instance)
 		return reconcile.Result{}, nil
 	}
 
@@ -138,7 +139,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			return reconcile.Result{}, err
 		}
 	}
-	reqLogger.Info("Service was found!", "service", found)
 	// Reconcile the access list in the Service
 	if !sliceEquals(found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks) {
 		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
@@ -189,7 +189,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		elbName = elbName[0:32]
 	}
 
-	reqLogger.Info("Checking to see if the ELB exists in AWS", "elbName", elbName)
 	exists, elb, err := awsClient.DoesELBExist(elbName)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't get ELB info from AWS. Is it not ready yet?")
@@ -208,8 +207,6 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		EndpointName: instance.Spec.ManagementAPIServerIngress.DNSName,
 		BaseDomain:   clusterBaseDomain,
 	}
-
-	reqLogger.Info("Making sure the DNS entry exists", "lb", lb, "elb", elb)
 
 	err = ensureDNSRecord(awsClient, lb, elb)
 	if err != nil {
