@@ -63,7 +63,7 @@ type PublishingStrategy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PublishingStrategySpec   `json:"spec,omitempty"`
+	Spec   PublishingStrategySpec   `json:"spec"`
 	Status PublishingStrategyStatus `json:"status,omitempty"`
 }
 
