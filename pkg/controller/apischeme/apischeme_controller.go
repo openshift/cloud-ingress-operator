@@ -30,12 +30,8 @@ import (
 )
 
 var (
-	// reconcileCount is how many times the Reconcile loop has fired. This
-	// controls how often we log what we're doing therein since it is checking
-	// every minute.
-	reconcileCount = 0
-	log            = logf.Log.WithName("controller_apischeme")
-	awsClient      awsclient.Client
+	log       = logf.Log.WithName("controller_apischeme")
+	awsClient awsclient.Client
 )
 
 /**
@@ -96,10 +92,7 @@ type LoadBalancer struct {
 // 3. Ready for work (Ready)
 func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reconcileCount++
-	if reconcileCount%1000 == 0 {
-		reqLogger.Info("Reconciling APIScheme", "request", request)
-	}
+	reqLogger.Info("Reconciling APIScheme")
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
@@ -121,6 +114,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
 	// depend on rh-api.
 	if !instance.Spec.ManagementAPIServerIngress.Enabled {
+		reqLogger.Info("Not enabled", "instance", instance)
 		return reconcile.Result{}, nil
 	}
 
