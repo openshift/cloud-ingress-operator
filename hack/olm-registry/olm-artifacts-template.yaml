@@ -10,8 +10,6 @@ parameters:
 - name: REPO_NAME
   value: cloud-ingress-operator
   required: true
-- name: ALLOWED_CIDR_BLOCKS
-  required: true
 metadata:
   name: selectorsyncset-template
 objects:
@@ -336,16 +334,6 @@ objects:
         name: ${REPO_NAME}
         source: ${REPO_NAME}-registry
         sourceNamespace: openshift-${REPO_NAME}
-    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
-      kind: APIScheme
-      metadata:
-        name: rh-api
-        namespace: openshift-cloud-ingress-operator
-      spec:
-        managementAPIServerIngress:
-          enabled: true
-          dnsName: rh-api
-          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:
@@ -382,13 +370,13 @@ objects:
               apiVersion:
                 description: 'APIVersion defines the versioned schema of this representation
                   of an object. Servers should convert recognized schemas to the latest
-                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
                 type: string
               kind:
                 description: 'Kind is a string value representing the REST resource
                   this object represents. Servers may infer this from the endpoint
                   the client submits requests to. Cannot be updated. In CamelCase.
-                  More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
                 type: string
               metadata:
                 type: object
@@ -402,12 +390,18 @@ objects:
                       tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
                     properties:
                       allowedCIDRBlocks:
+                        description: AllowedCIDRBlocks is the list of CIDR blocks
+                          that should be allowed to access the management API
                         items:
                           type: string
                         type: array
                       dnsName:
+                        description: DNSName is the name that should be used for DNS
+                          of the management API, eg rh-api
                         type: string
                       enabled:
+                        description: Enabled to create the Management API endpoint
+                          or not.
                         type: boolean
                     required:
                     - allowedCIDRBlocks
@@ -426,7 +420,50 @@ objects:
                       to regenerate code after modifying this file Add custom validation
                       using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
                     type: string
+                  conditions:
+                    items:
+                      description: APISchemeCondition is the history of transitions
+                      properties:
+                        allowedCIDRBlocks:
+                          description: AllowedCIDRBlocks currently allowed (as of
+                            the last successful Security Group update)
+                          items:
+                            type: string
+                          type: array
+                        lastProbeTime:
+                          description: LastProbeTime last time probed
+                          format: date-time
+                          type: string
+                        lastTransitionTime:
+                          description: LastTransitionTime Last change to status
+                          format: date-time
+                          type: string
+                        message:
+                          description: Message is an English text
+                          type: string
+                        reason:
+                          description: Reason is why we're making this status change
+                          type: string
+                        status:
+                          description: Status
+                          type: string
+                        type:
+                          description: Type is the type of condition
+                          type: string
+                      required:
+                      - lastProbeTime
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      type: object
+                    type: array
+                  state:
+                    description: APISchemeConditionType - APISchemeConditionType
+                    type: string
                 type: object
+            required:
+            - spec
             type: object
         version: v1alpha1
         versions:
@@ -567,6 +604,8 @@ objects:
                 description: PublishingStrategyStatus defines the observed state of
                   PublishingStrategy
                 type: object
+            required:
+            - spec
             type: object
         version: v1alpha1
         versions:

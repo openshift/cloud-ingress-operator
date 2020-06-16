@@ -10,8 +10,6 @@ parameters:
 - name: REPO_NAME
   value: REPLACED_BY_SCRIPT
   required: true
-- name: ALLOWED_CIDR_BLOCKS
-  required: true
 metadata:
   name: selectorsyncset-template
 objects: []
