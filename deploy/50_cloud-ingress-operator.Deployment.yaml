@@ -14,6 +14,20 @@ spec:
         name: cloud-ingress-operator
     spec:
       serviceAccountName: cloud-ingress-operator
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: "node-role.kubernetes.io"
+                operator: In
+                values: 
+                  - infra
+      tolerations:
+      - operator: Equal
+        key: node-role.kubernetes.io
+        value: infra
+        effect: PreferNoSchedule
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name

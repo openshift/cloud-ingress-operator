@@ -300,16 +300,18 @@ objects:
         image: ${REGISTRY_IMG}:${CHANNEL}-${IMAGE_TAG}
         affinity:
           nodeAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-            - preference:
-                matchExpressions:
-                - key: node-role.kubernetes.io/infra
-                  operator: Exists
-              weight: 1
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: node-role.kubernetes.io
+                  operator: In
+                  values:
+                  - infra
         tolerations:
-        - effect: NoSchedule
-          key: node-role.kubernetes.io/infra
-          operator: Exists
+        - operator: Equal
+          key: node-role.kubernetes.io
+          value: infra
+          effect: PreferNoSchedule
         displayName: ${REPO_NAME}
         icon:
           base64data: ''
