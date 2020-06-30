@@ -318,3 +318,17 @@ func (mr *MockClientMockRecorder) UpsertARecord(arg0, arg1, arg2, arg3, arg4, ar
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertARecord", reflect.TypeOf((*MockClient)(nil).UpsertARecord), arg0, arg1, arg2, arg3, arg4, arg5)
 }
+
+// DeleteARecord mocks base method
+func (m *MockClient) DeleteARecord(arg0, arg1, arg2, arg3 string, arg4 bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteARecord", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteARecord indicates an expected call of DeleteARecord
+func (mr *MockClientMockRecorder) DeleteARecord(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteARecord", reflect.TypeOf((*MockClient)(nil).DeleteARecord), arg0, arg1, arg2, arg3, arg4)
+}
