@@ -1,36 +1,41 @@
 package awsclient
 
 import (
-	"strings"
+	"path"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/route53"
 )
 
-// UpsertARecord adds an A record alias named DNSName in the target zone aliasDNSZoneID, inside the clusterDomain's zone.
-func (c *AwsClient) UpsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
-	// look up clusterDomain to get hostedzoneID
-	lookup := &route53.ListHostedZonesByNameInput{
+// GetPublicHostedZoneID looks up the ID of the public hosted zone for clusterDomain.
+func (c *AwsClient) GetPublicHostedZoneID(clusterDomain string) (string, error) {
+	input := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(clusterDomain),
 	}
-
-	listHostedZones, err := c.ListHostedZonesByName(lookup)
+	output, err := c.ListHostedZonesByName(input)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// get public hosted zone ID needed to changeResourceRecordSets
 	var publicHostedZoneID string
-	for _, zone := range listHostedZones.HostedZones {
+	for _, zone := range output.HostedZones {
 		if *zone.Name == clusterDomain {
-			// In order to get the publicHostedZoneID we need to get
-			// the HostedZone.Id object which is in the form of "/hostedzone/Z1P3C0HZA40C0N"
-			// Since we only care about the ID number, we take index of the last "/" char and parse right
-			zoneID := aws.StringValue(zone.Id)
-			slashIndex := strings.LastIndex(zoneID, "/")
-			publicHostedZoneID = zoneID[slashIndex+1:]
+			// The zone ID is the last element of the string
+			// HostedZone.Id, which takes the form of a path:
+			// "/hostedzone/<ZONEID>"
+			publicHostedZoneID = path.Base(aws.StringValue(zone.Id))
 			break
 		}
+	}
+
+	return publicHostedZoneID, nil
+}
+
+// UpsertARecord adds an A record alias named DNSName in the target zone aliasDNSZoneID, inside the clusterDomain's zone.
+func (c *AwsClient) UpsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
+	publicHostedZoneID, err := c.GetPublicHostedZoneID(clusterDomain)
+	if err != nil {
+		return err
 	}
 
 	change := &route53.ChangeResourceRecordSetsInput{
