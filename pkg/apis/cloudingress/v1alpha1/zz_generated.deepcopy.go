@@ -357,6 +357,7 @@ func (in *SSHDSpec) DeepCopyInto(out *SSHDSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	in.ConfigMapSelector.DeepCopyInto(&out.ConfigMapSelector)
 	return
 }
 

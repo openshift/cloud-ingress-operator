@@ -3,7 +3,9 @@ package sshd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -102,6 +104,7 @@ type ReconcileSSHD struct {
 }
 
 const (
+	authorizedKeysMountPath   = "/var/run/authorized_keys.d"
 	nodeMasterLabel           = "node-role.kubernetes.io/master"
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
 )
@@ -175,9 +178,41 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, nil
 	}
 
+	// List ConfigMaps with SSH keys
+	//
+	// Each internal team that should have SSH access to OSDv4 clusters has a unique
+	// ConfigMap object with all team members SSH keys in a single "authorized_keys"
+	// file, as well as a SelectorSyncSet object on Hive that syncs the ConfigMap to
+	// appropriate clusters for the team.
+	//
+	// The Deployment object will be configured to mount each available ConfigMap in
+	// the SSHD pod as a volume under a common directory.  The SSH server within the
+	// pod will use an "AuthorizedKeysCommand" to combine all the mounted authorized
+	// keys files under that common directory.
+	//
+	// Updates to ConfigMaps for new or departing members, as well as new ConfigMaps
+	// for new teams, may incur up to a 60 second delay before being reconciled into
+	// the deployed SSHD pod.
+	configMapList := &corev1.ConfigMapList{}
+	selector, err := metav1.LabelSelectorAsSelector(&instance.Spec.ConfigMapSelector)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if err = r.client.List(context.TODO(), configMapList,
+		client.InNamespace(instance.Namespace),
+		&client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		r.SetSSHDStatusError(instance, "Failed to list config maps with SSH keys", err)
+		return reconcile.Result{}, err
+	}
+	// Sort ConfigMaps by name for the purpose of creating
+	// stable Volume and VolumeMount lists in the Deployment.
+	sort.Slice(configMapList.Items, func(i, j int) bool {
+		return configMapList.Items[i].Name < configMapList.Items[j].Name
+	})
+
 	// Install Deployment
 	foundDeployment := &appsv1.Deployment{}
-	deployment := newSSHDDeployment(instance)
+	deployment := newSSHDDeployment(instance, configMapList)
 	deploymentName, err := client.ObjectKeyFromObject(deployment)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -313,7 +348,30 @@ func getMatchLabels(cr *cloudingressv1alpha1.SSHD) map[string]string {
 	return map[string]string{"deployment": cr.Name}
 }
 
-func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD) *appsv1.Deployment {
+func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.ConfigMapList) *appsv1.Deployment {
+	// Prefer nil over empty slices to satisfy reflect.DeepEqual.
+	var volumes []corev1.Volume
+	var volumeMounts []corev1.VolumeMount
+
+	for _, configMap := range configMapList.Items {
+		volumeName := configMap.ObjectMeta.Name
+		volumes = append(volumes, corev1.Volume{
+			Name: volumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: configMap.ObjectMeta.Name,
+					},
+					DefaultMode: pointer.Int32Ptr(0600),
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: filepath.Join(authorizedKeysMountPath, volumeName),
+		})
+	}
+
 	sshdContainer := corev1.Container{
 		Name:    "sshd",
 		Image:   cr.Spec.Image,
@@ -325,6 +383,7 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD) *appsv1.Deployment {
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
+		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          corev1.PullAlways,
@@ -351,6 +410,7 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD) *appsv1.Deployment {
 					Labels:    getMatchLabels(cr),
 				},
 				Spec: corev1.PodSpec{
+					Volumes:                       volumes,
 					Containers:                    []corev1.Container{sshdContainer},
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					TerminationGracePeriodSeconds: pointer.Int64Ptr(30),

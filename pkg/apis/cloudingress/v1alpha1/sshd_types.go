@@ -28,6 +28,10 @@ type SSHDSpec struct {
 
 	// Image is the URL of the SSHD container image
 	Image string `json:"image"`
+
+	// ConfigMapSelector is a label selector to isolate config maps containing SSH authorized keys
+	// to be mounted into the SSHD container
+	ConfigMapSelector metav1.LabelSelector `json:"configMapSelector,omitempty"`
 }
 
 // SSHDStatus defines the observed state of SSHD
