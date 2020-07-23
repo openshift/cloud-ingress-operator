@@ -10,6 +10,8 @@ parameters:
 - name: REPO_NAME
   value: cloud-ingress-operator
   required: true
+- name: ALLOWED_CIDR_BLOCKS
+  required: true
 metadata:
   name: selectorsyncset-template
 objects:
@@ -336,6 +338,18 @@ objects:
         name: ${REPO_NAME}
         source: ${REPO_NAME}-registry
         sourceNamespace: openshift-${REPO_NAME}
+    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+      kind: APIScheme
+      metadata:
+        name: rh-api
+        namespace: openshift-cloud-ingress-operator
+        annotations:
+          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
+      spec:
+        managementAPIServerIngress:
+          enabled: true
+          dnsName: rh-api
+          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:
