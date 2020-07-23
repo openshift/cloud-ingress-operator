@@ -5,8 +5,10 @@ metadata:
   namespace: openshift-cloud-ingress-operator
   annotations:
     allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"
+    test: true
 spec:
   managementAPIServerIngress:
     enabled: true
     dnsName: rh-api
     allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"
+
