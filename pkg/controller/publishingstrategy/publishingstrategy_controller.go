@@ -139,6 +139,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 	}
 
+	// ----------------------------TODO: remove these debug logs afterwards --------------------------------------
+	log.Info(fmt.Sprintf("initial ingresscontroller list: %+v", ingressControllerList.Items))
+	log.Info(fmt.Sprintf("appingress on publishingstrategy CR: %+v", instance.Spec.ApplicationIngress))
+	log.Info(fmt.Sprintf("ingress to reconcile: %+v", ingressNotOnCluster))
+	// -----------------------------------------------------------------------------------------------------------
+
 	for _, appingress := range ingressNotOnCluster {
 		newCertificate := &corev1.LocalObjectReference{
 			Name: appingress.Certificate.Name,
