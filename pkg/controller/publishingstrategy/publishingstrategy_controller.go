@@ -123,10 +123,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	// wait 60 seconds for deletion to be completed
-	log.Info("waited 60 seconds for necessary ingresscontroller deletions")
-	time.Sleep(time.Duration(60) * time.Second)
-
 	// create list of applicationIngress
 	var ingressNotOnCluster []cloudingressv1alpha1.ApplicationIngress
 
@@ -377,6 +373,9 @@ func (r *ReconcilePublishingStrategy) deleteIngressWithAnnotation(appIngressList
 				log.Error(err, "Failed to delete ingresscontroller")
 				return err
 			}
+			// wait 60 seconds for deletion to be completed
+			log.Info("waited 60 seconds for necessary ingresscontroller deletions")
+			time.Sleep(time.Duration(60) * time.Second)
 		}
 	}
 	return nil
