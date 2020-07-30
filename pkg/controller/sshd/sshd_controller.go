@@ -54,6 +54,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	// NOTE: The primary resource and the child resources it owns
+	//       will exist in a different namespace.  Normally these
+	//       watches would not work across namespaces but the pod
+	//       spec for this operator specifies WATCH_NAMESPACE="",
+	//       which gets passed to the Manager object in main() to
+	//       enable cluster-wide watches.
+
 	// Watch for changes to primary resource SSHD
 	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.SSHD{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
