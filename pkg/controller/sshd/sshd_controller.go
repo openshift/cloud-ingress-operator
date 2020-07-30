@@ -415,9 +415,25 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.Conf
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					TerminationGracePeriodSeconds: pointer.Int64Ptr(30),
 					DNSPolicy:                     corev1.DNSClusterFirst,
-					NodeSelector:                  map[string]string{nodeMasterLabel: ""},
 					SecurityContext:               &corev1.PodSecurityContext{},
 					SchedulerName:                 "default-scheduler",
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+								{
+									Weight: int32(100),
+									Preference: corev1.NodeSelectorTerm{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											{
+												Key:      nodeMasterLabel,
+												Operator: corev1.NodeSelectorOpExists,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 					Tolerations: []corev1.Toleration{
 						{
 							Key:      nodeMasterLabel,
