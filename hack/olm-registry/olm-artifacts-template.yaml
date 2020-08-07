@@ -349,7 +349,16 @@ objects:
         managementAPIServerIngress:
           enabled: true
           dnsName: rh-api
-          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
+          allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
+    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+      kind: SSHD
+      metadata:
+        name: rh-ssh
+        namespace: openshift-sre-sshd
+      spec:
+        dnsName: rh-ssh
+        allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
+        image: quay.io/app-sre/sre-ssh-proxy
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:
@@ -622,6 +631,120 @@ objects:
                 type: object
             required:
             - spec
+            type: object
+        version: v1alpha1
+        versions:
+        - name: v1alpha1
+          served: true
+          storage: true
+    - apiVersion: apiextensions.k8s.io/v1beta1
+      kind: CustomResourceDefinition
+      metadata:
+        name: sshds.cloudingress.managed.openshift.io
+      spec:
+        group: cloudingress.managed.openshift.io
+        names:
+          kind: SSHD
+          listKind: SSHDList
+          plural: sshds
+          singular: sshd
+        scope: Namespaced
+        subresources:
+          status: {}
+        validation:
+          openAPIV3Schema:
+            description: SSHD is the Schema for the sshds API
+            properties:
+              apiVersion:
+                description: 'APIVersion defines the versioned schema of this representation
+                  of an object. Servers should convert recognized schemas to the latest
+                  internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+                type: string
+              kind:
+                description: 'Kind is a string value representing the REST resource
+                  this object represents. Servers may infer this from the endpoint
+                  the client submits requests to. Cannot be updated. In CamelCase.
+                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                type: string
+              metadata:
+                type: object
+              spec:
+                description: SSHDSpec defines the desired state of SSHD
+                properties:
+                  allowedCIDRBlocks:
+                    description: AllowedCIDRBlocks is the list of CIDR blocks that
+                      should be allowed to access the SSHD service
+                    items:
+                      type: string
+                    type: array
+                  configMapSelector:
+                    description: ConfigMapSelector is a label selector to isolate
+                      config maps containing SSH authorized keys to be mounted into
+                      the SSHD container
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A
+                          single {key,value} in the matchLabels map is equivalent
+                          to an element of matchExpressions, whose key field is "key",
+                          the operator is "In", and the values array contains only
+                          "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                  dnsName:
+                    description: DNSName is the DNS name that should point to the
+                      SSHD service load balancers, e.g. rh-ssh
+                    type: string
+                  image:
+                    description: Image is the URL of the SSHD container image
+                    type: string
+                required:
+                - allowedCIDRBlocks
+                - dnsName
+                - image
+                type: object
+              status:
+                description: SSHDStatus defines the observed state of SSHD
+                properties:
+                  message:
+                    description: Message is a description of the current state
+                    type: string
+                  state:
+                    description: State is the current state of the controller
+                    type: string
+                type: object
             type: object
         version: v1alpha1
         versions:

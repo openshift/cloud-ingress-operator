@@ -98,6 +98,7 @@ type Client interface {
 
 	// route53
 	UpsertARecord(string, string, string, string, string, bool) error
+	DeleteARecord(string, string, string, string, bool) error
 }
 
 type AwsClient struct {

@@ -1,0 +1,9 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: SSHD
+metadata:
+  name: rh-ssh
+  namespace: openshift-sre-sshd
+spec:
+  dnsName: rh-ssh
+  allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"
+  image: quay.io/app-sre/sre-ssh-proxy
