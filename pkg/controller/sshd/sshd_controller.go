@@ -468,6 +468,9 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name,
 			Namespace: cr.Namespace,
+			Annotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout": "600",
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
