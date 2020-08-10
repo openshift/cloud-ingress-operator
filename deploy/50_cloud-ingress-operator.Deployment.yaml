@@ -16,13 +16,12 @@ spec:
       serviceAccountName: cloud-ingress-operator
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: "node-role.kubernetes.io"
-                operator: In
-                values: 
-                  - infra
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/infra
+                operator: Exists
+            weight: 1
       tolerations:
       - operator: Equal
         key: node-role.kubernetes.io
