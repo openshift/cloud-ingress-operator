@@ -349,7 +349,7 @@ objects:
         managementAPIServerIngress:
           enabled: true
           dnsName: rh-api
-          allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
+          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
     - apiVersion: cloudingress.managed.openshift.io/v1alpha1
       kind: SSHD
       metadata:
