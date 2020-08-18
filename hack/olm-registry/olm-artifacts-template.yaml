@@ -12,6 +12,8 @@ parameters:
   required: true
 - name: ALLOWED_CIDR_BLOCKS
   required: true
+- name: ENABLE_MANAGEMENT_API_SERVER_INGRESS
+  required: true
 metadata:
   name: selectorsyncset-template
 objects:
@@ -347,7 +349,7 @@ objects:
           allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
       spec:
         managementAPIServerIngress:
-          enabled: true
+          enabled: ${ENABLE_MANAGEMENT_API_SERVER_INGRESS}
           dnsName: rh-api
           allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
     - apiVersion: cloudingress.managed.openshift.io/v1alpha1
