@@ -109,10 +109,12 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		reqLogger.Error(err, "Error reading APIScheme object")
 		return reconcile.Result{}, err
 	}
+
+	// TODO(efried/lisa/lseelye): Add finalizer and check for deletionTimestamp to tear things
+	// down. But that has SERIOUS potential issues with Hive, as it will come to depend on
+	// rh-api.
+
 	// If the management API isn't enabled, we have nothing to do!
-	// TODO (lisa/lseelye): This should call a teardown feature to ensure we have
-	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
-	// depend on rh-api.
 	if !instance.Spec.ManagementAPIServerIngress.Enabled {
 		reqLogger.Info("Not enabled", "instance", instance)
 		return reconcile.Result{}, nil
