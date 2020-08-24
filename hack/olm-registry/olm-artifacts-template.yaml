@@ -359,7 +359,7 @@ objects:
       spec:
         dnsName: rh-ssh
         allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
-        image: quay.io/app-sre/sre-ssh-proxy
+        image: quay.io/app-sre/sre-ssh-proxy:v44-262ce16
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:

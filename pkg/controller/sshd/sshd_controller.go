@@ -393,7 +393,7 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.Conf
 		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullAlways,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	return &appsv1.Deployment{
