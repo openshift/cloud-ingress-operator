@@ -71,10 +71,16 @@ func newConfigMapList(names ...string) *corev1.ConfigMapList {
 func TestNewSSHDeployment(t *testing.T) {
 	var configMapList *corev1.ConfigMapList
 	var deployment *appsv1.Deployment
+	const hostKeysName string = "host-keys"
+
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, hostKeysName)
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
 
 	// Verify SSHD parameters are honored
 	configMapList = newConfigMapList()
-	deployment = newSSHDDeployment(cr, configMapList)
+	deployment = newSSHDDeployment(cr, configMapList, hostKeysSecret)
 	if deployment.ObjectMeta.Name != cr.ObjectMeta.Name {
 		t.Errorf("Deployment has wrong name %q, expected %q",
 			deployment.ObjectMeta.Name, cr.ObjectMeta.Name)
@@ -104,25 +110,37 @@ func TestNewSSHDeployment(t *testing.T) {
 			deployment.Spec.Template.Spec.Containers[0].Image, cr.Spec.Image)
 	}
 
-	// Verify no config maps yields no volumes
-	if deployment.Spec.Template.Spec.Volumes != nil {
+	// Verify no config maps yields only the host keys volume
+	if len(deployment.Spec.Template.Spec.Volumes) < 1 {
+		t.Error("Deployment is missing a volume for host keys")
+	} else if len(deployment.Spec.Template.Spec.Volumes) > 1 {
 		t.Errorf("Deployment has unexpected volumes: %v",
 			deployment.Spec.Template.Spec.Volumes)
+	} else if deployment.Spec.Template.Spec.Volumes[0].Name != hostKeysName {
+		t.Errorf("Volume in deployment does not appear to be for host keys: %v",
+			deployment.Spec.Template.Spec.Volumes[0])
 	}
-	if deployment.Spec.Template.Spec.Containers[0].VolumeMounts != nil {
+	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) < 1 {
+		t.Error("Deployment is missing a volume mount for host keys")
+	} else if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) > 1 {
 		t.Errorf("Deployment has unexpected volume mounts in container: %v",
 			deployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+	} else if deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name != hostKeysName {
+		t.Errorf("Volume mount in container does not appear to be for host keys: %v",
+			deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0])
 	}
 
 	// Verify config maps are handled properly
 	configMapList = newConfigMapList("A", "B")
-	deployment = newSSHDDeployment(cr, configMapList)
-	if len(deployment.Spec.Template.Spec.Volumes) != len(configMapList.Items) {
+	deployment = newSSHDDeployment(cr, configMapList, hostKeysSecret)
+	// Plus one volume for the host key secret.
+	if len(deployment.Spec.Template.Spec.Volumes) != len(configMapList.Items)+1 {
 		t.Errorf("Volumes are wrong in deployment, found %d, expected %d",
 			len(deployment.Spec.Template.Spec.Volumes),
 			len(configMapList.Items))
 	}
-	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != len(configMapList.Items) {
+	// Plus one volume mount for the host key secret.
+	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != len(configMapList.Items)+1 {
 		t.Errorf("Container's volume mounts are wrong in deployment, found %d, expected %d",
 			len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts),
 			len(configMapList.Items))
