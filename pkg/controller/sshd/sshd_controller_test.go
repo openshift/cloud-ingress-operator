@@ -1,10 +1,13 @@
 package sshd
 
 import (
+	"crypto/rsa"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+
+	"golang.org/x/crypto/ssh"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +21,8 @@ const (
 	placeholderName      string = "placeholderName"
 	placeholderNamespace string = "placeholderNamespace"
 	placeholderImage     string = "placeholderImage"
+
+	rsaKeyModulusSize int = (4096 / 8)
 )
 
 var cr = &cloudingressv1alpha1.SSHD{
@@ -65,6 +70,33 @@ func newConfigMapList(names ...string) *corev1.ConfigMapList {
 			APIVersion: corev1.SchemeGroupVersion.String(),
 		},
 		Items: items,
+	}
+}
+
+func TestNewSSHSecret(t *testing.T) {
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
+
+	for _, pemBytes := range hostKeysSecret.Data {
+		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
+		if err != nil {
+			t.Fatal("Failed to parse private key:", err)
+		}
+		switch privateKey := privateKey.(type) {
+		case *rsa.PrivateKey:
+			if err := privateKey.Validate(); err != nil {
+				t.Fatal("RSA key is invalid:", err)
+			}
+			if privateKey.Size() != rsaKeyModulusSize {
+				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
+					privateKey.Size()*8, rsaKeyModulusSize*8)
+			}
+		// XXX Handle other host key types if/when the controller adds them.
+		default:
+			t.Fatalf("Unexpected private key type: %T", privateKey)
+		}
 	}
 }
 
