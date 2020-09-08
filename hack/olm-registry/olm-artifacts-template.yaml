@@ -306,7 +306,7 @@ objects:
           nodeAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
             - preference:
-              matchExpressions:
+                matchExpressions:
                 - key: node-role.kubernetes.io/infra
                   operator: Exists
               weight: 1
@@ -359,7 +359,7 @@ objects:
       spec:
         dnsName: rh-ssh
         allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
-        image: quay.io/app-sre/sre-ssh-proxy:v44-262ce16
+        image: quay.io/app-sre/sre-ssh-proxy:v49-1fde8e5
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:

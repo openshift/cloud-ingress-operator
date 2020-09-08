@@ -1,10 +1,13 @@
 package sshd
 
 import (
+	"crypto/rsa"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+
+	"golang.org/x/crypto/ssh"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +21,8 @@ const (
 	placeholderName      string = "placeholderName"
 	placeholderNamespace string = "placeholderNamespace"
 	placeholderImage     string = "placeholderImage"
+
+	rsaKeyModulusSize int = (4096 / 8)
 )
 
 var cr = &cloudingressv1alpha1.SSHD{
@@ -68,13 +73,46 @@ func newConfigMapList(names ...string) *corev1.ConfigMapList {
 	}
 }
 
+func TestNewSSHSecret(t *testing.T) {
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
+
+	for _, pemBytes := range hostKeysSecret.Data {
+		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
+		if err != nil {
+			t.Fatal("Failed to parse private key:", err)
+		}
+		switch privateKey := privateKey.(type) {
+		case *rsa.PrivateKey:
+			if err := privateKey.Validate(); err != nil {
+				t.Fatal("RSA key is invalid:", err)
+			}
+			if privateKey.Size() != rsaKeyModulusSize {
+				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
+					privateKey.Size()*8, rsaKeyModulusSize*8)
+			}
+		// XXX Handle other host key types if/when the controller adds them.
+		default:
+			t.Fatalf("Unexpected private key type: %T", privateKey)
+		}
+	}
+}
+
 func TestNewSSHDeployment(t *testing.T) {
 	var configMapList *corev1.ConfigMapList
 	var deployment *appsv1.Deployment
+	const hostKeysName string = "host-keys"
+
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, hostKeysName)
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
 
 	// Verify SSHD parameters are honored
 	configMapList = newConfigMapList()
-	deployment = newSSHDDeployment(cr, configMapList)
+	deployment = newSSHDDeployment(cr, configMapList, hostKeysSecret)
 	if deployment.ObjectMeta.Name != cr.ObjectMeta.Name {
 		t.Errorf("Deployment has wrong name %q, expected %q",
 			deployment.ObjectMeta.Name, cr.ObjectMeta.Name)
@@ -104,25 +142,37 @@ func TestNewSSHDeployment(t *testing.T) {
 			deployment.Spec.Template.Spec.Containers[0].Image, cr.Spec.Image)
 	}
 
-	// Verify no config maps yields no volumes
-	if deployment.Spec.Template.Spec.Volumes != nil {
+	// Verify no config maps yields only the host keys volume
+	if len(deployment.Spec.Template.Spec.Volumes) < 1 {
+		t.Error("Deployment is missing a volume for host keys")
+	} else if len(deployment.Spec.Template.Spec.Volumes) > 1 {
 		t.Errorf("Deployment has unexpected volumes: %v",
 			deployment.Spec.Template.Spec.Volumes)
+	} else if deployment.Spec.Template.Spec.Volumes[0].Name != hostKeysName {
+		t.Errorf("Volume in deployment does not appear to be for host keys: %v",
+			deployment.Spec.Template.Spec.Volumes[0])
 	}
-	if deployment.Spec.Template.Spec.Containers[0].VolumeMounts != nil {
+	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) < 1 {
+		t.Error("Deployment is missing a volume mount for host keys")
+	} else if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) > 1 {
 		t.Errorf("Deployment has unexpected volume mounts in container: %v",
 			deployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+	} else if deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name != hostKeysName {
+		t.Errorf("Volume mount in container does not appear to be for host keys: %v",
+			deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0])
 	}
 
 	// Verify config maps are handled properly
 	configMapList = newConfigMapList("A", "B")
-	deployment = newSSHDDeployment(cr, configMapList)
-	if len(deployment.Spec.Template.Spec.Volumes) != len(configMapList.Items) {
+	deployment = newSSHDDeployment(cr, configMapList, hostKeysSecret)
+	// Plus one volume for the host key secret.
+	if len(deployment.Spec.Template.Spec.Volumes) != len(configMapList.Items)+1 {
 		t.Errorf("Volumes are wrong in deployment, found %d, expected %d",
 			len(deployment.Spec.Template.Spec.Volumes),
 			len(configMapList.Items))
 	}
-	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != len(configMapList.Items) {
+	// Plus one volume mount for the host key secret.
+	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != len(configMapList.Items)+1 {
 		t.Errorf("Container's volume mounts are wrong in deployment, found %d, expected %d",
 			len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts),
 			len(configMapList.Items))
