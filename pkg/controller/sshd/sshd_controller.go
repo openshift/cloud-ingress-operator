@@ -122,6 +122,8 @@ const (
 	hostKeysMountPath         = "/var/run/ssh"
 	nodeMasterLabel           = "node-role.kubernetes.io/master"
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	ELBAnnotationKey          = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
+	ELBAnnotationValue        = "600"
 )
 
 // Reconcile reads that state of the cluster for a SSHD object and makes changes based on the state read
@@ -324,15 +326,28 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, err
 		}
 	} else {
-		// Service exists, check if it's updated.
+		var serviceNeedsUpdate bool
+
+		// Service exists, check if annotations or spec need updated.
+
+		if !metav1.HasAnnotation(foundService.ObjectMeta, ELBAnnotationKey) ||
+			foundService.ObjectMeta.Annotations[ELBAnnotationKey] != ELBAnnotationValue {
+			r.SetSSHDStatusPending(instance, "Updating service annotations")
+			metav1.SetMetaDataAnnotation(&foundService.ObjectMeta, ELBAnnotationKey, ELBAnnotationValue)
+			serviceNeedsUpdate = true
+		}
+
 		// XXX Copy system-assigned fields to satisfy reflect.DeepEqual.
 		service.Spec.Ports[0].NodePort = foundService.Spec.Ports[0].NodePort
 		service.Spec.ClusterIP = foundService.Spec.ClusterIP
 		service.Spec.HealthCheckNodePort = foundService.Spec.HealthCheckNodePort
 		if !reflect.DeepEqual(foundService.Spec, service.Spec) {
-			// Specs aren't equal, update and fix.
 			r.SetSSHDStatusPending(instance, "Updating service", "from", foundService.Spec, "to", service.Spec)
 			foundService.Spec = *service.Spec.DeepCopy()
+			serviceNeedsUpdate = true
+		}
+
+		if serviceNeedsUpdate {
 			if err = r.client.Update(context.TODO(), foundService); err != nil {
 				r.SetSSHDStatusError(instance, "Failed to update service", err)
 				return reconcile.Result{}, err
@@ -590,7 +605,7 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			Name:      cr.Name,
 			Namespace: cr.Namespace,
 			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout": "600",
+				ELBAnnotationKey: ELBAnnotationValue,
 			},
 		},
 		Spec: corev1.ServiceSpec{
