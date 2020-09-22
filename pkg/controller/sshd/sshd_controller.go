@@ -475,20 +475,24 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.Conf
 		return volumeMounts[i].Name < volumeMounts[j].Name
 	})
 
+	// Because the OpenSSH server runs as an arbitrary user instead of root,
+	// and the mounted host keys are owned by root, we rely on the container
+	// user always being a member of the root group*, and set the permission
+	// to be both owner and group-readable (0440).
+	//
+	// Normally group-readable private keys are forbidden by OpenSSH, but it
+	// turns out the server does not apply its strict permission checks when
+	// a private key is owned by a different user than itself.
+	//
+	// * See "Support arbitrary user ids" section in:
+	//   https://docs.openshift.com/container-platform/4.5/openshift_images/create-images.html#images-create-guide-openshift_create-images
 	volumeName := hostKeysSecret.ObjectMeta.Name
 	volumes = append(volumes, corev1.Volume{
 		Name: volumeName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: hostKeysSecret.ObjectMeta.Name,
-				// Mode needs to satisfy OpenSSH's requirements
-				// for HostKey files: sshd will refuse to use a
-				// file if it is group/world-accessible.
-				// https://man.openbsd.org/sshd_config#HostKey
-				//
-				// For owner permissions, "read" is sufficient
-				// for the container.
-				DefaultMode: pointer.Int32Ptr(0400),
+				SecretName:  hostKeysSecret.ObjectMeta.Name,
+				DefaultMode: pointer.Int32Ptr(0440),
 				Optional:    pointer.BoolPtr(false),
 			},
 		},
