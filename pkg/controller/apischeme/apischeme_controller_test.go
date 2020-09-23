@@ -6,7 +6,7 @@ import (
 
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -21,7 +21,7 @@ func TestClusterBaseDomain(t *testing.T) {
 	objs := []runtime.Object{aObj, infraObj, machineList}
 	mocks := testutils.NewTestMock(t, objs)
 
-	base, err := utils.GetClusterBaseDomain(mocks.FakeKubeClient)
+	base, err := baseutils.GetClusterBaseDomain(mocks.FakeKubeClient)
 	if err != nil {
 		t.Fatalf("Could not get cluster base domain name: %v", err)
 	}

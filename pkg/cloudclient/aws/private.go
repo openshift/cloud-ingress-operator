@@ -11,6 +11,7 @@ import (
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -79,7 +80,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 		return err
 	}
 
-	baseDomain, err := utils.GetClusterBaseDomain(kclient)
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -109,7 +110,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 		}
 	}
 	// create new ext nlb
-	infrastructureName, err := utils.GetClusterName(kclient)
+	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	}
 
 	// can't create listener for new ext nlb
-	baseDomain, err := utils.GetClusterBaseDomain(kclient)
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -211,7 +212,7 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 		return err
 	}
 	// ELB exists, now let's set the DNS
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(kclient)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -233,7 +234,7 @@ func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client,
 		return err
 	}
 	// ELB exists, now let's set the DNS
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(kclient)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -482,7 +483,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	if err != nil {
 		return "", "", err
 	}
-	masterList, err := utils.GetMasterMachines(kclient)
+	masterList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
 		return "", "", err
 	}

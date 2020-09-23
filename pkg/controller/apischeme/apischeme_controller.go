@@ -11,6 +11,7 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -177,7 +178,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	}
 
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Couldn't obtain the cluster's base domain")
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's base domain", cloudingressv1alpha1.ConditionError)

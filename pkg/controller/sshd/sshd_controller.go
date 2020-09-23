@@ -20,6 +20,7 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -361,7 +362,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Create a Route53 DNS entry for the service's load balancer.
 	// TODO Consider using https://github.com/openshift/external-dns
 
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(r.client)
 	if err != nil {
 		r.SetSSHDStatusError(instance, "Failed to get cluster's base domain", err)
 		return reconcile.Result{}, err

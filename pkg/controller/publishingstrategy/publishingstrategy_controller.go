@@ -16,6 +16,7 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -198,13 +199,13 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
-	masterList, err := utils.GetMasterMachines(r.client)
+	masterList, err := baseutils.GetMasterMachines(r.client)
 	if err != nil {
 		log.Error(err, "Couldn't fetch list of master nodes")
 		return reconcile.Result{}, err
 	}
 
-	domainName, err := utils.GetClusterBaseDomain(r.client) // in form of ```samn-test.j5u3.s1.devshift.org```
+	domainName, err := baseutils.GetClusterBaseDomain(r.client) // in form of ```samn-test.j5u3.s1.devshift.org```
 	if err != nil {
 		log.Error(err, "Couldn't obtain the cluster's base domain")
 		return reconcile.Result{}, err
@@ -292,7 +293,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 
 		// create a new external NLB
-		infrastructureName, err := utils.GetClusterName(r.client)
+		infrastructureName, err := baseutils.GetClusterName(r.client)
 		if err != nil {
 			log.Error(err, "cannot get infrastructure name")
 			return reconcile.Result{}, err
