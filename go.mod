@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go v1.20.19
 	github.com/coreos/prometheus-operator v0.35.1
 	github.com/go-openapi/spec v0.19.4
-	github.com/golang/mock v1.4.3
+	github.com/golang/mock v1.4.4
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
 	github.com/openshift/operator-custom-metrics v0.3.0
@@ -14,6 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.2.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20191028145041-f83a4685e152
+	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.2
 	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v12.0.0+incompatible
