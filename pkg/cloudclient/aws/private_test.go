@@ -178,7 +178,11 @@ func TestCreateNetworkLoadBalancer(t *testing.T) {
 
 			ErrorExpected: false,
 			ErrResp:       "",
-			Resp:          elbv2.CreateLoadBalancerOutput{},
+			Resp: elbv2.CreateLoadBalancerOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{},
+				},
+			},
 		},
 	}
 	for _, test := range tests {
