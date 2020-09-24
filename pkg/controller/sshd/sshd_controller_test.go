@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"crypto/rsa"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -55,6 +56,60 @@ func TestSetSSHDStatus(t *testing.T) {
 
 		if cr.Status.State != test.State {
 			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, test.State)
+		}
+	}
+}
+
+func TestSetSSHDStatusPending(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatusPending(cr, test.Message)
+
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
+		}
+
+		if cr.Status.State != cloudingressv1alpha1.SSHDStatePending {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStatePending)
+		}
+	}
+}
+
+func TestSetSSHDStatusError(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatusError(cr, test.Message, errors.New("fake error"))
+
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
+		}
+
+		if cr.Status.State != cloudingressv1alpha1.SSHDStateError {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStateError)
 		}
 	}
 }
