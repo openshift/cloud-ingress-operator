@@ -12,6 +12,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	// TODO: Use a fake client and cloud-service interface
 	//       mocking to test ReconcileSSHD.Reconcile()
 	//"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -24,6 +28,36 @@ const (
 
 	rsaKeyModulusSize int = (4096 / 8)
 )
+
+// tests
+func TestSetSSHDStatus(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		State       cloudingressv1alpha1.SSHDStateType
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+			State:   cloudingressv1alpha1.SSHDStateReady,
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatus(cr, test.Message, test.State)
+
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
+		}
+
+		if cr.Status.State != test.State {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, test.State)
+		}
+	}
+}
 
 func TestNewSSHDeployment(t *testing.T) {
 	var configMapList *corev1.ConfigMapList
@@ -145,6 +179,33 @@ func TestNewSSHService(t *testing.T) {
 	}
 }
 
+func TestNewSSHSecret(t *testing.T) {
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
+
+	for _, pemBytes := range hostKeysSecret.Data {
+		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
+		if err != nil {
+			t.Fatal("Failed to parse private key:", err)
+		}
+		switch privateKey := privateKey.(type) {
+		case *rsa.PrivateKey:
+			if err := privateKey.Validate(); err != nil {
+				t.Fatal("RSA key is invalid:", err)
+			}
+			if privateKey.Size() != rsaKeyModulusSize {
+				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
+					privateKey.Size()*8, rsaKeyModulusSize*8)
+			}
+		// XXX Handle other host key types if/when the controller adds them.
+		default:
+			t.Fatalf("Unexpected private key type: %T", privateKey)
+		}
+	}
+}
+
 // utils
 var cr = &cloudingressv1alpha1.SSHD{
 	TypeMeta: metav1.TypeMeta{
@@ -194,29 +255,14 @@ func newConfigMapList(names ...string) *corev1.ConfigMapList {
 	}
 }
 
-func TestNewSSHSecret(t *testing.T) {
-	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
-	if err != nil {
-		t.Fatal("Failed to generate host keys:", err)
-	}
+func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme) {
+	t.Helper()
 
-	for _, pemBytes := range hostKeysSecret.Data {
-		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
-		if err != nil {
-			t.Fatal("Failed to parse private key:", err)
-		}
-		switch privateKey := privateKey.(type) {
-		case *rsa.PrivateKey:
-			if err := privateKey.Validate(); err != nil {
-				t.Fatal("RSA key is invalid:", err)
-			}
-			if privateKey.Size() != rsaKeyModulusSize {
-				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
-					privateKey.Size()*8, rsaKeyModulusSize*8)
-			}
-		// XXX Handle other host key types if/when the controller adds them.
-		default:
-			t.Fatalf("Unexpected private key type: %T", privateKey)
-		}
-	}
+	s = scheme.Scheme
+	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
+
+	objects := []runtime.Object{cr}
+
+	testClient = fake.NewFakeClientWithScheme(s, objects...)
+	return
 }
