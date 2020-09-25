@@ -7,21 +7,22 @@ import (
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
 	mockAwsClient "github.com/openshift/cloud-ingress-operator/pkg/awsclient/mock"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/golang/mock/gomock"
+	configv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	// TODO: Use a fake client and cloud-service interface
-	//       mocking to test ReconcileSSHD.Reconcile()
-	//"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -319,6 +320,49 @@ func TestNewSSHSecret(t *testing.T) {
 	}
 }
 
+func TestReconcile(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	awsClient := mockAwsClient.NewMockClient(ctrl)
+	elb := &awsclient.AWSLoadBalancer{
+		ELBName:   ".test.1234.z1.fake.tld",
+		DNSName:   "loadBalancerDNSName",
+		DNSZoneId: "loadBalancerHostedZoneId",
+	}
+	awsClient.EXPECT().DoesELBExist("a").Return(true, elb, nil)
+	awsClient.EXPECT().UpsertARecord("test.1234.z1.fake.tld.", "loadBalancerDNSName", "loadBalancerHostedZoneId", ".test.1234.z1.fake.tld", "RH SSH Endpoint", false)
+	awsClient.EXPECT().UpsertARecord("1234.z1.fake.tld.", "loadBalancerDNSName", "loadBalancerHostedZoneId", ".test.1234.z1.fake.tld", "RH SSH Endpoint", false)
+
+	testClient, testScheme := setUpTestClient(t)
+	r := &ReconcileSSHD{
+		client:    testClient,
+		scheme:    testScheme,
+		awsClient: awsClient,
+		route53: &Route53Data{
+			loadBalancerDNSName:      elb.DNSZoneId,
+			loadBalancerHostedZoneId: elb.DNSZoneId,
+			resourceRecordSetName:    elb.ELBName,
+			privateHostedZoneName:    "privateHostedZoneName",
+			publicHostedZoneName:     "publicHostedZoneName",
+		},
+	}
+
+	result, err := r.Reconcile(reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      placeholderName,
+			Namespace: placeholderNamespace,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if result.Requeue {
+		t.Errorf("got requeue on %v", result)
+	}
+}
+
 // utils
 var cr = &cloudingressv1alpha1.SSHD{
 	TypeMeta: metav1.TypeMeta{
@@ -334,6 +378,8 @@ var cr = &cloudingressv1alpha1.SSHD{
 		Image:             placeholderImage,
 	},
 }
+
+var svc = newSSHDService(cr)
 
 func newConfigMap(name string) corev1.ConfigMap {
 	return corev1.ConfigMap{
@@ -374,7 +420,24 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 	s = scheme.Scheme
 	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
 
-	objects := []runtime.Object{cr}
+	infra := &configv1.Infrastructure{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Infrastructure",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+		Spec: configv1.InfrastructureSpec{
+			CloudConfig: configv1.ConfigMapFileReference{Name: "cloudconfigmapfile"},
+		},
+		Status: configv1.InfrastructureStatus{
+			APIServerURL: "https://api.test.1234.z1.fake.tld:6443",
+		},
+	}
+	s.AddKnownTypes(configv1.SchemeGroupVersion, infra)
+
+	objects := []runtime.Object{cr, svc, infra}
 
 	testClient = fake.NewFakeClientWithScheme(s, objects...)
 	return
