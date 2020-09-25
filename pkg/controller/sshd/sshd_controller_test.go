@@ -144,6 +144,34 @@ func TestEnsureDNSRecords(t *testing.T) {
 	}
 }
 
+func TestDeleteDNSRecords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	awsClient := mockAwsClient.NewMockClient(ctrl)
+	awsClient.EXPECT().DeleteARecord("privateHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", false)
+	awsClient.EXPECT().DeleteARecord("publicHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", false)
+
+	testClient, testScheme := setUpTestClient(t)
+	r := &ReconcileSSHD{
+		client:    testClient,
+		scheme:    testScheme,
+		awsClient: awsClient,
+		route53: &Route53Data{
+			loadBalancerDNSName:      "loadBalancerDNSName",
+			loadBalancerHostedZoneId: "loadBalancerHostedZoneId",
+			resourceRecordSetName:    "resourceRecordSetName",
+			privateHostedZoneName:    "privateHostedZoneName",
+			publicHostedZoneName:     "publicHostedZoneName",
+		},
+	}
+
+	err := r.deleteDNSRecords()
+	if err != nil {
+		t.Fatalf("got an unexpected error: %s", err)
+	}
+}
+
 func TestNewSSHDeployment(t *testing.T) {
 	var configMapList *corev1.ConfigMapList
 	var deployment *appsv1.Deployment
