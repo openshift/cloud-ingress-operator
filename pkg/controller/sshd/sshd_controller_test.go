@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	mockAwsClient "github.com/openshift/cloud-ingress-operator/pkg/awsclient/mock"
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +113,34 @@ func TestSetSSHDStatusError(t *testing.T) {
 		if cr.Status.State != cloudingressv1alpha1.SSHDStateError {
 			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStateError)
 		}
+	}
+}
+
+func TestEnsureDNSRecords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	awsClient := mockAwsClient.NewMockClient(ctrl)
+	awsClient.EXPECT().UpsertARecord("privateHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", "RH SSH Endpoint", false)
+	awsClient.EXPECT().UpsertARecord("publicHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", "RH SSH Endpoint", false)
+
+	testClient, testScheme := setUpTestClient(t)
+	r := &ReconcileSSHD{
+		client:    testClient,
+		scheme:    testScheme,
+		awsClient: awsClient,
+		route53: &Route53Data{
+			loadBalancerDNSName:      "loadBalancerDNSName",
+			loadBalancerHostedZoneId: "loadBalancerHostedZoneId",
+			resourceRecordSetName:    "resourceRecordSetName",
+			privateHostedZoneName:    "privateHostedZoneName",
+			publicHostedZoneName:     "publicHostedZoneName",
+		},
+	}
+
+	err := r.ensureDNSRecords()
+	if err != nil {
+		t.Fatalf("got an unexpected error: %s", err)
 	}
 }
 
@@ -231,33 +261,6 @@ func TestNewSSHService(t *testing.T) {
 	if !reflect.DeepEqual(service.Spec.LoadBalancerSourceRanges, cr.Spec.AllowedCIDRBlocks) {
 		t.Errorf("Service has wrong source ranges %v, expected %v",
 			service.Spec.LoadBalancerSourceRanges, cr.Spec.AllowedCIDRBlocks)
-	}
-}
-
-func TestNewSSHSecret(t *testing.T) {
-	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
-	if err != nil {
-		t.Fatal("Failed to generate host keys:", err)
-	}
-
-	for _, pemBytes := range hostKeysSecret.Data {
-		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
-		if err != nil {
-			t.Fatal("Failed to parse private key:", err)
-		}
-		switch privateKey := privateKey.(type) {
-		case *rsa.PrivateKey:
-			if err := privateKey.Validate(); err != nil {
-				t.Fatal("RSA key is invalid:", err)
-			}
-			if privateKey.Size() != rsaKeyModulusSize {
-				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
-					privateKey.Size()*8, rsaKeyModulusSize*8)
-			}
-		// XXX Handle other host key types if/when the controller adds them.
-		default:
-			t.Fatalf("Unexpected private key type: %T", privateKey)
-		}
 	}
 }
 
