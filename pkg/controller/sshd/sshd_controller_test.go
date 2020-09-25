@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	mockAwsClient "github.com/openshift/cloud-ingress-operator/pkg/awsclient/mock"
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +113,34 @@ func TestSetSSHDStatusError(t *testing.T) {
 		if cr.Status.State != cloudingressv1alpha1.SSHDStateError {
 			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStateError)
 		}
+	}
+}
+
+func TestEnsureDNSRecords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	awsClient := mockAwsClient.NewMockClient(ctrl)
+	awsClient.EXPECT().UpsertARecord("privateHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", "RH SSH Endpoint", false)
+	awsClient.EXPECT().UpsertARecord("publicHostedZoneName", "loadBalancerDNSName", "loadBalancerHostedZoneId", "resourceRecordSetName", "RH SSH Endpoint", false)
+
+	testClient, testScheme := setUpTestClient(t)
+	r := &ReconcileSSHD{
+		client:    testClient,
+		scheme:    testScheme,
+		awsClient: awsClient,
+		route53: &Route53Data{
+			loadBalancerDNSName:      "loadBalancerDNSName",
+			loadBalancerHostedZoneId: "loadBalancerHostedZoneId",
+			resourceRecordSetName:    "resourceRecordSetName",
+			privateHostedZoneName:    "privateHostedZoneName",
+			publicHostedZoneName:     "publicHostedZoneName",
+		},
+	}
+
+	err := r.ensureDNSRecords()
+	if err != nil {
+		t.Fatalf("got an unexpected error: %s", err)
 	}
 }
 
