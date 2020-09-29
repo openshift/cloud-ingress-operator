@@ -390,7 +390,21 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 	s = scheme.Scheme
 	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
 
-	objects := []runtime.Object{cr, svc}
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      placeholderName + "-host-keys",
+			Namespace: placeholderNamespace,
+		},
+		Data: map[string][]byte{
+			"ssh_host_rsa_key": []byte("bunchofrsastuff"),
+		},
+	}
+
+	objects := []runtime.Object{cr, svc, secret}
 
 	testClient = fake.NewFakeClientWithScheme(s, objects...)
 	return
