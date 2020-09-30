@@ -160,6 +160,23 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		}
 	}
 
+	ingressList := &operatorv1.IngressControllerList{}
+	listOptions = []client.ListOption{
+		client.InNamespace("openshift-ingress-operator"),
+	}
+	err = r.client.List(context.TODO(), ingressList, listOptions...)
+	if err != nil {
+		log.Error(err, "Cannot get list of ingresscontroller")
+		return reconcile.Result{}, err
+	}
+
+	// since we don't own ingresscontroller object, adding this check ensures that the proper ingresscontrollers have been created by cluster-ingress-operator
+	// if check fails, requeue the reconcile and try to re-create the ingresscontrollers until successful
+	if !r.ensureIngressControllersExist(instance.Spec.ApplicationIngress, ingressList) {
+		reqLogger.Info("IngressController does not match PublishingStrategy. Requeue and try again")
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	}
+
 	// get region
 	region, err := utils.GetClusterRegion(r.client)
 	if err != nil {
@@ -350,6 +367,31 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
+}
+
+// ensure ingresscontrollers on publishingstrategy CR are present on the cluster
+func (r *ReconcilePublishingStrategy) ensureIngressControllersExist(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) bool {
+	isContained := true
+	for _, app := range appIngressList {
+		var exists bool
+		for _, ingress := range ingressControllerList.Items {
+			// prevent nil pointer error
+			if ingress.Spec.Domain == "" || ingress.Status.EndpointPublishingStrategy.LoadBalancer == nil {
+				isContained = false
+				break
+			}
+			listening := string(app.Listening)
+			capListening := strings.Title(strings.ToLower(listening))
+			if ingress.Spec.Domain == app.DNSName && capListening == string(ingress.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+				exists = true
+			}
+		}
+		if !exists {
+			isContained = false
+			break
+		}
+	}
+	return isContained
 }
 
 // get a list of all ingress on cluster that has annotation owner cloud-ingress-operator

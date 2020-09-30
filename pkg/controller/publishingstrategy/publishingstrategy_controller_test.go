@@ -470,3 +470,96 @@ func TestContains(t *testing.T) {
 		t.Errorf("expect false but got true")
 	}
 }
+
+func TestEnsureIngressControllersExist(t *testing.T) {
+	// set up schemes
+	ctx := context.TODO()
+	r := newTestReconciler()
+	s := scheme.Scheme
+
+	if err := operatorv1.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
+	}
+
+	if err := apis.AddToScheme(s); err != nil {
+		t.Fatalf("Unable to add route scheme (%v)", err)
+	}
+
+	err := r.client.Create(ctx, mockNonDefaultIngressController())
+	if err != nil {
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	err = r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
+	if err != nil {
+		t.Errorf("couldn't create ingress without annotation")
+	}
+
+	err = r.client.Create(ctx, mockPublishingStrategy())
+	if err != nil {
+		t.Errorf("couldn't create ingresscontroller %s", err)
+	}
+
+	ingressControllerList := &operatorv1.IngressControllerList{}
+	opts := client.ListOptions{}
+
+	err = r.client.List(ctx, ingressControllerList, &opts)
+	if err != nil {
+		t.Errorf("couldn't get ingresscontroller list %s", err)
+	}
+
+	t.Logf(fmt.Sprintf("ingress list: %v", ingressControllerList.Items))
+	t.Logf(fmt.Sprintf("appingress list: %v", mockPublishingStrategy().Spec.ApplicationIngress))
+
+	// expected to return false as applicationIngressList does not match with IngressControllerList
+	ensureFalse := r.ensureIngressControllersExist(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
+	if ensureFalse {
+		t.Errorf("Expected false but got true")
+	}
+
+	ingressControllerListTrue := &operatorv1.IngressControllerList{
+		Items: []operatorv1.IngressController{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: operatorv1.IngressControllerSpec{
+					Domain: "exaple-domain-to-pass-in",
+					DefaultCertificate: &corev1.LocalObjectReference{
+						Name: "",
+					},
+				},
+				Status: operatorv1.IngressControllerStatus{
+					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+						Type: operatorv1.LoadBalancerServiceStrategyType,
+						LoadBalancer: &operatorv1.LoadBalancerStrategy{
+							Scope: operatorv1.LoadBalancerScope("External"),
+						},
+					},
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "apps2",
+				},
+				Spec: operatorv1.IngressControllerSpec{
+					Domain: "apps2.exaple-nondefault-domain-to-pass-in",
+				},
+				Status: operatorv1.IngressControllerStatus{
+					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+						Type: operatorv1.LoadBalancerServiceStrategyType,
+						LoadBalancer: &operatorv1.LoadBalancerStrategy{
+							Scope: operatorv1.LoadBalancerScope("External"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// applicationIngress list matches with ingressController list, expected true
+	ensureTrue := r.ensureIngressControllersExist(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerListTrue)
+	if !ensureTrue {
+		t.Errorf("Expected false but got true")
+	}
+}

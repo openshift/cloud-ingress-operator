@@ -6,4 +6,4 @@ metadata:
 spec:
   dnsName: rh-ssh
   allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"
-  image: quay.io/app-sre/sre-ssh-proxy
+  image: quay.io/app-sre/sre-ssh-proxy:v49-1fde8e5
