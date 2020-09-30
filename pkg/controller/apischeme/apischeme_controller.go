@@ -107,7 +107,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Error(err, "Couldn't find the APIScheme object")
+			reqLogger.Info("Couldn't find the APIScheme object")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
