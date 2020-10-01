@@ -2,15 +2,12 @@ package sshd
 
 import (
 	"context"
-	"crypto/rsa"
 	"errors"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	mockcc "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mock_cloudclient"
-
-	"golang.org/x/crypto/ssh"
 
 	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
@@ -315,6 +312,9 @@ var cr = &cloudingressv1alpha1.SSHD{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      placeholderName,
 		Namespace: placeholderNamespace,
+		Finalizers: []string{
+			reconcileSSHDFinalizerDNS,
+		},
 	},
 	Spec: cloudingressv1alpha1.SSHDSpec{
 		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
@@ -363,7 +363,21 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 	s = scheme.Scheme
 	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
 
-	objects := []runtime.Object{cr, svc}
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      placeholderName + "-host-keys",
+			Namespace: placeholderNamespace,
+		},
+		Data: map[string][]byte{
+			"ssh_host_rsa_key": []byte("somefakedata"),
+		},
+	}
+
+	objects := []runtime.Object{cr, svc, secret}
 
 	testClient = fake.NewFakeClientWithScheme(s, objects...)
 	return
