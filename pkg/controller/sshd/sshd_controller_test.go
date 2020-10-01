@@ -113,26 +113,6 @@ func TestSetSSHDStatusError(t *testing.T) {
 	}
 }
 
-func TestEnsureDNSRecords(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	testClient, testScheme := setUpTestClient(t)
-	cloud := mockcc.NewMockCloudClient(ctrl)
-	cloud.EXPECT().EnsureSSHDNS(context.TODO(), testClient, cr, svc)
-
-	r := &ReconcileSSHD{
-		client:      testClient,
-		scheme:      testScheme,
-		cloudClient: cloud,
-	}
-
-	err := r.ensureDNSRecords(cr)
-	if err != nil {
-		t.Fatalf("got an unexpected error: %s", err)
-	}
-}
-
 func TestDeleteDNSRecords(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -351,7 +351,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	}
 
-	err = r.ensureDNSRecords(instance)
+	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, service)
 	switch err {
 	case nil:
 		// all good
@@ -592,33 +592,6 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeCluster,
 		},
 	}
-}
-
-func (r *ReconcileSSHD) ensureDNSRecords(cr *cloudingressv1alpha1.SSHD) error {
-	// fetch the sshd service
-	svc := &corev1.Service{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, svc)
-	if err != nil {
-		return err
-	}
-
-	// ensure records
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, cr, svc)
-		if err != nil {
-			log.Info("Couldn't ensure DNS record for zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
 }
 
 func (r *ReconcileSSHD) deleteDNSRecords(cr *cloudingressv1alpha1.SSHD) error {
