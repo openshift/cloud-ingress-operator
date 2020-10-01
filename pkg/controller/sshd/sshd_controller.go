@@ -18,6 +18,7 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 
@@ -351,7 +352,15 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 	}
 
 	err = r.ensureDNSRecords(instance)
-	if err != nil {
+	switch err {
+	case nil:
+		// all good
+	case err.(*cioerrors.LoadBalancerNotFoundError):
+		// couldn't find the new ELB yet
+		r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.")
+		r.client.Status().Update(context.TODO(), instance)
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	default:
 		r.SetSSHDStatusError(instance, "Failed to ensure the DNS record", err)
 		return reconcile.Result{}, err
 	}
