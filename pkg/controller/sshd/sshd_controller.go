@@ -2,7 +2,6 @@ package sshd
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -17,7 +16,6 @@ import (
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
@@ -173,7 +171,25 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		// Request object is being deleted.
 		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
 			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
-			if err = r.deleteDNSRecords(instance); err != nil {
+
+			// fetch the sshd service
+			svc := &corev1.Service{}
+			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
+			switch err {
+			case nil:
+				// all good
+			case err.(*cioerrors.LoadBalancerNotFoundError):
+				// couldn't find the new ELB yet
+				r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.")
+				r.client.Status().Update(context.TODO(), instance)
+				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+			default:
+				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
 				return reconcile.Result{}, err
 			}
 
@@ -592,33 +608,6 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeCluster,
 		},
 	}
-}
-
-func (r *ReconcileSSHD) deleteDNSRecords(cr *cloudingressv1alpha1.SSHD) error {
-	// fetch the sshd service
-	svc := &corev1.Service{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, svc)
-	if err != nil {
-		return err
-	}
-
-	// delete records
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, cr, svc)
-		if err != nil {
-			log.Info("Couldn't delete a DNS record: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
 }
 
 // SetSSHDStatusPending calls SetSSHDStatus with a Pending condition
