@@ -25,81 +25,6 @@ const (
 	rsaKeyModulusSize int = (4096 / 8)
 )
 
-var cr = &cloudingressv1alpha1.SSHD{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "SSHD",
-		APIVersion: cloudingressv1alpha1.SchemeGroupVersion.String(),
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      placeholderName,
-		Namespace: placeholderNamespace,
-	},
-	Spec: cloudingressv1alpha1.SSHDSpec{
-		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
-		Image:             placeholderImage,
-	},
-}
-
-func newConfigMap(name string) corev1.ConfigMap {
-	return corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: placeholderNamespace,
-			Labels: map[string]string{
-				"api.openshift.com/authorized-keys": name,
-			},
-		},
-		Data: map[string]string{
-			"authorized_keys": "ssh-rsa R0lCQkVSSVNIIQ==",
-		},
-	}
-}
-
-func newConfigMapList(names ...string) *corev1.ConfigMapList {
-	items := []corev1.ConfigMap{}
-	for _, name := range names {
-		items = append(items, newConfigMap(name))
-	}
-	return &corev1.ConfigMapList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMapList",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		Items: items,
-	}
-}
-
-func TestNewSSHSecret(t *testing.T) {
-	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
-	if err != nil {
-		t.Fatal("Failed to generate host keys:", err)
-	}
-
-	for _, pemBytes := range hostKeysSecret.Data {
-		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
-		if err != nil {
-			t.Fatal("Failed to parse private key:", err)
-		}
-		switch privateKey := privateKey.(type) {
-		case *rsa.PrivateKey:
-			if err := privateKey.Validate(); err != nil {
-				t.Fatal("RSA key is invalid:", err)
-			}
-			if privateKey.Size() != rsaKeyModulusSize {
-				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
-					privateKey.Size()*8, rsaKeyModulusSize*8)
-			}
-		// XXX Handle other host key types if/when the controller adds them.
-		default:
-			t.Fatalf("Unexpected private key type: %T", privateKey)
-		}
-	}
-}
-
 func TestNewSSHDeployment(t *testing.T) {
 	var configMapList *corev1.ConfigMapList
 	var deployment *appsv1.Deployment
@@ -217,5 +142,81 @@ func TestNewSSHService(t *testing.T) {
 	if !reflect.DeepEqual(service.Spec.LoadBalancerSourceRanges, cr.Spec.AllowedCIDRBlocks) {
 		t.Errorf("Service has wrong source ranges %v, expected %v",
 			service.Spec.LoadBalancerSourceRanges, cr.Spec.AllowedCIDRBlocks)
+	}
+}
+
+// utils
+var cr = &cloudingressv1alpha1.SSHD{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "SSHD",
+		APIVersion: cloudingressv1alpha1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      placeholderName,
+		Namespace: placeholderNamespace,
+	},
+	Spec: cloudingressv1alpha1.SSHDSpec{
+		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
+		Image:             placeholderImage,
+	},
+}
+
+func newConfigMap(name string) corev1.ConfigMap {
+	return corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: placeholderNamespace,
+			Labels: map[string]string{
+				"api.openshift.com/authorized-keys": name,
+			},
+		},
+		Data: map[string]string{
+			"authorized_keys": "ssh-rsa R0lCQkVSSVNIIQ==",
+		},
+	}
+}
+
+func newConfigMapList(names ...string) *corev1.ConfigMapList {
+	items := []corev1.ConfigMap{}
+	for _, name := range names {
+		items = append(items, newConfigMap(name))
+	}
+	return &corev1.ConfigMapList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMapList",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		Items: items,
+	}
+}
+
+func TestNewSSHSecret(t *testing.T) {
+	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
+	if err != nil {
+		t.Fatal("Failed to generate host keys:", err)
+	}
+
+	for _, pemBytes := range hostKeysSecret.Data {
+		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
+		if err != nil {
+			t.Fatal("Failed to parse private key:", err)
+		}
+		switch privateKey := privateKey.(type) {
+		case *rsa.PrivateKey:
+			if err := privateKey.Validate(); err != nil {
+				t.Fatal("RSA key is invalid:", err)
+			}
+			if privateKey.Size() != rsaKeyModulusSize {
+				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
+					privateKey.Size()*8, rsaKeyModulusSize*8)
+			}
+		// XXX Handle other host key types if/when the controller adds them.
+		default:
+			t.Fatalf("Unexpected private key type: %T", privateKey)
+		}
 	}
 }
