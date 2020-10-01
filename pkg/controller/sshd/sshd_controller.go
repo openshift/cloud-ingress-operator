@@ -2,7 +2,6 @@ package sshd
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -16,10 +15,8 @@ import (
 	"encoding/pem"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
-
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -99,14 +96,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcileSSHD implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileSSHD{}
 
-type Route53Data struct {
-	loadBalancerDNSName      string
-	loadBalancerHostedZoneId string
-	resourceRecordSetName    string
-	privateHostedZoneName    string
-	publicHostedZoneName     string
-}
-
 // ReconcileSSHD reconciles a SSHD object
 type ReconcileSSHD struct {
 	// This client, initialized using mgr.Client() above, is a split client
@@ -114,8 +103,7 @@ type ReconcileSSHD struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	awsClient awsclient.Client
-	route53   *Route53Data
+	cloudClient cloudclient.CloudClient
 }
 
 const (
@@ -150,22 +138,15 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Ensure we have an awsClient instance.
-	if r.awsClient == nil {
-		region, err := utils.GetClusterRegion(r.client)
+	// Ensure we have a cloudClient instance.
+	if r.cloudClient == nil {
+		platform, err := baseutils.GetPlatformType(r.client)
 		if err != nil {
-			r.SetSSHDStatusError(instance, "Failed to get cluster's AWS region", err)
+			r.SetSSHDStatusError(instance, "Failed to get cluster's platform", err)
 			return reconcile.Result{}, err
 		}
-		r.awsClient, err = awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
-			SecretName: config.AWSSecretName,
-			NameSpace:  config.OperatorNamespace,
-			AwsRegion:  region,
-		})
-		if err != nil {
-			r.SetSSHDStatusError(instance, "Failed to create an AWS client", err)
-			return reconcile.Result{}, err
-		}
+
+		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
 	}
 
 	// Check for a deletion timestamp.
@@ -179,9 +160,27 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	} else {
 		// Request object is being deleted.
-		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) && r.route53 != nil {
+		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
 			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
-			if err = r.deleteDNSRecords(); err != nil {
+
+			// fetch the sshd service
+			svc := &corev1.Service{}
+			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
+			switch err {
+			case nil:
+				// all good
+			case err.(*cioerrors.LoadBalancerNotFoundError):
+				// couldn't find the load balancer - it's likely still queued for creation
+				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
+				r.client.Status().Update(context.TODO(), instance)
+				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+			default:
+				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
 				return reconcile.Result{}, err
 			}
 
@@ -359,45 +358,16 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	}
 
-	// Create a Route53 DNS entry for the service's load balancer.
-	// TODO Consider using https://github.com/openshift/external-dns
-
-	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(r.client)
-	if err != nil {
-		r.SetSSHDStatusError(instance, "Failed to get cluster's base domain", err)
-		return reconcile.Result{}, err
-	}
-
-	// Get the ELB-to-be's name from Service's UID.
-	elbName := strings.ReplaceAll("a"+string(foundService.ObjectMeta.UID), "-", "")
-	if len(elbName) > 32 {
-		// truncate to 32 characters
-		elbName = elbName[0:32]
-	}
-
-	exists, elb, err := r.awsClient.DoesELBExist(elbName)
-	if err != nil {
-		r.SetSSHDStatusError(instance, "Failed to get load balancer status", err)
-		return reconcile.Result{}, err
-	}
-	if !exists {
-		// It isn't bad that it doesn't exist if there's no error, so re-queue.
-		r.SetSSHDStatusPending(instance, "Waiting on service load balancers")
+	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, foundService)
+	switch err {
+	case nil:
+		// all good
+	case err.(*cioerrors.LoadBalancerNotFoundError):
+		// couldn't find the new load balancer yet
+		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-	}
-
-	r.route53 = &Route53Data{
-		loadBalancerDNSName:      elb.DNSName,
-		loadBalancerHostedZoneId: elb.DNSZoneId,
-		resourceRecordSetName:    instance.Spec.DNSName + "." + clusterBaseDomain,
-		privateHostedZoneName:    clusterBaseDomain + ".",
-		// The public zone name omits the cluster name.
-		// e.g. mycluster.abcd.s1.openshift.com -> abcd.s1.openshift.com
-		publicHostedZoneName: clusterBaseDomain[strings.Index(clusterBaseDomain, ".")+1:] + ".",
-	}
-
-	err = r.ensureDNSRecords()
-	if err != nil {
+	default:
 		r.SetSSHDStatusError(instance, "Failed to ensure the DNS record", err)
 		return reconcile.Result{}, err
 	}
@@ -629,100 +599,6 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeCluster,
 		},
 	}
-}
-
-func (r *ReconcileSSHD) ensureDNSRecords() error {
-	// Private zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.awsClient.UpsertARecord(
-			r.route53.privateHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			"RH SSH Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	// Public zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a dot to get the zone name.
-		err := r.awsClient.UpsertARecord(
-			r.route53.publicHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			"RH SSH Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for public zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
-}
-
-func (r *ReconcileSSHD) deleteDNSRecords() error {
-	// Private zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.awsClient.DeleteARecord(
-			r.route53.privateHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			false)
-		if err != nil {
-			log.Info("Couldn't delete a DNS record for private zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	// Public zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a dot to get the zone name.
-		err := r.awsClient.DeleteARecord(
-			r.route53.publicHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			false)
-		if err != nil {
-			log.Info("Couldn't delete a DNS record for public zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for public zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
 }
 
 // SetSSHDStatusPending calls SetSSHDStatus with a Pending condition
