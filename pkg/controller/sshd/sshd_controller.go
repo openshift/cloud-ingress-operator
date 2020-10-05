@@ -184,8 +184,8 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 			case nil:
 				// all good
 			case err.(*cioerrors.LoadBalancerNotFoundError):
-				// couldn't find the new ELB yet
-				r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.")
+				// couldn't find the ELB - it's likely still queued for creation
+				r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't ready.")
 				r.client.Status().Update(context.TODO(), instance)
 				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 			default:
@@ -373,7 +373,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		// all good
 	case err.(*cioerrors.LoadBalancerNotFoundError):
 		// couldn't find the new ELB yet
-		r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.")
+		r.SetSSHDStatus(instance, "Couldn't reconcile", "AWS ELB isn't ready yet.")
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
