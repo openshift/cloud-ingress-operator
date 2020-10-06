@@ -47,7 +47,7 @@ const (
 	MaxAPIRetries int = 10
 
 	// AWSSecretName
-	AWSSecretName string = "cloud-ingress-operator-credentials"
+	AWSSecretName string = "cloud-ingress-operator-credentials-aws"
 
 	// OperatorNamespace
 	OperatorNamespace string = "openshift-cloud-ingress-operator"

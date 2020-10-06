@@ -41,11 +41,11 @@ objects:
     - apiVersion: cloudcredential.openshift.io/v1
       kind: CredentialsRequest
       metadata:
-        name: cloud-ingress-operator-credentials
+        name: cloud-ingress-operator-credentials-aws
         namespace: openshift-cloud-ingress-operator
       spec:
         secretRef:
-          name: cloud-ingress-operator-credentials
+          name: cloud-ingress-operator-credentials-aws
           namespace: openshift-cloud-ingress-operator
         providerSpec:
           apiVersion: cloudcredential.openshift.io/v1
