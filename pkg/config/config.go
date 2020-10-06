@@ -49,6 +49,9 @@ const (
 	// AWSSecretName
 	AWSSecretName string = "cloud-ingress-operator-credentials-aws"
 
+	// GCPSecretName
+	GCPSecretName string = "cloud-ingress-operator-credentials-gcp"
+
 	// OperatorNamespace
 	OperatorNamespace string = "openshift-cloud-ingress-operator"
 )
