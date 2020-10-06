@@ -2,10 +2,17 @@ package gcp
 
 import (
 	"context"
+	"fmt"
+
+	"golang.org/x/oauth2/google"
+	dnsv1 "google.golang.org/api/dns/v1"
+	"google.golang.org/api/option"
 
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -20,6 +27,7 @@ var (
 
 // Client represents a GCP Client
 type Client struct {
+	dnsService *dnsv1.Service
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
@@ -52,7 +60,48 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
+func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
+	credentials, err := google.CredentialsFromJSON(
+		ctx, serviceAccountJSON,
+		dnsv1.NdevClouddnsReadwriteScope)
+	if err != nil {
+		return nil, err
+	}
+
+	dnsService, err := dnsv1.NewService(ctx, option.WithCredentials(credentials))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		dnsService: dnsService,
+	}, nil
+}
+
 // NewClient creates a new CloudClient for use with AWS.
 func NewClient(kclient client.Client) *Client {
-	panic("NewClient is not implemented")
+	ctx := context.Background()
+	secret := &corev1.Secret{}
+	err := kclient.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      config.GCPSecretName,
+			Namespace: config.OperatorNamespace,
+		},
+		secret)
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+	}
+	serviceAccountJSON, ok := secret.Data["service_account.json"]
+	if !ok {
+		panic(fmt.Sprintf("Access credentials missing service account"))
+	}
+
+	c, err := newClient(ctx, serviceAccountJSON)
+
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't create GCP client %s", err.Error()))
+	}
+
+	return c
 }
