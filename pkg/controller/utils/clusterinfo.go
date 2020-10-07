@@ -166,18 +166,6 @@ func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, e
 	return infra, nil
 }
 
-// AWSOwnerTag returns owner taglist for the cluster
-func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
-	m := make(map[string]string)
-	name, err := GetClusterName(kclient)
-	if err != nil {
-		return m, err
-	}
-
-	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
-	return m, nil
-}
-
 func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
 	cm, err := getClusterConfigMap(kclient)
 	if err != nil {
