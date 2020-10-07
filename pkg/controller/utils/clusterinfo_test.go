@@ -159,29 +159,6 @@ func TestMasterInstanceIDs(t *testing.T) {
 	}
 }
 
-func TestAWSOwnerTag(t *testing.T) {
-	clustername := "awstags-test"
-	infraObj := testutils.CreateInfraObject(clustername, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-	tags, err := AWSOwnerTag(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get AWS owner tags %v", err)
-	}
-	// might add more tags(?), so check for non-zero
-	if len(tags) == 0 {
-		t.Fatalf("Zero tags returned, expected at least one")
-	}
-	expected := "kubernetes.io/cluster/awstags-test"
-	if v, ok := tags[expected]; ok {
-		if v != "owned" {
-			t.Fatalf("Expected owner tag %s to have value %s. Got %s", expected, "owned", v)
-		}
-	} else {
-		t.Fatalf("Expected to have a tag with key %s, but there wasn't one", expected)
-	}
-}
-
 // None of these should ever occur, but if they did, it'd be nice to know they return an error
 func TestNoInfraObj(t *testing.T) {
 	masterNames := make([]string, 3)
@@ -192,11 +169,7 @@ func TestNoInfraObj(t *testing.T) {
 	objs := []runtime.Object{machineList}
 	mocks := testutils.NewTestMock(t, objs)
 
-	_, err := AWSOwnerTag(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-	_, err = GetClusterRegion(mocks.FakeKubeClient)
+	_, err := GetClusterRegion(mocks.FakeKubeClient)
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
