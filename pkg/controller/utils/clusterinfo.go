@@ -42,15 +42,6 @@ func GetClusterBaseDomain(kclient client.Client) (string, error) {
 	return u.Hostname()[4:], nil
 }
 
-// GetClusterPlatform will return the installed cluster's platform type
-func GetClusterPlatform(kclient client.Client) (string, error) {
-	infra, err := getInfrastructureObject(kclient)
-	if err != nil {
-		return "", err
-	}
-	return string(infra.Status.Platform), nil
-}
-
 // GetClusterName returns the installed cluster's name (max 27 characters)
 func GetClusterName(kclient client.Client) (string, error) {
 	infra, err := getInfrastructureObject(kclient)

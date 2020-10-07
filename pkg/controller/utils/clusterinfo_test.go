@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -39,20 +38,6 @@ func TestOldClusterNoInfrastructureBackfill(t *testing.T) {
 	}
 	if region != testutils.DefaultRegionName {
 		t.Fatalf("Expected region to be %s, but got %s", testutils.DefaultRegionName, region)
-	}
-}
-
-func TestGetClusterPlatform(t *testing.T) {
-	infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-
-	platform, err := GetClusterPlatform(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get cluster platform: %v", err)
-	}
-	if platform != string(configv1.AWSPlatformType) {
-		t.Fatalf("Expected platform to be %v, got %v instead.", string(configv1.AWSPlatformType), platform)
 	}
 }
 
@@ -153,10 +138,6 @@ func TestNoInfraObj(t *testing.T) {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
 	_, err = GetClusterName(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-	_, err = GetClusterPlatform(mocks.FakeKubeClient)
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
