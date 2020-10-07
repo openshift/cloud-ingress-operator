@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -131,28 +130,6 @@ func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 	return machineList, nil
 }
 
-// GetClusterMasterInstancesIDs gets all the instance IDs for Master nodes
-// For AWS the form is aws:///<availability zone>/<instance ID>
-// This could come from parsing the arbitrarily formatted .Status.ProviderStatus
-// but .Spec.ProviderID is standard
-func GetClusterMasterInstancesIDs(kclient client.Client) ([]string, error) {
-	machineList, err := GetMasterMachines(kclient)
-	if err != nil {
-		return []string{}, err
-	}
-
-	ids := make([]string, 0)
-
-	for _, machineObj := range machineList.Items {
-		r := strings.LastIndex(*machineObj.Spec.ProviderID, "/")
-		if r != -1 {
-			n := *machineObj.Spec.ProviderID
-			ids = append(ids, n[r+1:])
-		}
-	}
-	return ids, nil
-}
-
 func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, error) {
 	infra := &configv1.Infrastructure{}
 	ns := types.NamespacedName{
@@ -164,18 +141,6 @@ func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, e
 		return nil, err
 	}
 	return infra, nil
-}
-
-// AWSOwnerTag returns owner taglist for the cluster
-func AWSOwnerTag(kclient client.Client) (map[string]string, error) {
-	m := make(map[string]string)
-	name, err := GetClusterName(kclient)
-	if err != nil {
-		return m, err
-	}
-
-	m[fmt.Sprintf("kubernetes.io/cluster/%s", name)] = "owned"
-	return m, nil
 }
 
 func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
