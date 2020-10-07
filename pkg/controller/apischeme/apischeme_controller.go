@@ -169,7 +169,18 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			}
 
 			if found != nil {
-				if err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found); err != nil {
+				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
+				switch err {
+				case nil:
+					// all good
+				case err.(*cioerrors.LoadBalancerNotFoundError):
+					// couldn't find the load balancer - it's likely still queued for creation
+					SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+					r.client.Status().Update(context.TODO(), instance)
+					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				default:
+					reqLogger.Error(err, "Failed to delete the DNS record")
+					SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
 					return reconcile.Result{}, err
 				}
 			}
@@ -240,7 +251,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, err
 	case err.(*cioerrors.LoadBalancerNotFoundError):
 		// couldn't find the new ELB yet
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.", cloudingressv1alpha1.ConditionError)
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
