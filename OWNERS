@@ -1,12 +1,14 @@
 reviewers:
-- sam-nguyen7
-- lisa
 - csheremeta
+- lisa
 - mwoodson
+- sam-nguyen7
 approvers:
-- sam-nguyen7
-- lisa
+- cblecker
 - csheremeta
+- lisa
+- mbarnes
 - mwoodson
+- sam-nguyen7
 maintainers:
 - lisa

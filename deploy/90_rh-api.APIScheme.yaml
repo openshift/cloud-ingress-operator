@@ -7,6 +7,6 @@ metadata:
     allowedCIDRBlocks: "${ALLOWED_CIDR_BLOCKS}"
 spec:
   managementAPIServerIngress:
-    enabled: true
+    enabled: "${{ENABLE_MANAGEMENT_API_SERVER_INGRESS}}"
     dnsName: rh-api
-    allowedCIDRBlocks: "${ALLOWED_CIDR_BLOCKS}"
+    allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"

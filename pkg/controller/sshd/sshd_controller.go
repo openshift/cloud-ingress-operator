@@ -2,16 +2,21 @@ package sshd
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
 
+	// For host key generation
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 
@@ -21,6 +26,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,14 +112,16 @@ type ReconcileSSHD struct {
 	client client.Client
 	scheme *runtime.Scheme
 
-	awsClient awsclient.Client
-	route53   *Route53Data
+	cloudClient cloudclient.CloudClient
 }
 
 const (
 	authorizedKeysMountPath   = "/var/run/authorized_keys.d"
+	hostKeysMountPath         = "/var/run/ssh"
 	nodeMasterLabel           = "node-role.kubernetes.io/master"
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	ELBAnnotationKey          = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
+	ELBAnnotationValue        = "600"
 )
 
 // Reconcile reads that state of the cluster for a SSHD object and makes changes based on the state read
@@ -139,22 +147,15 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Ensure we have an awsClient instance.
-	if r.awsClient == nil {
-		region, err := utils.GetClusterRegion(r.client)
+	// Ensure we have a cloudClient instance.
+	if r.cloudClient == nil {
+		platform, err := utils.GetPlatformType(r.client)
 		if err != nil {
-			r.SetSSHDStatusError(instance, "Failed to get cluster's AWS region", err)
+			r.SetSSHDStatusError(instance, "Failed to get cluster's platform", err)
 			return reconcile.Result{}, err
 		}
-		r.awsClient, err = awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
-			SecretName: config.AWSSecretName,
-			NameSpace:  config.OperatorNamespace,
-			AwsRegion:  region,
-		})
-		if err != nil {
-			r.SetSSHDStatusError(instance, "Failed to create an AWS client", err)
-			return reconcile.Result{}, err
-		}
+
+		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
 	}
 
 	// Check for a deletion timestamp.
@@ -168,9 +169,27 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	} else {
 		// Request object is being deleted.
-		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) && r.route53 != nil {
+		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
 			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
-			if err = r.deleteDNSRecords(); err != nil {
+
+			// fetch the sshd service
+			svc := &corev1.Service{}
+			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
+			switch err {
+			case nil:
+				// all good
+			case err.(*cioerrors.LoadBalancerNotFoundError):
+				// couldn't find the load balancer - it's likely still queued for creation
+				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
+				r.client.Status().Update(context.TODO(), instance)
+				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+			default:
+				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
 				return reconcile.Result{}, err
 			}
 
@@ -211,15 +230,47 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		r.SetSSHDStatusError(instance, "Failed to list config maps with SSH keys", err)
 		return reconcile.Result{}, err
 	}
-	// Sort ConfigMaps by name for the purpose of creating
-	// stable Volume and VolumeMount lists in the Deployment.
-	sort.Slice(configMapList.Items, func(i, j int) bool {
-		return configMapList.Items[i].Name < configMapList.Items[j].Name
-	})
+
+	// Install "host-keys" Secret
+	//
+	// Since host key generation has a random component and is therefore
+	// different each time, only call newSSHDSecret if an existing secret
+	// cannot be found.
+	hostKeysSecret := &corev1.Secret{}
+	secretName := types.NamespacedName{
+		Namespace: instance.Namespace,
+		Name:      instance.Name + "-host-keys",
+	}
+	if err = r.client.Get(context.TODO(), secretName, hostKeysSecret); err != nil {
+		if errors.IsNotFound(err) {
+			// Create a new "host-keys" Secret.
+			r.SetSSHDStatusPending(instance, "Generating host keys")
+			secret, err := newSSHDSecret(secretName.Namespace, secretName.Name)
+			if err != nil {
+				r.SetSSHDStatusError(instance, "Failed to generate host keys", err)
+				return reconcile.Result{}, err
+			}
+			if err := controllerutil.SetControllerReference(instance, secret, r.scheme); err != nil {
+				r.SetSSHDStatusError(instance, "Failed to set secret controller reference", err)
+				return reconcile.Result{}, err
+			}
+			if err = r.client.Create(context.TODO(), secret); err != nil {
+				if errors.IsAlreadyExists(err) {
+					return reconcile.Result{Requeue: true}, nil
+				}
+				r.SetSSHDStatusError(instance, "Failed to create secret", err)
+				return reconcile.Result{}, err
+			}
+			// Get the created secret on the next pass.
+			return reconcile.Result{Requeue: true}, nil
+		} else {
+			return reconcile.Result{}, err
+		}
+	}
 
 	// Install Deployment
 	foundDeployment := &appsv1.Deployment{}
-	deployment := newSSHDDeployment(instance, configMapList)
+	deployment := newSSHDDeployment(instance, configMapList, hostKeysSecret)
 	deploymentName, err := client.ObjectKeyFromObject(deployment)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -284,15 +335,28 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, err
 		}
 	} else {
-		// Service exists, check if it's updated.
+		var serviceNeedsUpdate bool
+
+		// Service exists, check if annotations or spec need updated.
+
+		if !metav1.HasAnnotation(foundService.ObjectMeta, ELBAnnotationKey) ||
+			foundService.ObjectMeta.Annotations[ELBAnnotationKey] != ELBAnnotationValue {
+			r.SetSSHDStatusPending(instance, "Updating service annotations")
+			metav1.SetMetaDataAnnotation(&foundService.ObjectMeta, ELBAnnotationKey, ELBAnnotationValue)
+			serviceNeedsUpdate = true
+		}
+
 		// XXX Copy system-assigned fields to satisfy reflect.DeepEqual.
 		service.Spec.Ports[0].NodePort = foundService.Spec.Ports[0].NodePort
 		service.Spec.ClusterIP = foundService.Spec.ClusterIP
 		service.Spec.HealthCheckNodePort = foundService.Spec.HealthCheckNodePort
 		if !reflect.DeepEqual(foundService.Spec, service.Spec) {
-			// Specs aren't equal, update and fix.
 			r.SetSSHDStatusPending(instance, "Updating service", "from", foundService.Spec, "to", service.Spec)
 			foundService.Spec = *service.Spec.DeepCopy()
+			serviceNeedsUpdate = true
+		}
+
+		if serviceNeedsUpdate {
 			if err = r.client.Update(context.TODO(), foundService); err != nil {
 				r.SetSSHDStatusError(instance, "Failed to update service", err)
 				return reconcile.Result{}, err
@@ -303,45 +367,16 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	}
 
-	// Create a Route53 DNS entry for the service's load balancer.
-	// TODO Consider using https://github.com/openshift/external-dns
-
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
-	if err != nil {
-		r.SetSSHDStatusError(instance, "Failed to get cluster's base domain", err)
-		return reconcile.Result{}, err
-	}
-
-	// Get the ELB-to-be's name from Service's UID.
-	elbName := strings.ReplaceAll("a"+string(foundService.ObjectMeta.UID), "-", "")
-	if len(elbName) > 32 {
-		// truncate to 32 characters
-		elbName = elbName[0:32]
-	}
-
-	exists, elb, err := r.awsClient.DoesELBExist(elbName)
-	if err != nil {
-		r.SetSSHDStatusError(instance, "Failed to get load balancer status", err)
-		return reconcile.Result{}, err
-	}
-	if !exists {
-		// It isn't bad that it doesn't exist if there's no error, so re-queue.
-		r.SetSSHDStatusPending(instance, "Waiting on service load balancers")
+	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, service)
+	switch err {
+	case nil:
+		// all good
+	case err.(*cioerrors.LoadBalancerNotFoundError):
+		// couldn't find the new load balancer yet
+		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
+		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-	}
-
-	r.route53 = &Route53Data{
-		loadBalancerDNSName:      elb.DNSName,
-		loadBalancerHostedZoneId: elb.DNSZoneId,
-		resourceRecordSetName:    instance.Spec.DNSName + "." + clusterBaseDomain,
-		privateHostedZoneName:    clusterBaseDomain + ".",
-		// The public zone name omits the cluster name.
-		// e.g. mycluster.abcd.s1.openshift.com -> abcd.s1.openshift.com
-		publicHostedZoneName: clusterBaseDomain[strings.Index(clusterBaseDomain, ".")+1:] + ".",
-	}
-
-	err = r.ensureDNSRecords()
-	if err != nil {
+	default:
 		r.SetSSHDStatusError(instance, "Failed to ensure the DNS record", err)
 		return reconcile.Result{}, err
 	}
@@ -355,7 +390,41 @@ func getMatchLabels(cr *cloudingressv1alpha1.SSHD) map[string]string {
 	return map[string]string{"deployment": cr.Name}
 }
 
-func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.ConfigMapList) *appsv1.Deployment {
+func newSSHDSecret(namespace, name string) (*corev1.Secret, error) {
+	// Generate 4096-bit RSA key
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, err
+	}
+	ssh_host_rsa_key := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
+	})
+
+	// XXX Generate other key types?
+	//     ECDSA:   Easy, fully supported in standard library.
+	//     ED25519: Standard library can generate a private key, but requires an
+	//              external module to create an "OPENSSH PRIVATE KEY" PEM block:
+	//              https://github.com/mikesmitty/edkey
+
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			// Key also serves as an environment variable name
+			// (uppercased) and must be a valid C_IDENTIFIER.
+			"ssh_host_rsa_key": ssh_host_rsa_key,
+		},
+	}, nil
+}
+
+func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.ConfigMapList, hostKeysSecret *corev1.Secret) *appsv1.Deployment {
 	// Prefer nil over empty slices to satisfy reflect.DeepEqual.
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
@@ -378,6 +447,56 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.Conf
 			MountPath: filepath.Join(authorizedKeysMountPath, volumeName),
 		})
 	}
+	// Sort volume slices by name to keep the sequence stable.
+	sort.Slice(volumes, func(i, j int) bool {
+		return volumes[i].Name < volumes[j].Name
+	})
+	sort.Slice(volumeMounts, func(i, j int) bool {
+		return volumeMounts[i].Name < volumeMounts[j].Name
+	})
+
+	// Because the OpenSSH server runs as an arbitrary user instead of root,
+	// and the mounted host keys are owned by root, we rely on the container
+	// user always being a member of the root group*, and set the permission
+	// to be both owner and group-readable (0440).
+	//
+	// Normally group-readable private keys are forbidden by OpenSSH, but it
+	// turns out the server does not apply its strict permission checks when
+	// a private key is owned by a different user than itself.
+	//
+	// * See "Support arbitrary user ids" section in:
+	//   https://docs.openshift.com/container-platform/4.5/openshift_images/create-images.html#images-create-guide-openshift_create-images
+	volumeName := hostKeysSecret.ObjectMeta.Name
+	volumes = append(volumes, corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  hostKeysSecret.ObjectMeta.Name,
+				DefaultMode: pointer.Int32Ptr(0440),
+				Optional:    pointer.BoolPtr(false),
+			},
+		},
+	})
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: hostKeysMountPath,
+	})
+
+	// Add environment variables to help the container configure itself.
+	var env []corev1.EnvVar
+	env = append(env, corev1.EnvVar{
+		Name:  "AUTHORIZED_KEYS_DIR",
+		Value: authorizedKeysMountPath,
+	})
+	for key := range hostKeysSecret.Data {
+		env = append(env, corev1.EnvVar{
+			Name:  strings.ToUpper(key),
+			Value: filepath.Join(hostKeysMountPath, key),
+		})
+	}
+	sort.Slice(env, func(i, j int) bool {
+		return env[i].Name < env[j].Name
+	})
 
 	sshdContainer := corev1.Container{
 		Name:    "sshd",
@@ -390,10 +509,11 @@ func newSSHDDeployment(cr *cloudingressv1alpha1.SSHD, configMapList *corev1.Conf
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
+		Env:                      env,
 		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		ImagePullPolicy:          corev1.PullAlways,
+		ImagePullPolicy:          corev1.PullIfNotPresent,
 	}
 
 	return &appsv1.Deployment{
@@ -469,7 +589,7 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			Name:      cr.Name,
 			Namespace: cr.Namespace,
 			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout": "600",
+				ELBAnnotationKey: ELBAnnotationValue,
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -488,100 +608,6 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeCluster,
 		},
 	}
-}
-
-func (r *ReconcileSSHD) ensureDNSRecords() error {
-	// Private zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.awsClient.UpsertARecord(
-			r.route53.privateHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			"RH SSH Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	// Public zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a dot to get the zone name.
-		err := r.awsClient.UpsertARecord(
-			r.route53.publicHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			"RH SSH Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for public zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
-}
-
-func (r *ReconcileSSHD) deleteDNSRecords() error {
-	// Private zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := r.awsClient.DeleteARecord(
-			r.route53.privateHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			false)
-		if err != nil {
-			log.Info("Couldn't delete a DNS record for private zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	// Public zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a dot to get the zone name.
-		err := r.awsClient.DeleteARecord(
-			r.route53.publicHostedZoneName,
-			r.route53.loadBalancerDNSName,
-			r.route53.loadBalancerHostedZoneId,
-			r.route53.resourceRecordSetName,
-			false)
-		if err != nil {
-			log.Info("Couldn't delete a DNS record for public zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for public zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-
-	return nil
 }
 
 // SetSSHDStatusPending calls SetSSHDStatus with a Pending condition

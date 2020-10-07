@@ -12,6 +12,8 @@ parameters:
   required: true
 - name: ALLOWED_CIDR_BLOCKS
   required: true
+- name: ENABLE_MANAGEMENT_API_SERVER_INGRESS
+  required: true
 metadata:
   name: selectorsyncset-template
 objects:
@@ -302,13 +304,12 @@ objects:
         image: ${REGISTRY_IMG}:${CHANNEL}-${IMAGE_TAG}
         affinity:
           nodeAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-              nodeSelectorTerms:
-              - matchExpressions:
-                - key: node-role.kubernetes.io
-                  operator: In
-                  values:
-                  - infra
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - preference:
+                matchExpressions:
+                - key: node-role.kubernetes.io/infra
+                  operator: Exists
+              weight: 1
         tolerations:
         - operator: Equal
           key: node-role.kubernetes.io
@@ -347,9 +348,9 @@ objects:
           allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
       spec:
         managementAPIServerIngress:
-          enabled: true
+          enabled: ${{ENABLE_MANAGEMENT_API_SERVER_INGRESS}}
           dnsName: rh-api
-          allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
+          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
     - apiVersion: cloudingress.managed.openshift.io/v1alpha1
       kind: SSHD
       metadata:
@@ -358,7 +359,7 @@ objects:
       spec:
         dnsName: rh-ssh
         allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
-        image: quay.io/app-sre/sre-ssh-proxy
+        image: quay.io/app-sre/sre-ssh-proxy:v49-1fde8e5
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:

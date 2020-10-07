@@ -3,12 +3,11 @@ package apischeme
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/pkg/awsclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 
@@ -22,6 +21,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -29,9 +29,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const (
+	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+)
+
 var (
-	log       = logf.Log.WithName("controller_apischeme")
-	awsClient awsclient.Client
+	log = logf.Log.WithName("controller_apischeme")
+	// for testing to set it to something else
+	cloudClient cloudclient.CloudClient
 )
 
 /**
@@ -102,25 +107,102 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			reqLogger.Error(err, "Couldn't find the APIScheme object")
+			reqLogger.Info("Couldn't find the APIScheme object")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
 		reqLogger.Error(err, "Error reading APIScheme object")
 		return reconcile.Result{}, err
 	}
+
 	// If the management API isn't enabled, we have nothing to do!
-	// TODO (lisa/lseelye): This should call a teardown feature to ensure we have
-	// disabled, but that has SERIOUS potential issues with Hive, as it will come to
-	// depend on rh-api.
 	if !instance.Spec.ManagementAPIServerIngress.Enabled {
 		reqLogger.Info("Not enabled", "instance", instance)
 		return reconcile.Result{}, nil
 	}
 
+	if cloudClient == nil {
+		cloudPlatform, err := utils.GetPlatformType(r.client)
+		if err != nil {
+			SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
+			r.client.Status().Update(context.TODO(), instance)
+			return reconcile.Result{}, err
+		}
+		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
+	}
+
+	serviceNamespacedName := types.NamespacedName{
+		Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
+		Namespace: "openshift-kube-apiserver",
+	}
+
+	// Check for a deletion timestamp.
+	if instance.DeletionTimestamp.IsZero() {
+		// Request object is alive, so ensure it has the DNS finalizer.
+		if !controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
+			controllerutil.AddFinalizer(instance, reconcileFinalizerDNS)
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Request object is being deleted.
+		if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
+			found := &corev1.Service{}
+			if err = r.client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
+				if errors.IsNotFound(err) {
+					// Service was not found!
+					//
+					// Skip the DeleteAdminAPIDNS call and remove the
+					// finalizer anyway so the CR deletion can proceed.
+					// This could leave DNS entries behind!
+					//
+					// TODO As a future enhancement, the CloudClient
+					//      provider should handle this scenario and
+					//      look up the necessary information itself
+					//      to proceed with the DNS deletion.
+					found = nil
+				} else {
+					reqLogger.Error(err, "Couldn't get the Service")
+					return reconcile.Result{}, err
+				}
+			}
+
+			if found != nil {
+				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
+				switch err {
+				case nil:
+					// all good
+				case err.(*cioerrors.LoadBalancerNotFoundError):
+					// couldn't find the load balancer - it's likely still queued for creation
+					SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+					r.client.Status().Update(context.TODO(), instance)
+					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				default:
+					reqLogger.Error(err, "Failed to delete the DNS record")
+					SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
+					return reconcile.Result{}, err
+				}
+			}
+
+			// Remove the DNS finalizer and update the request object.
+			controllerutil.RemoveFinalizer(instance, reconcileFinalizerDNS)
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			// Requeue once more after updating.  Without a finalizer,
+			// the next pass should delete the request object.
+			return reconcile.Result{Requeue: true}, nil
+		}
+
+		// Halt the reconciliation.
+		return reconcile.Result{}, nil
+	}
+
 	// Does the Service exist already?
 	found := &corev1.Service{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Spec.ManagementAPIServerIngress.DNSName, Namespace: "openshift-kube-apiserver"}, found)
+	err = r.client.Get(context.TODO(), serviceNamespacedName, found)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// need to create it
@@ -154,71 +236,29 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
-	region, err := utils.GetClusterRegion(r.client)
-	if err != nil && region != "" {
-		reqLogger.Error(err, "Couldn't get the cluster's region")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's AWS region", cloudingressv1alpha1.ConditionError)
+	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.client, instance, found)
+	// Check for error types that this operator knows about
+	switch err {
+	case nil:
+		// no problems
+		SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	if awsClient == nil {
-		awsClient, err = awsclient.GetAWSClient(r.client, awsclient.NewAwsClientInput{
-			SecretName: config.AWSSecretName,
-			NameSpace:  config.OperatorNamespace,
-			AwsRegion:  region,
-		})
-	}
-	if err != nil {
-		reqLogger.Error(err, "Failed to get AWS client")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create an AWS client", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(r.client)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't obtain the cluster's base domain")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get the cluster's base domain", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	// Get the ELB-to-be's name from Service's UID
-	elbName := strings.ReplaceAll("a"+string(found.ObjectMeta.UID), "-", "")
-	if len(elbName) > 32 {
-		// truncate to 32 characters
-		elbName = elbName[0:32]
-	}
-
-	exists, elb, err := awsClient.DoesELBExist(elbName)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't get ELB info from AWS. Is it not ready yet?")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't get ELB info from AWS. Is it not ready yet?", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{}, err
-	}
-	if !exists {
-		// It isn't bad that it doesn't exist, if there's no error, so re-queue
-		reqLogger.Info("AWS ELB isn't ready yet. Requeueing.")
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "AWS ELB isn't not ready yet.", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
-		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-	}
-	lb := &LoadBalancer{
-		EndpointName: instance.Spec.ManagementAPIServerIngress.DNSName,
-		BaseDomain:   clusterBaseDomain,
-	}
-
-	err = ensureDNSRecord(awsClient, lb, elb)
-	if err != nil {
-		reqLogger.Error(err, "Couldn't ensure the admin API endpoint")
+		return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+	case err.(*cioerrors.DnsUpdateError):
+		// couldn't update DNS
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
+	case err.(*cioerrors.LoadBalancerNotFoundError):
+		// couldn't find the new ELB yet
+		SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+		r.client.Status().Update(context.TODO(), instance)
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	default:
+		// not one of ours
+		log.Error(err, "Error ensuring Admin API", "instance", instance, "Service", found)
+		return reconcile.Result{}, err
 	}
-
-	SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
-	r.client.Status().Update(context.TODO(), instance)
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
@@ -252,46 +292,6 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 			LoadBalancerSourceRanges: instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks,
 		},
 	}
-}
-
-func ensureDNSRecord(awsAPI awsclient.Client, lb *LoadBalancer, awsObj *awsclient.AWSLoadBalancer) error {
-	// Private zone
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a . to get the zone name
-		err := awsAPI.UpsertARecord(lb.BaseDomain+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for private zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for private zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-	// Public zone
-	// The public zone omits the cluster name. So an example:
-	// A cluster's base domain of alice-cluster.l4s7.s1.domain.com will need an
-	// entry made in l4s7.s1.domain.com. zone.
-	publicZone := lb.BaseDomain[strings.Index(lb.BaseDomain, ".")+1:]
-	for i := 1; i <= config.MaxAPIRetries; i++ {
-		// Append a . to get the zone name
-		err := awsAPI.UpsertARecord(publicZone+".", awsObj.DNSName, awsObj.DNSZoneId, lb.EndpointName+"."+lb.BaseDomain, "RH API Endpoint", false)
-		if err != nil {
-			log.Info("Couldn't upsert a DNS record for public zone: " + err.Error())
-			if i == config.MaxAPIRetries {
-				log.Info("Out of retries for public zone")
-				return err
-			}
-			log.Info(fmt.Sprintf("Sleeping %d seconds before retrying...", i))
-			time.Sleep(time.Duration(i) * time.Second)
-		} else {
-			break
-		}
-	}
-	return nil
 }
 
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
