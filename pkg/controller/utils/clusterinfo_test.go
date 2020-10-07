@@ -134,31 +134,6 @@ func TestGetClusterRegion(t *testing.T) {
 	}
 }
 
-func TestMasterInstanceIDs(t *testing.T) {
-	masterNames := make([]string, 3)
-	for i := 0; i < 3; i++ {
-		masterNames[i] = fmt.Sprintf("master-%d", i)
-	}
-	machineList, _ := testutils.CreateMachineObjectList(masterNames, "ids", "master", testutils.DefaultRegionName, testutils.DefaultAzName)
-	objs := []runtime.Object{machineList}
-	mocks := testutils.NewTestMock(t, objs)
-
-	ids, err := GetClusterMasterInstancesIDs(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get master instance IDs %v", err)
-	}
-	if len(ids) != len(masterNames) {
-		t.Fatalf("Expected %d instance IDs, but got %d back", len(masterNames), len(ids))
-	}
-	// TODO(lseelye): It'd be nice if this matched up with the actual provider
-	// scheme instead of the contrived i-name
-	for _, id := range ids {
-		if id[0:9] != "i-master-" {
-			t.Fatalf("Expected master instance ID to begin with i-master-. Got %s", string(id[0:9]))
-		}
-	}
-}
-
 // None of these should ever occur, but if they did, it'd be nice to know they return an error
 func TestNoInfraObj(t *testing.T) {
 	masterNames := make([]string, 3)
