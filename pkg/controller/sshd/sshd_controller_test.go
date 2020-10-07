@@ -1,20 +1,24 @@
 package sshd
 
 import (
-	"crypto/rsa"
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	mockcc "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mock_cloudclient"
 
-	"golang.org/x/crypto/ssh"
-
+	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// TODO: Use a fake client and cloud-service interface
-	//       mocking to test ReconcileSSHD.Reconcile()
-	//"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -25,77 +29,86 @@ const (
 	rsaKeyModulusSize int = (4096 / 8)
 )
 
-var cr = &cloudingressv1alpha1.SSHD{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "SSHD",
-		APIVersion: cloudingressv1alpha1.SchemeGroupVersion.String(),
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      placeholderName,
-		Namespace: placeholderNamespace,
-	},
-	Spec: cloudingressv1alpha1.SSHDSpec{
-		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
-		Image:             placeholderImage,
-	},
-}
-
-func newConfigMap(name string) corev1.ConfigMap {
-	return corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: placeholderNamespace,
-			Labels: map[string]string{
-				"api.openshift.com/authorized-keys": name,
-			},
-		},
-		Data: map[string]string{
-			"authorized_keys": "ssh-rsa R0lCQkVSSVNIIQ==",
+// tests
+func TestSetSSHDStatus(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		State       cloudingressv1alpha1.SSHDStateType
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+			State:   cloudingressv1alpha1.SSHDStateReady,
 		},
 	}
-}
 
-func newConfigMapList(names ...string) *corev1.ConfigMapList {
-	items := []corev1.ConfigMap{}
-	for _, name := range names {
-		items = append(items, newConfigMap(name))
-	}
-	return &corev1.ConfigMapList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMapList",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		Items: items,
-	}
-}
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatus(cr, test.Message, test.State)
 
-func TestNewSSHSecret(t *testing.T) {
-	hostKeysSecret, err := newSSHDSecret(placeholderNamespace, "host-keys")
-	if err != nil {
-		t.Fatal("Failed to generate host keys:", err)
-	}
-
-	for _, pemBytes := range hostKeysSecret.Data {
-		privateKey, err := ssh.ParseRawPrivateKey(pemBytes)
-		if err != nil {
-			t.Fatal("Failed to parse private key:", err)
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
 		}
-		switch privateKey := privateKey.(type) {
-		case *rsa.PrivateKey:
-			if err := privateKey.Validate(); err != nil {
-				t.Fatal("RSA key is invalid:", err)
-			}
-			if privateKey.Size() != rsaKeyModulusSize {
-				t.Errorf("RSA key has wrong modulus size %d bits; expected %d bits",
-					privateKey.Size()*8, rsaKeyModulusSize*8)
-			}
-		// XXX Handle other host key types if/when the controller adds them.
-		default:
-			t.Fatalf("Unexpected private key type: %T", privateKey)
+
+		if cr.Status.State != test.State {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, test.State)
+		}
+	}
+}
+
+func TestSetSSHDStatusPending(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatusPending(cr, test.Message)
+
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
+		}
+
+		if cr.Status.State != cloudingressv1alpha1.SSHDStatePending {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStatePending)
+		}
+	}
+}
+
+func TestSetSSHDStatusError(t *testing.T) {
+	tests := []struct {
+		Name        string
+		Message     string
+		ExpectError bool
+	}{
+		{
+			Name:    "set status",
+			Message: "working as expected",
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(t)
+		r := &ReconcileSSHD{client: testClient, scheme: testScheme}
+		r.SetSSHDStatusError(cr, test.Message, errors.New("fake error"))
+
+		if cr.Status.Message != test.Message {
+			t.Errorf("test: %s; status was %s, expected %s\n", test.Name, cr.Status.Message, test.Message)
+		}
+
+		if cr.Status.State != cloudingressv1alpha1.SSHDStateError {
+			t.Errorf("test: %s; state was %s, expected %s\n", test.Name, cr.Status.State, cloudingressv1alpha1.SSHDStateError)
 		}
 	}
 }
@@ -218,4 +231,129 @@ func TestNewSSHService(t *testing.T) {
 		t.Errorf("Service has wrong source ranges %v, expected %v",
 			service.Spec.LoadBalancerSourceRanges, cr.Spec.AllowedCIDRBlocks)
 	}
+}
+
+func TestReconcile(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testClient, testScheme := setUpTestClient(t)
+	cloud := mockcc.NewMockCloudClient(ctrl)
+
+	cloud.EXPECT().EnsureSSHDNS(context.TODO(), testClient, OfType(reflect.TypeOf(cr).String()), svc)
+
+	r := &ReconcileSSHD{
+		client:      testClient,
+		scheme:      testScheme,
+		cloudClient: cloud,
+	}
+
+	result, err := r.Reconcile(reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      placeholderName,
+			Namespace: placeholderNamespace,
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if result.Requeue {
+		t.Errorf("got requeue on %v", result)
+	}
+}
+
+// utils
+var cr = &cloudingressv1alpha1.SSHD{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "SSHD",
+		APIVersion: cloudingressv1alpha1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      placeholderName,
+		Namespace: placeholderNamespace,
+		Finalizers: []string{
+			reconcileSSHDFinalizerDNS,
+		},
+	},
+	Spec: cloudingressv1alpha1.SSHDSpec{
+		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
+		Image:             placeholderImage,
+	},
+}
+
+var svc = newSSHDService(cr)
+
+func newConfigMap(name string) corev1.ConfigMap {
+	return corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: placeholderNamespace,
+			Labels: map[string]string{
+				"api.openshift.com/authorized-keys": name,
+			},
+		},
+		Data: map[string]string{
+			"authorized_keys": "ssh-rsa R0lCQkVSSVNIIQ==",
+		},
+	}
+}
+
+func newConfigMapList(names ...string) *corev1.ConfigMapList {
+	items := []corev1.ConfigMap{}
+	for _, name := range names {
+		items = append(items, newConfigMap(name))
+	}
+	return &corev1.ConfigMapList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMapList",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		Items: items,
+	}
+}
+
+func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme) {
+	t.Helper()
+
+	s = scheme.Scheme
+	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
+
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      placeholderName + "-host-keys",
+			Namespace: placeholderNamespace,
+		},
+		Data: map[string][]byte{
+			"ssh_host_rsa_key": []byte("somefakedata"),
+		},
+	}
+
+	objects := []runtime.Object{cr, svc, secret}
+
+	testClient = fake.NewFakeClientWithScheme(s, objects...)
+	return
+}
+
+// set up a gomock matcher to test if something is the right type
+type ofType struct{ t string }
+
+func (o *ofType) Matches(x interface{}) bool {
+	return reflect.TypeOf(x).String() == o.t
+}
+
+func (o *ofType) String() string {
+	return "is of type " + o.t
+}
+
+func OfType(t string) gomock.Matcher {
+	return &ofType{t}
 }
