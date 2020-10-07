@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"gopkg.in/yaml.v2"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
@@ -21,7 +22,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +42,16 @@ type Client struct {
 	route53Client route53iface.Route53API
 	elbClient     elbiface.ELBAPI
 	elbv2Client   elbv2iface.ELBV2API
+}
+
+// installConfig represents the bare minimum requirement to get the AWS cluster region from the install-config
+// See https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+type installConfig struct {
+	Platform struct {
+		AWS struct {
+			Region string `json:"region"`
+		} `json:"aws"`
+	} `json:"platform"`
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
@@ -93,10 +103,54 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 		route53Client: route53.New(s),
 	}, nil
 }
+func parseClusterRegionFromConfigMap(cm *corev1.ConfigMap) (string, error) {
+	if cm == nil || cm.Data == nil {
+		return "", fmt.Errorf("unexpected nil configmap or nil configmap Data")
+	}
+	data, ok := cm.Data["install-config"]
+	if !ok {
+		return "", fmt.Errorf("Missing install-config in configmap")
+	}
+	var ic installConfig
+	if err := yaml.Unmarshal([]byte(data), &ic); err != nil {
+		return "", fmt.Errorf("Invalid install-config: %v\njson:%s", err, data)
+	}
+	return ic.Platform.AWS.Region, nil
+}
+
+func getClusterConfigMap(kclient client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	ns := types.NamespacedName{
+		Namespace: "kube-system",
+		Name:      "cluster-config-v1",
+	}
+	err := kclient.Get(context.TODO(), ns, cm)
+	return cm, err
+}
+
+func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
+	cm, err := getClusterConfigMap(kclient)
+	if err != nil {
+		return "", err
+	}
+	return parseClusterRegionFromConfigMap(cm)
+}
+
+//GetClusterRegion returns the installed cluster's AWS region
+func GetClusterRegion(kclient client.Client) (string, error) {
+	infra, err := getInfrastructureObject(kclient)
+	if err != nil {
+		return "", err
+	} else if infra.Status.PlatformStatus == nil {
+		// Try the deprecated configmap. See https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+		return readClusterRegionFromConfigMap(kclient)
+	}
+	return infra.Status.PlatformStatus.AWS.Region, nil
+}
 
 // NewClient creates a new CloudClient for use with AWS.
 func NewClient(kclient client.Client) *Client {
-	region, err := utils.GetClusterRegion(kclient)
+	region, err := GetClusterRegion(kclient)
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't get cluster region %s", err.Error()))
 	}
