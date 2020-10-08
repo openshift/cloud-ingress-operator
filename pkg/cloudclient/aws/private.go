@@ -16,7 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/errors"
@@ -48,8 +47,6 @@ type loadBalancerV2 struct {
 	scheme                    string
 	vpcID                     string
 }
-
-var log = logf.Log.WithName("machine_helper")
 
 // RemoveAWSLBFromMasterMachines removes a Load Balancer (with name elbName) from
 // the spec.providerSpec.value.loadBalancers list for each of the master machine
