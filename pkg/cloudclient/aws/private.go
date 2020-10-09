@@ -682,7 +682,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 			if err != nil {
 				return "", "", err
 			}
-			err = utils.RemoveAWSLBFromMasterMachines(kclient, lbName, masterList)
+			err = RemoveAWSLBFromMasterMachines(kclient, lbName, masterList)
 			if err != nil {
 				return "", "", err
 			}
