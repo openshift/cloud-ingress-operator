@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -39,20 +38,6 @@ func TestOldClusterNoInfrastructureBackfill(t *testing.T) {
 	}
 	if region != testutils.DefaultRegionName {
 		t.Fatalf("Expected region to be %s, but got %s", testutils.DefaultRegionName, region)
-	}
-}
-
-func TestGetClusterPlatform(t *testing.T) {
-	infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-
-	platform, err := GetClusterPlatform(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get cluster platform: %v", err)
-	}
-	if platform != string(configv1.AWSPlatformType) {
-		t.Fatalf("Expected platform to be %v, got %v instead.", string(configv1.AWSPlatformType), platform)
 	}
 }
 
@@ -134,54 +119,6 @@ func TestGetClusterRegion(t *testing.T) {
 	}
 }
 
-func TestMasterInstanceIDs(t *testing.T) {
-	masterNames := make([]string, 3)
-	for i := 0; i < 3; i++ {
-		masterNames[i] = fmt.Sprintf("master-%d", i)
-	}
-	machineList, _ := testutils.CreateMachineObjectList(masterNames, "ids", "master", testutils.DefaultRegionName, testutils.DefaultAzName)
-	objs := []runtime.Object{machineList}
-	mocks := testutils.NewTestMock(t, objs)
-
-	ids, err := GetClusterMasterInstancesIDs(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get master instance IDs %v", err)
-	}
-	if len(ids) != len(masterNames) {
-		t.Fatalf("Expected %d instance IDs, but got %d back", len(masterNames), len(ids))
-	}
-	// TODO(lseelye): It'd be nice if this matched up with the actual provider
-	// scheme instead of the contrived i-name
-	for _, id := range ids {
-		if id[0:9] != "i-master-" {
-			t.Fatalf("Expected master instance ID to begin with i-master-. Got %s", string(id[0:9]))
-		}
-	}
-}
-
-func TestAWSOwnerTag(t *testing.T) {
-	clustername := "awstags-test"
-	infraObj := testutils.CreateInfraObject(clustername, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-	tags, err := AWSOwnerTag(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get AWS owner tags %v", err)
-	}
-	// might add more tags(?), so check for non-zero
-	if len(tags) == 0 {
-		t.Fatalf("Zero tags returned, expected at least one")
-	}
-	expected := "kubernetes.io/cluster/awstags-test"
-	if v, ok := tags[expected]; ok {
-		if v != "owned" {
-			t.Fatalf("Expected owner tag %s to have value %s. Got %s", expected, "owned", v)
-		}
-	} else {
-		t.Fatalf("Expected to have a tag with key %s, but there wasn't one", expected)
-	}
-}
-
 // None of these should ever occur, but if they did, it'd be nice to know they return an error
 func TestNoInfraObj(t *testing.T) {
 	masterNames := make([]string, 3)
@@ -192,11 +129,7 @@ func TestNoInfraObj(t *testing.T) {
 	objs := []runtime.Object{machineList}
 	mocks := testutils.NewTestMock(t, objs)
 
-	_, err := AWSOwnerTag(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-	_, err = GetClusterRegion(mocks.FakeKubeClient)
+	_, err := GetClusterRegion(mocks.FakeKubeClient)
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
@@ -205,10 +138,6 @@ func TestNoInfraObj(t *testing.T) {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
 	_, err = GetClusterName(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-	_, err = GetClusterPlatform(mocks.FakeKubeClient)
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
