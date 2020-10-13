@@ -54,11 +54,16 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
+	var svcIPs []string
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		svcIPs = append(svcIPs, ingress.IP)
+	}
+
 	dnsChange := &gdnsv1.Change{
 		Additions: []*gdnsv1.ResourceRecordSet{
 			{
 				Name:    dnsName,
-				Rrdatas: svc.Spec.ExternalIPs,
+				Rrdatas: svcIPs,
 				Type:    "A",
 				Ttl:     30,
 			},
