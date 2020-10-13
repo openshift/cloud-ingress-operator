@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 
+	gdnsv1 "google.golang.org/api/dns/v1"
+
+	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	//utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -48,7 +51,42 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 }
 
 func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
-	return errors.New("ensureDNSForService is not implemented")
+	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
+	// will make this all but impossible to write unit tests for
+
+	var svcIPs []string
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		svcIPs = append(svcIPs, ingress.IP)
+	}
+
+	dnsChange := &gdnsv1.Change{
+		Additions: []*gdnsv1.ResourceRecordSet{
+			{
+				Name:    dnsName,
+				Rrdatas: svcIPs,
+				Type:    "A",
+				Ttl:     30,
+			},
+		},
+	}
+
+	clusterDNS := &configv1.DNS{}
+	err := kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	if err != nil {
+		return err
+	}
+
+	// update the public zone
+	call := c.dnsService.Changes.Create(c.projectID, clusterDNS.Spec.PublicZone.ID, dnsChange)
+	_, err = call.Do()
+	if err != nil {
+		return err
+	}
+
+	// update the private zone
+	call = c.dnsService.Changes.Create(c.projectID, clusterDNS.Spec.PrivateZone.ID, dnsChange)
+	_, err = call.Do()
+	return err
 }
 
 func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
