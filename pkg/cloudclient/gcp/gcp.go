@@ -27,6 +27,7 @@ var (
 
 // Client represents a GCP Client
 type Client struct {
+	projectID  string
 	dnsService *dnsv1.Service
 }
 
@@ -75,6 +76,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 
 	return &Client{
 		dnsService: dnsService,
+		projectID:  credentials.ProjectID,
 	}, nil
 }
 
