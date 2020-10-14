@@ -87,7 +87,39 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 }
 
 func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
-	return errors.New("removeDNSForService is not implemented")
+	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
+	// will make this all but impossible to write unit tests for
+
+	svcIPs := getIPAddressesFromService(svc)
+
+	dnsChange := &gdnsv1.Change{
+		Deletions: []*gdnsv1.ResourceRecordSet{
+			{
+				Name:    dnsName,
+				Rrdatas: svcIPs,
+				Type:    "A",
+				Ttl:     30,
+			},
+		},
+	}
+
+	clusterDNS := &configv1.DNS{}
+	err := kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	if err != nil {
+		return err
+	}
+
+	// update the public zone
+	call := c.dnsService.Changes.Create(c.projectID, clusterDNS.Spec.PublicZone.ID, dnsChange)
+	_, err = call.Do()
+	if err != nil {
+		return err
+	}
+
+	// update the private zone
+	call = c.dnsService.Changes.Create(c.projectID, clusterDNS.Spec.PrivateZone.ID, dnsChange)
+	_, err = call.Do()
+	return err
 }
 
 func getIPAddressesFromService(svc *corev1.Service) (ips []string) {
