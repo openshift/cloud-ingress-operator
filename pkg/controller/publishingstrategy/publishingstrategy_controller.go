@@ -589,6 +589,7 @@ func convertIngressControllerToMap(existingIngress []operatorv1.IngressControlle
 // checkExistingIngress returns false if applicationIngress do not match any existing ingresscontroller on cluster
 func checkExistingIngress(existingMap map[string]operatorv1.IngressController, publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress) bool {
 	if _, ok := existingMap[publishingStrategyIngress.DNSName]; !ok {
+		log.Info(fmt.Sprintf("IngressController for %q not found", publishingStrategyIngress.DNSName))
 		return false
 	}
 	if !isOnCluster(publishingStrategyIngress, existingMap[publishingStrategyIngress.DNSName]) {
@@ -600,30 +601,48 @@ func checkExistingIngress(existingMap map[string]operatorv1.IngressController, p
 // doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
 func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController operatorv1.IngressController) bool {
 	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
+		log.Info("ApplicationIngress.DNSName mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	if publishingStrategyIngress.Certificate.Name != ingressController.Spec.DefaultCertificate.Name {
+		log.Info("ApplicationIngress.Certificate.Name mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	listening := string(publishingStrategyIngress.Listening)
 	capListening := strings.Title(strings.ToLower(listening))
 	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "Internal" {
+		log.Info("ApplicationIngress.Listening mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	if ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil && capListening == "External" {
 		return true
 	}
 	if capListening != string(ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		log.Info("ApplicationIngress.Listening mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	if publishingStrategyIngress.RouteSelector.MatchLabels == nil {
 		return true
 	}
 	if (publishingStrategyIngress.RouteSelector.MatchLabels == nil) != (ingressController.Spec.RouteSelector == nil) {
+		log.Info("ApplicationIngress.RouteSelector.MatchLabels mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	isRouteSelectorEqual := reflect.DeepEqual(ingressController.Spec.RouteSelector.MatchLabels, publishingStrategyIngress.RouteSelector.MatchLabels)
 	if !isRouteSelectorEqual {
+		log.Info("ApplicationIngress.RouteSelector.MatchLabels mismatch",
+			"ApplicationIngress", publishingStrategyIngress,
+			"IngressController", ingressController)
 		return false
 	}
 	return true
