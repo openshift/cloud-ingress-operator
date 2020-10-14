@@ -54,10 +54,7 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
-	var svcIPs []string
-	for _, ingress := range svc.Status.LoadBalancer.Ingress {
-		svcIPs = append(svcIPs, ingress.IP)
-	}
+	svcIPs := getIPAddressesFromService(svc)
 
 	dnsChange := &gdnsv1.Change{
 		Additions: []*gdnsv1.ResourceRecordSet{
@@ -91,4 +88,12 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 
 func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	return errors.New("removeDNSForService is not implemented")
+}
+
+func getIPAddressesFromService(svc *corev1.Service) (ips []string) {
+	for _, ingress := range svc.Status.LoadBalancer.Ingress {
+		ips = append(ips, ingress.IP)
+	}
+
+	return
 }
