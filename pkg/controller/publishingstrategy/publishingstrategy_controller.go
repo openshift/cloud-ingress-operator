@@ -376,7 +376,9 @@ func (r *ReconcilePublishingStrategy) ensureIngressControllersExist(appIngressLi
 		var exists bool
 		for _, ingress := range ingressControllerList.Items {
 			// prevent nil pointer error
-			if ingress.Spec.Domain == "" || ingress.Status.EndpointPublishingStrategy.LoadBalancer == nil {
+			if ingress.Spec.Domain == "" ||
+				ingress.Status.EndpointPublishingStrategy == nil ||
+				ingress.Status.EndpointPublishingStrategy.LoadBalancer == nil {
 				isContained = false
 				break
 			}
