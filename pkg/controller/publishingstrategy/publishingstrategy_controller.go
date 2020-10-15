@@ -371,29 +371,44 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 
 // ensure ingresscontrollers on publishingstrategy CR are present on the cluster
 func (r *ReconcilePublishingStrategy) ensureIngressControllersExist(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) bool {
-	isContained := true
-	for _, app := range appIngressList {
-		var exists bool
-		for _, ingress := range ingressControllerList.Items {
-			// prevent nil pointer error
-			if ingress.Spec.Domain == "" ||
-				ingress.Status.EndpointPublishingStrategy == nil ||
-				ingress.Status.EndpointPublishingStrategy.LoadBalancer == nil {
-				isContained = false
-				break
-			}
-			listening := string(app.Listening)
-			capListening := strings.Title(strings.ToLower(listening))
-			if ingress.Spec.Domain == app.DNSName && capListening == string(ingress.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
-				exists = true
-			}
-		}
-		if !exists {
-			isContained = false
-			break
+
+	for _, appIngress := range appIngressList {
+		result := doesIngressControllerExist(appIngress, ingressControllerList)
+
+		if !result {
+			return false
 		}
 	}
-	return isContained
+
+	return true
+}
+
+func doesIngressControllerExist(appIngress cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) bool {
+
+	for _, ingress := range ingressControllerList.Items {
+
+		// prevent nil pointer error
+		if !validateIngress(ingress) {
+			return false
+		}
+
+		listening := string(appIngress.Listening)
+		capListening := strings.Title(strings.ToLower(listening))
+		if ingress.Spec.Domain == appIngress.DNSName && capListening == string(ingress.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateIngress(ingressController operatorv1.IngressController) bool {
+	if ingressController.Spec.Domain == "" ||
+		ingressController.Status.EndpointPublishingStrategy == nil ||
+		ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
+		return false
+	}
+
+	return true
 }
 
 // get a list of all ingress on cluster that has annotation owner cloud-ingress-operator
