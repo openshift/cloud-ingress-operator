@@ -373,9 +373,8 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 func (r *ReconcilePublishingStrategy) ensureIngressControllersExist(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressControllerList *operatorv1.IngressControllerList) bool {
 
 	for _, appIngress := range appIngressList {
-		result := doesIngressControllerExist(appIngress, ingressControllerList)
 
-		if !result {
+		if !doesIngressControllerExist(appIngress, ingressControllerList) {
 			return false
 		}
 	}
