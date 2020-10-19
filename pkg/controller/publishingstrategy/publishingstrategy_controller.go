@@ -1,6 +1,7 @@
 package publishingstrategy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -35,6 +37,7 @@ const (
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
+var serializer = json.NewSerializerWithOptions(nil, nil, nil, json.SerializerOptions{})
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -136,7 +139,9 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	}
 
 	// ----------------------------TODO: remove these debug logs afterwards --------------------------------------
-	log.Info(fmt.Sprintf("initial ingresscontroller list: %+v", ingressControllerList.Items))
+	var serializedIngressControllerList bytes.Buffer
+	_ = serializer.Encode(ingressControllerList, &serializedIngressControllerList)
+	log.Info(fmt.Sprintf("initial ingresscontroller list: %s", serializedIngressControllerList.String()))
 	log.Info(fmt.Sprintf("appingress on publishingstrategy CR: %+v", instance.Spec.ApplicationIngress))
 	log.Info(fmt.Sprintf("ingress to reconcile: %+v", ingressNotOnCluster))
 	// -----------------------------------------------------------------------------------------------------------
