@@ -62,6 +62,30 @@ if __name__ == '__main__':
     csv['spec']['description'] = "SRE operator - " + operator_name
     csv['spec']['version'] = operator_version
 
+    # Initialize CRD array in CSV
+    csv['spec']['customresourcedefinitions']['owned'] = []
+
+    # Copy all CSV files over to the bundle output dir:
+    # Copy all CRD files over to the bundle output dir:
+    crd_files = [ f for f in os.listdir('deploy/crds') if f.endswith('_crd.yaml') ]
+    for file_name in crd_files:
+        full_path = os.path.join('deploy/crds', file_name)
+        if (os.path.isfile(os.path.join('deploy/crds', file_name))):
+            shutil.copy(full_path, os.path.join(version_dir, file_name))
+        # Load CRD so we can use attributes from it
+        with open("deploy/crds/{}".format(file_name), "r") as stream:
+            crd = yaml.load(stream)
+        # Update CSV template customresourcedefinitions key
+        csv['spec']['customresourcedefinitions']['owned'].append(
+            {
+                "name": crd["metadata"]["name"],
+                "description": crd["spec"]["names"]["kind"],
+                "displayName": crd["spec"]["names"]["kind"],
+                "kind": crd["spec"]["names"]["kind"],
+                "version": crd["spec"]["version"]
+            }
+        )
+
     csv['spec']['install']['spec']['clusterPermissions'] = []
 
     SA_NAME = operator_name

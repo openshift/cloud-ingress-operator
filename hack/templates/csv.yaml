@@ -43,8 +43,4 @@ spec:
         # Deployment spec will be added here by the generate-csv.py script.
   customresourcedefinitions:
     owned:
-    - description: Reconcile SubjectPermissions to create ClusterRoleBinding and RoleBindings
-      displayName: SubjectPermission
-      kind: SubjectPermission
-      name: subjectpermissions.managed.openshift.io
-      version: v1alpha1
+    # CRD's will be added here by the generate-operator-bundle.py
