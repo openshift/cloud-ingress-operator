@@ -137,8 +137,8 @@ func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
 	return parseClusterRegionFromConfigMap(cm)
 }
 
-//GetClusterRegion returns the installed cluster's AWS region
-func GetClusterRegion(kclient client.Client) (string, error) {
+//getClusterRegion returns the installed cluster's AWS region
+func getClusterRegion(kclient client.Client) (string, error) {
 	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return "", err
@@ -151,7 +151,7 @@ func GetClusterRegion(kclient client.Client) (string, error) {
 
 // NewClient creates a new CloudClient for use with AWS.
 func NewClient(kclient client.Client) *Client {
-	region, err := GetClusterRegion(kclient)
+	region, err := getClusterRegion(kclient)
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't get cluster region %s", err.Error()))
 	}

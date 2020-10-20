@@ -209,9 +209,9 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
 
-// GetMasterMachines returns a machineList object whose .Items can be iterated
+// getMasterMachines returns a machineList object whose .Items can be iterated
 // over to perform actions on/with information from each master machine object
-func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
+func getMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 	machineList := &machineapi.MachineList{}
 	listOptions := []client.ListOption{
 		client.InNamespace("openshift-machine-api"),
@@ -224,16 +224,16 @@ func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 	return machineList, nil
 }
 
-// GetMasterNodeSubnets returns all the subnets for Machines with 'master' label.
+// getMasterNodeSubnets returns all the subnets for Machines with 'master' label.
 // return structure:
 // {
 //   public => subnetname,
 //   private => subnetname,
 // }
 //
-func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
+func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 	subnets := make(map[string]string)
-	machineList, err := GetMasterMachines(kclient)
+	machineList, err := getMasterMachines(kclient)
 	if err != nil {
 		return subnets, err
 	}
@@ -287,7 +287,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 		return err
 	}
 	extNLBName := infrastructureName + "-ext"
-	subnets, err := GetMasterNodeSubnets(kclient)
+	subnets, err := getMasterNodeSubnets(kclient)
 	if err != nil {
 		return err
 	}
@@ -655,7 +655,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	if err != nil {
 		return "", "", err
 	}
-	masterList, err := GetMasterMachines(kclient)
+	masterList, err := getMasterMachines(kclient)
 	if err != nil {
 		return "", "", err
 	}
