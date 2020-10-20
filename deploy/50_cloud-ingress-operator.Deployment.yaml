@@ -27,6 +27,10 @@ spec:
         key: node-role.kubernetes.io
         value: infra
         effect: PreferNoSchedule
+      - operator: Equal
+        key: node-role.kubernetes.io
+        value: infra
+        effect: NoSchedule
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
