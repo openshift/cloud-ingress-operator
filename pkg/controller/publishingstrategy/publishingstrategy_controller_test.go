@@ -375,14 +375,9 @@ func TestIngressHandle(t *testing.T) {
 		Name: "new-certificate",
 	}
 
-	err = r.defaultIngressHandle(mockPublishingStrategy().Spec.ApplicationIngress[0], list, newCertificate)
+	err = r.createOrUpdateIngressController(mockPublishingStrategy().Spec.ApplicationIngress[0], newCertificate)
 	if err != nil {
 		t.Fatalf("couldn't handle default ingress")
-	}
-
-	err = r.nonDefaultIngressHandle(mockPublishingStrategy().Spec.ApplicationIngress[1], list, newCertificate)
-	if err != nil {
-		t.Fatalf("couldn't handle non-default ingress")
 	}
 }
 
@@ -422,11 +417,6 @@ func TestDeleteIngressWithAnnotation(t *testing.T) {
 	err = r.client.List(ctx, ingressControllerList, &opts)
 	if err != nil {
 		t.Errorf("couldn't get ingresscontroller list %s", err)
-	}
-	// if ingress without annotation hit method, then it should not be removed
-	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
-	if err != nil {
-		t.Fatalf("couldn't delete ingress")
 	}
 
 	err = r.client.List(ctx, ingressControllerList, &opts)
