@@ -11,7 +11,6 @@ import (
 	"time"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
@@ -210,7 +209,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
 
-// GetMasterNodes returns a machineList object whose .Items can be iterated
+// GetMasterMachines returns a machineList object whose .Items can be iterated
 // over to perform actions on/with information from each master machine object
 func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 	machineList := &machineapi.MachineList{}
@@ -656,7 +655,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	if err != nil {
 		return "", "", err
 	}
-	masterList, err := utils.GetMasterMachines(kclient)
+	masterList, err := GetMasterMachines(kclient)
 	if err != nil {
 		return "", "", err
 	}
