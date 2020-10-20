@@ -28,6 +28,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 )
 
+const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
+
 type awsLoadBalancer struct {
 	elbName   string
 	dnsName   string
@@ -207,66 +209,6 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 	return nil
 }
 
-const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
-
-// getMasterMachines returns a machineList object whose .Items can be iterated
-// over to perform actions on/with information from each master machine object
-func getMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
-	machineList := &machineapi.MachineList{}
-	listOptions := []client.ListOption{
-		client.InNamespace("openshift-machine-api"),
-		client.MatchingLabels{masterMachineLabel: "master"},
-	}
-	err := kclient.List(context.TODO(), machineList, listOptions...)
-	if err != nil {
-		return nil, err
-	}
-	return machineList, nil
-}
-
-// getMasterNodeSubnets returns all the subnets for Machines with 'master' label.
-// return structure:
-// {
-//   public => subnetname,
-//   private => subnetname,
-// }
-//
-func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
-	subnets := make(map[string]string)
-	machineList, err := getMasterMachines(kclient)
-	if err != nil {
-		return subnets, err
-	}
-	if len(machineList.Items) == 0 {
-		return subnets, fmt.Errorf("Did not find any master Machine objects")
-	}
-
-	// get the AZ from a Master object's providerSpec.
-	codec, err := awsproviderapi.NewCodec()
-
-	if err != nil {
-		return subnets, err
-	}
-
-	// Obtain the availability zone
-	awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
-	err = codec.DecodeProviderSpec(&machineList.Items[0].Spec.ProviderSpec, awsconfig)
-	if err != nil {
-		return subnets, err
-	}
-
-	// Infra object gives us the Infrastructure name, which is the combination of
-	// cluster name and identifier.
-	infra, err := baseutils.GetInfrastructureObject(kclient)
-	if err != nil {
-		return subnets, err
-	}
-	subnets["public"] = fmt.Sprintf("%s-public-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
-	subnets["private"] = fmt.Sprintf("%s-private-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
-
-	return subnets, nil
-}
-
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
 func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
@@ -345,6 +287,85 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	}
 	// success
 	return nil
+}
+
+// getClusterName returns the installed cluster's name (max 27 characters)
+func getClusterName(kclient client.Client) (string, error) {
+	infra, err := baseutils.GetInfrastructureObject(kclient)
+	if err != nil {
+		return "", err
+	}
+	return infra.Status.InfrastructureName, nil
+}
+
+// getMasterNodeSubnets returns all the subnets for Machines with 'master' label.
+// return structure:
+// {
+//   public => subnetname,
+//   private => subnetname,
+// }
+//
+func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
+	subnets := make(map[string]string)
+	machineList, err := getMasterMachines(kclient)
+	if err != nil {
+		return subnets, err
+	}
+	if len(machineList.Items) == 0 {
+		return subnets, fmt.Errorf("Did not find any master Machine objects")
+	}
+
+	// get the AZ from a Master object's providerSpec.
+	codec, err := awsproviderapi.NewCodec()
+
+	if err != nil {
+		return subnets, err
+	}
+
+	// Obtain the availability zone
+	awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
+	err = codec.DecodeProviderSpec(&machineList.Items[0].Spec.ProviderSpec, awsconfig)
+	if err != nil {
+		return subnets, err
+	}
+
+	// Infra object gives us the Infrastructure name, which is the combination of
+	// cluster name and identifier.
+	infra, err := baseutils.GetInfrastructureObject(kclient)
+	if err != nil {
+		return subnets, err
+	}
+	subnets["public"] = fmt.Sprintf("%s-public-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
+	subnets["private"] = fmt.Sprintf("%s-private-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
+
+	return subnets, nil
+}
+
+//getClusterRegion returns the installed cluster's AWS region
+func getClusterRegion(kclient client.Client) (string, error) {
+	infra, err := baseutils.GetInfrastructureObject(kclient)
+	if err != nil {
+		return "", err
+	} else if infra.Status.PlatformStatus == nil {
+		// Try the deprecated configmap. See https://bugzilla.redhat.com/show_bug.cgi?id=1814332
+		return readClusterRegionFromConfigMap(kclient)
+	}
+	return infra.Status.PlatformStatus.AWS.Region, nil
+}
+
+// getMasterMachines returns a machineList object whose .Items can be iterated
+// over to perform actions on/with information from each master machine object
+func getMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
+	machineList := &machineapi.MachineList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-machine-api"),
+		client.MatchingLabels{masterMachineLabel: "master"},
+	}
+	err := kclient.List(context.TODO(), machineList, listOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return machineList, nil
 }
 
 /* Helper functions below, sorted by AWS API type */
