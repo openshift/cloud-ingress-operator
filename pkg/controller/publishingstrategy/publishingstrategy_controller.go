@@ -398,7 +398,7 @@ func doesIngressControllerExist(appIngress cloudingressv1alpha1.ApplicationIngre
 
 		listening := string(appIngress.Listening)
 		capListening := strings.Title(strings.ToLower(listening))
-		if ingress.Spec.Domain == appIngress.DNSName && capListening == string(ingress.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		if ingress.Status.Domain == appIngress.DNSName && capListening == string(ingress.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return true
 		}
 	}
@@ -406,7 +406,7 @@ func doesIngressControllerExist(appIngress cloudingressv1alpha1.ApplicationIngre
 }
 
 func validateIngress(ingressController operatorv1.IngressController) bool {
-	if ingressController.Spec.Domain == "" ||
+	if ingressController.Status.Domain == "" ||
 		ingressController.Status.EndpointPublishingStrategy == nil ||
 		ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
 		return false
@@ -461,7 +461,7 @@ func contains(appIngressList []cloudingressv1alpha1.ApplicationIngress, ingressC
 		}
 		// set bool to true if it is non-default and have the proper annotations
 		if ingressController.Name != "default" && ingressController.Annotations["Owner"] == "cloud-ingress-operator" {
-			if ingressController.Spec.Domain == app.DNSName {
+			if ingressController.Status.Domain == app.DNSName {
 				isContained = true
 			}
 		}
@@ -597,12 +597,12 @@ func newApplicationIngressControllerCR(ingressControllerCRName, scope, dnsName s
 	}, nil
 }
 
-// convertIngressControllerToMap takes in on cluster ingresscontroller list and returns them as a map with key Spec.Domain and value operatorv1.IngressController
+// convertIngressControllerToMap takes in on cluster ingresscontroller list and returns them as a map with key Status.Domain and value operatorv1.IngressController
 func convertIngressControllerToMap(existingIngress []operatorv1.IngressController) map[string]operatorv1.IngressController {
 	ingressMap := make(map[string]operatorv1.IngressController)
 
 	for _, ingress := range existingIngress {
-		ingressMap[ingress.Spec.Domain] = ingress
+		ingressMap[ingress.Status.Domain] = ingress
 	}
 	return ingressMap
 }
@@ -621,7 +621,7 @@ func checkExistingIngress(existingMap map[string]operatorv1.IngressController, p
 
 // doesIngressMatch checks if application ingress in PublishingStrategy CR matches with IngressController CR
 func isOnCluster(publishingStrategyIngress *cloudingressv1alpha1.ApplicationIngress, ingressController operatorv1.IngressController) bool {
-	if publishingStrategyIngress.DNSName != ingressController.Spec.Domain {
+	if publishingStrategyIngress.DNSName != ingressController.Status.Domain {
 		log.Info("ApplicationIngress.DNSName mismatch",
 			"ApplicationIngress", publishingStrategyIngress,
 			"IngressController", ingressController)

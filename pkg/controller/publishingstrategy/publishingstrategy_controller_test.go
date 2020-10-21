@@ -31,6 +31,7 @@ func mockIngressControllerList() *operatorv1.IngressControllerList {
 					},
 				},
 				Status: operatorv1.IngressControllerStatus{
+					Domain: "example-domain",
 					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 						Type: operatorv1.LoadBalancerServiceStrategyType,
 						LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -47,6 +48,7 @@ func mockIngressControllerList() *operatorv1.IngressControllerList {
 					Domain: "example-non-default-domain",
 				},
 				Status: operatorv1.IngressControllerStatus{
+					Domain: "example-non-default-domain",
 					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 						Type: operatorv1.LoadBalancerServiceStrategyType,
 						LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -66,6 +68,7 @@ func mockIngressControllerList() *operatorv1.IngressControllerList {
 					},
 				},
 				Status: operatorv1.IngressControllerStatus{
+					Domain: "example-domain-3",
 					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 						Type: operatorv1.LoadBalancerServiceStrategyType,
 						// LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -90,6 +93,7 @@ func mockDefaultIngressController() *operatorv1.IngressController {
 			},
 		},
 		Status: operatorv1.IngressControllerStatus{
+			Domain: "example-domain",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 				Type: operatorv1.LoadBalancerServiceStrategyType,
 				LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -115,6 +119,7 @@ func mockNonDefaultIngressController() *operatorv1.IngressController {
 			},
 		},
 		Status: operatorv1.IngressControllerStatus{
+			Domain: "apps2.exaple-nondefault-domain-to-pass-in",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 				Type: operatorv1.LoadBalancerServiceStrategyType,
 				LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -137,6 +142,7 @@ func mockNonDefaultIngressNoAnnotation() *operatorv1.IngressController {
 			},
 		},
 		Status: operatorv1.IngressControllerStatus{
+			Domain: "apps2.exaple-nondefault-domain-with-no-annotation",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 				Type: operatorv1.LoadBalancerServiceStrategyType,
 				LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -530,6 +536,7 @@ func TestEnsureIngressControllersExist(t *testing.T) {
 					},
 				},
 				Status: operatorv1.IngressControllerStatus{
+					Domain: "exaple-domain-to-pass-in",
 					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 						Type: operatorv1.LoadBalancerServiceStrategyType,
 						LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -546,6 +553,7 @@ func TestEnsureIngressControllersExist(t *testing.T) {
 					Domain: "apps2.exaple-nondefault-domain-to-pass-in",
 				},
 				Status: operatorv1.IngressControllerStatus{
+					Domain: "apps2.exaple-nondefault-domain-to-pass-in",
 					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 						Type: operatorv1.LoadBalancerServiceStrategyType,
 						LoadBalancer: &operatorv1.LoadBalancerStrategy{
