@@ -17,7 +17,7 @@ spec:
             operator: Exists
         weight: 1
   tolerations:
-  - operator: Equal
+  - operator: Exists
     key: node-role.kubernetes.io/infra
     effect: NoSchedule
   displayName: ${REPO_NAME}
