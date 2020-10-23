@@ -8,20 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestClusterBaseDomain(t *testing.T) {
-	infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-
-	base, err := GetClusterBaseDomain(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Could not get cluster base domain name: %v", err)
-	}
-	if base != "unit.test" {
-		t.Fatalf("Base domain mismatch. Expected %s, got %s", "unit.test", base)
-	}
-}
-
 // BZ https://bugzilla.redhat.com/show_bug.cgi?id=1814332
 func TestOldClusterNoInfrastructureBackfill(t *testing.T) {
 	clustername := "oldtest"
@@ -38,21 +24,6 @@ func TestOldClusterNoInfrastructureBackfill(t *testing.T) {
 	}
 	if region != testutils.DefaultRegionName {
 		t.Fatalf("Expected region to be %s, but got %s", testutils.DefaultRegionName, region)
-	}
-}
-
-func TestGetClusterName(t *testing.T) {
-	clustername := "cluster-test-name"
-	infraObj := testutils.CreateInfraObject(clustername, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
-	objs := []runtime.Object{infraObj}
-	mocks := testutils.NewTestMock(t, objs)
-
-	name, err := GetClusterName(mocks.FakeKubeClient)
-	if err != nil {
-		t.Fatalf("Couldn't get cluster name %v", err)
-	}
-	if name != clustername {
-		t.Fatalf("Expected cluster name to be %s, got %s instead", clustername, name)
 	}
 }
 
@@ -137,13 +108,4 @@ func TestNoInfraObj(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
-	_, err = GetClusterName(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-	_, err = GetClusterBaseDomain(mocks.FakeKubeClient)
-	if err == nil {
-		t.Fatalf("Expected to get an error from not having an Infrastructure object")
-	}
-
 }

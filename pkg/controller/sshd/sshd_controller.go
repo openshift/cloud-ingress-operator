@@ -17,8 +17,7 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -149,7 +148,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// Ensure we have a cloudClient instance.
 	if r.cloudClient == nil {
-		platform, err := utils.GetPlatformType(r.client)
+		platform, err := baseutils.GetPlatformType(r.client)
 		if err != nil {
 			r.SetSSHDStatusError(instance, "Failed to get cluster's platform", err)
 			return reconcile.Result{}, err

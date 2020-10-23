@@ -7,9 +7,9 @@ import (
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,7 +122,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 
 	if cloudClient == nil {
-		cloudPlatform, err := utils.GetPlatformType(r.client)
+		cloudPlatform, err := baseutils.GetPlatformType(r.client)
 		if err != nil {
 			SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
 			r.client.Status().Update(context.TODO(), instance)

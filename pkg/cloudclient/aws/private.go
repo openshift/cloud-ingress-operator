@@ -10,17 +10,16 @@ import (
 	"strings"
 	"time"
 
-	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/errors"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -194,7 +193,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 		return err
 	}
 
-	baseDomain, err := utils.GetClusterBaseDomain(kclient)
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -207,18 +206,6 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 		return err
 	}
 	return nil
-}
-func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, error) {
-	infra := &configv1.Infrastructure{}
-	ns := types.NamespacedName{
-		Namespace: "",
-		Name:      "cluster",
-	}
-	err := kclient.Get(context.TODO(), ns, infra)
-	if err != nil {
-		return nil, err
-	}
-	return infra, nil
 }
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
@@ -271,7 +258,7 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 
 	// Infra object gives us the Infrastructure name, which is the combination of
 	// cluster name and identifier.
-	infra, err := getInfrastructureObject(kclient)
+	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return subnets, err
 	}
@@ -296,7 +283,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 		}
 	}
 	// create new ext nlb
-	infrastructureName, err := utils.GetClusterName(kclient)
+	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
 		return err
 	}
@@ -340,7 +327,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	}
 
 	// can't create listener for new ext nlb
-	baseDomain, err := utils.GetClusterBaseDomain(kclient)
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -398,7 +385,7 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 		return err
 	}
 	// ELB exists, now let's set the DNS
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(kclient)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}
@@ -420,7 +407,7 @@ func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client,
 		return err
 	}
 	// ELB exists, now let's set the DNS
-	clusterBaseDomain, err := utils.GetClusterBaseDomain(kclient)
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return err
 	}

@@ -3,9 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
-	"net/url"
 
-	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -14,6 +12,8 @@ import (
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 
 	"sigs.k8s.io/yaml"
+
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 )
 
 // installConfig represents the bare minimum requirement to get the AWS cluster region from the install-config
@@ -27,29 +27,6 @@ type installConfig struct {
 }
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
-
-// GetClusterBaseDomain returns the installed cluster's base domain name
-func GetClusterBaseDomain(kclient client.Client) (string, error) {
-	infra, err := getInfrastructureObject(kclient)
-	if err != nil {
-		return "", err
-	}
-	// This starts with "api." that needs to be removed.
-	u, err := url.Parse(infra.Status.APIServerURL)
-	if err != nil {
-		return "", fmt.Errorf("Couldn't parse the cluster's URI from %s: %s", infra.Status.APIServerURL, err)
-	}
-	return u.Hostname()[4:], nil
-}
-
-// GetClusterName returns the installed cluster's name (max 27 characters)
-func GetClusterName(kclient client.Client) (string, error) {
-	infra, err := getInfrastructureObject(kclient)
-	if err != nil {
-		return "", err
-	}
-	return infra.Status.InfrastructureName, nil
-}
 
 // GetMasterNodeSubnets returns all the subnets for Machines with 'master' label.
 // return structure:
@@ -84,7 +61,7 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 
 	// Infra object gives us the Infrastructure name, which is the combination of
 	// cluster name and identifier.
-	infra, err := getInfrastructureObject(kclient)
+	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return subnets, err
 	}
@@ -96,7 +73,7 @@ func GetMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 
 // GetClusterRegion returns the installed cluster's AWS region
 func GetClusterRegion(kclient client.Client) (string, error) {
-	infra, err := getInfrastructureObject(kclient)
+	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return "", err
 	} else if infra.Status.PlatformStatus == nil {
@@ -119,19 +96,6 @@ func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 		return nil, err
 	}
 	return machineList, nil
-}
-
-func getInfrastructureObject(kclient client.Client) (*configv1.Infrastructure, error) {
-	infra := &configv1.Infrastructure{}
-	ns := types.NamespacedName{
-		Namespace: "",
-		Name:      "cluster",
-	}
-	err := kclient.Get(context.TODO(), ns, infra)
-	if err != nil {
-		return nil, err
-	}
-	return infra, nil
 }
 
 func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
