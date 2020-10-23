@@ -15,10 +15,9 @@ import (
 	"encoding/pem"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
+	operatoringressv1 "github.com/openshift/api/operatoringress/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,8 +101,6 @@ type ReconcileSSHD struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
-
-	cloudClient cloudclient.CloudClient
 }
 
 const (
@@ -113,6 +110,10 @@ const (
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
 	ELBAnnotationKey          = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	ELBAnnotationValue        = "600"
+
+	// All DNSRecords must reside in this namespace
+	DNSRecordNamespace = "openshift-ingress-operator"
+	DNSRecordFinalizer = "operator.openshift.io/ingress-dns"
 )
 
 // Reconcile reads that state of the cluster for a SSHD object and makes changes based on the state read
@@ -138,49 +139,30 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		return reconcile.Result{}, err
 	}
 
-	// Ensure we have a cloudClient instance.
-	if r.cloudClient == nil {
-		platform, err := baseutils.GetPlatformType(r.client)
-		if err != nil {
-			r.SetSSHDStatusError(instance, "Failed to get cluster's platform", err)
-			return reconcile.Result{}, err
-		}
-
-		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
-	}
-
 	// Check for a deletion timestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
+			// Add finalizer, update, and requeue.
 			controllerutil.AddFinalizer(instance, reconcileSSHDFinalizerDNS)
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
+			return reconcile.Result{Requeue: true}, nil
 		}
 	} else {
 		// Request object is being deleted.
 		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
-			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
+			r.SetSSHDStatus(instance, "Deleting DNS records", cloudingressv1alpha1.SSHDStateFinalizing)
 
-			// fetch the sshd service
-			svc := &corev1.Service{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
-			if err != nil {
-				return reconcile.Result{}, err
+			dnsRecord := &operatoringressv1.DNSRecord{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: DNSRecordNamespace,
+					Name:      instance.Name,
+				},
 			}
-
-			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
-			switch err {
-			case nil:
-				// all good
-			case err.(*cioerrors.LoadBalancerNotFoundError):
-				// couldn't find the load balancer - it's likely still queued for creation
-				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
-				r.client.Status().Update(context.TODO(), instance)
-				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-			default:
-				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
+			err = r.client.Delete(context.TODO(), dnsRecord)
+			if client.IgnoreNotFound(err) != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -193,6 +175,12 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 		// Halt the reconciliation.
 		return reconcile.Result{}, nil
+	}
+
+	clusterBaseDomain, err := baseutils.GetClusterBaseDomain(r.client)
+	if err != nil {
+		r.SetSSHDStatusError(instance, "Failed to get cluster's base domain", err)
+		return reconcile.Result{}, err
 	}
 
 	// List ConfigMaps with SSH keys
@@ -319,7 +307,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 				r.SetSSHDStatusError(instance, "Failed to create service", err)
 				return reconcile.Result{}, err
 			}
-			// Reconcile again to get the new Service and give AWS time to create the ELB.
+			// Reconcile again to get the new Service and give it time to create the load balancer.
 			reqLogger.Info("Service was just created, so let's try to requeue to set it up")
 			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		} else {
@@ -352,24 +340,56 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 				r.SetSSHDStatusError(instance, "Failed to update service", err)
 				return reconcile.Result{}, err
 			}
-			// Requeue to give AWS time to apply the changes.
+			// Requeue to give the controller time to apply the changes.
 			reqLogger.Info("Requeuing after service update")
 			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		}
 	}
 
-	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, foundService)
-	switch err {
-	case nil:
-		// all good
-	case err.(*cioerrors.LoadBalancerNotFoundError):
-		// couldn't find the new load balancer yet
+	if len(foundService.Status.LoadBalancer.Ingress) == 0 {
 		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
-		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-	default:
-		r.SetSSHDStatusError(instance, "Failed to ensure the DNS record", err)
+	}
+
+	// Install DNSRecord
+	foundDNSRecord := &operatoringressv1.DNSRecord{}
+	dnsName := instance.Spec.DNSName + "." + clusterBaseDomain + "."
+	dnsRecord := newDNSRecord(instance, dnsName, foundService)
+	dnsRecordName, err := client.ObjectKeyFromObject(dnsRecord)
+	if err != nil {
 		return reconcile.Result{}, err
+	}
+	if err = r.client.Get(context.TODO(), dnsRecordName, foundDNSRecord); err != nil {
+		if errors.IsNotFound(err) {
+			// Create a new DNSRecord
+			r.SetSSHDStatusPending(instance, "Creating DNS record")
+			// XXX Disabled until the DNSRecord controller can watch SSHD's namespace.
+			//if err = controllerutil.SetControllerReference(instance, dnsRecord, r.scheme); err != nil {
+			//	r.SetSSHDStatusError(instance, "Failed to set service controller reference", err)
+			//	return reconcile.Result{}, err
+			//}
+			if err = r.client.Create(context.TODO(), dnsRecord); err != nil {
+				if errors.IsAlreadyExists(err) {
+					return reconcile.Result{Requeue: true}, nil
+				}
+				r.SetSSHDStatusError(instance, "Failed to create DNS record", err)
+				return reconcile.Result{}, err
+			}
+		} else {
+			return reconcile.Result{}, err
+		}
+	} else {
+		// DNSRecord exists, check if it's updated.
+		if !reflect.DeepEqual(foundDNSRecord.Spec, dnsRecord.Spec) {
+			// Specs aren't equal, update and fix.
+			r.SetSSHDStatusPending(instance, "Updating DNS record", "from", foundDNSRecord.Spec, "to", dnsRecord.Spec)
+			foundDNSRecord.Spec = *dnsRecord.Spec.DeepCopy()
+			if err = r.client.Update(context.TODO(), foundDNSRecord); err != nil {
+				r.SetSSHDStatusError(instance, "Failed to update DNS record", err)
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{Requeue: true}, nil
+		}
 	}
 
 	r.SetSSHDStatus(instance, "SSHD is ready", cloudingressv1alpha1.SSHDStateReady)
@@ -597,6 +617,40 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			SessionAffinity:          corev1.ServiceAffinityNone,
 			LoadBalancerSourceRanges: cr.Spec.AllowedCIDRBlocks,
 			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeCluster,
+		},
+	}
+}
+
+func newDNSRecord(cr *cloudingressv1alpha1.SSHD, dnsName string, service *corev1.Service) *operatoringressv1.DNSRecord {
+	var targets []string
+
+	for _, ingress := range service.Status.LoadBalancer.Ingress {
+		if ingress.IP != "" {
+			targets = append(targets, ingress.IP)
+		}
+		if ingress.Hostname != "" {
+			targets = append(targets, ingress.Hostname)
+		}
+	}
+
+	return &operatoringressv1.DNSRecord{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DNSRecord",
+			APIVersion: operatoringressv1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name,
+			Namespace: DNSRecordNamespace,
+			Labels: map[string]string{
+				"ingresscontroller.operator.openshift.io/owning-ingresscontroller": "default",
+			},
+			Finalizers: []string{DNSRecordFinalizer},
+		},
+		Spec: operatoringressv1.DNSRecordSpec{
+			DNSName:    dnsName,
+			Targets:    targets,
+			RecordType: operatoringressv1.CNAMERecordType,
+			RecordTTL:  30,
 		},
 	}
 }
