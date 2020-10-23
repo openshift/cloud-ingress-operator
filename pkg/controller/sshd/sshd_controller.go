@@ -366,7 +366,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 	}
 
-	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, service)
+	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, foundService)
 	switch err {
 	case nil:
 		// all good
