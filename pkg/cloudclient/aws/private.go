@@ -204,7 +204,11 @@ func (c *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
 
 func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	// Get the ELB name from the Service's UID. Truncate to 32 characters for AWS
-	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")[0:32]
+	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")
+	if len(elbName) > 32 {
+		// Truncate to 32 characters
+		elbName = elbName[0:32]
+	}
 	awsELB, err := c.doesELBExist(elbName)
 	// Primarily checking to see if this exists. It is an error if it does not,
 	// likely because AWS is still creating it and the Reconcile should be retried
