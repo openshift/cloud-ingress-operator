@@ -23,13 +23,8 @@ spec:
                 operator: Exists
             weight: 1
       tolerations:
-      - operator: Equal
-        key: node-role.kubernetes.io
-        value: infra
-        effect: PreferNoSchedule
-      - operator: Equal
-        key: node-role.kubernetes.io
-        value: infra
+      - operator: Exists
+        key: node-role.kubernetes.io/infra
         effect: NoSchedule
       containers:
         - name: cloud-ingress-operator

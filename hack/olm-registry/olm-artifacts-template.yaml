@@ -311,10 +311,9 @@ objects:
                   operator: Exists
               weight: 1
         tolerations:
-        - operator: Equal
-          key: node-role.kubernetes.io
-          value: infra
-          effect: PreferNoSchedule
+        - operator: Exists
+          key: node-role.kubernetes.io/infra
+          effect: NoSchedule
         displayName: ${REPO_NAME}
         icon:
           base64data: ''
