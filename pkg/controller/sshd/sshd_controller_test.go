@@ -1,15 +1,15 @@
 package sshd
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	mockcc "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mock_cloudclient"
+	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 
 	"github.com/golang/mock/gomock"
+	operatoringressv1 "github.com/openshift/api/operatoringress/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -238,14 +238,10 @@ func TestReconcile(t *testing.T) {
 	defer ctrl.Finish()
 
 	testClient, testScheme := setUpTestClient(t)
-	cloud := mockcc.NewMockCloudClient(ctrl)
-
-	cloud.EXPECT().EnsureSSHDNS(context.TODO(), testClient, OfType(reflect.TypeOf(cr).String()), svc)
 
 	r := &ReconcileSSHD{
-		client:      testClient,
-		scheme:      testScheme,
-		cloudClient: cloud,
+		client: testClient,
+		scheme: testScheme,
 	}
 
 	result, err := r.Reconcile(reconcile.Request{
@@ -277,12 +273,11 @@ var cr = &cloudingressv1alpha1.SSHD{
 		},
 	},
 	Spec: cloudingressv1alpha1.SSHDSpec{
+		DNSName:           placeholderName,
 		AllowedCIDRBlocks: []string{"1.1.1.1", "2.2.2.2"},
 		Image:             placeholderImage,
 	},
 }
-
-var svc = newSSHDService(cr)
 
 func newConfigMap(name string) corev1.ConfigMap {
 	return corev1.ConfigMap{
@@ -321,7 +316,14 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 	t.Helper()
 
 	s = scheme.Scheme
+	operatoringressv1.Install(s)
 	s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, cr)
+
+	infra := testutils.CreateInfraObject(
+		"basename",
+		testutils.DefaultAPIEndpoint,
+		testutils.DefaultAPIEndpoint,
+		testutils.DefaultRegionName)
 
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -337,7 +339,18 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 		},
 	}
 
-	objects := []runtime.Object{cr, svc, secret}
+	service := newSSHDService(cr)
+	service.Status.LoadBalancer.Ingress = append(
+		service.Status.LoadBalancer.Ingress,
+		corev1.LoadBalancerIngress{
+			Hostname: "load-balancer-hostname",
+		},
+	)
+
+	dnsName := placeholderName + "." + testutils.DefaultClusterDomain + "."
+	dnsRecord := newDNSRecord(cr, dnsName, service)
+
+	objects := []runtime.Object{cr, service, dnsRecord, secret, infra}
 
 	testClient = fake.NewFakeClientWithScheme(s, objects...)
 	return

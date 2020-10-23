@@ -119,3 +119,15 @@ rules:
   - deployments
   verbs:
   - get
+- apiGroups:
+  - ingress.operator.openshift.io
+  resources:
+  - dnsrecords
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
