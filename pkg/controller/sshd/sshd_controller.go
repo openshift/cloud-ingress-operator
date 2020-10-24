@@ -96,14 +96,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcileSSHD implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileSSHD{}
 
-type Route53Data struct {
-	loadBalancerDNSName      string
-	loadBalancerHostedZoneId string
-	resourceRecordSetName    string
-	privateHostedZoneName    string
-	publicHostedZoneName     string
-}
-
 // ReconcileSSHD reconciles a SSHD object
 type ReconcileSSHD struct {
 	// This client, initialized using mgr.Client() above, is a split client
