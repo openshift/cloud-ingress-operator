@@ -134,6 +134,7 @@ objects:
         resources:
         - infrastructures
         - apiservers
+        - dnses
         verbs:
         - list
         - get
