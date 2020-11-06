@@ -4,15 +4,15 @@ import (
 	"fmt"
 )
 
-type LoadBalancerNotFoundError struct {
+type LoadBalancerNotReadyError struct {
 	e string
 }
 
-func (e *LoadBalancerNotFoundError) Error() string { return e.e }
+func (e *LoadBalancerNotReadyError) Error() string { return e.e }
 
-func NewLoadBalancerNotFoundError(lb string) error {
-	return &LoadBalancerNotFoundError{
-		e: fmt.Sprintf("Could not find LoadBalancer %s", lb),
+func NewLoadBalancerNotReadyError() error {
+	return &LoadBalancerNotReadyError{
+		e: "Load balancer for service is not yet ready",
 	}
 }
 

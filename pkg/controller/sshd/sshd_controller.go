@@ -174,8 +174,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 			switch err {
 			case nil:
 				// all good
-			case err.(*cioerrors.LoadBalancerNotFoundError):
-				// couldn't find the load balancer - it's likely still queued for creation
+			case err.(*cioerrors.LoadBalancerNotReadyError):
 				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
 				r.client.Status().Update(context.TODO(), instance)
 				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
@@ -362,8 +361,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 	switch err {
 	case nil:
 		// all good
-	case err.(*cioerrors.LoadBalancerNotFoundError):
-		// couldn't find the new load balancer yet
+	case err.(*cioerrors.LoadBalancerNotReadyError):
 		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
