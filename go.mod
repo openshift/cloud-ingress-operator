@@ -13,7 +13,8 @@ require (
 	github.com/operator-framework/operator-sdk v0.15.1
 	github.com/prometheus/client_golang v1.2.1
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20191028145041-f83a4685e152
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	google.golang.org/api v0.6.1-0.20190607001116-5213b8090861
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.2
 	k8s.io/apimachinery v0.17.2
@@ -22,7 +23,7 @@ require (
 	k8s.io/utils v0.0.0-20191217005138-9e5e9d854fcc
 	sigs.k8s.io/cluster-api-provider-aws v0.0.0-00010101000000-000000000000
 	sigs.k8s.io/controller-runtime v0.5.6
-	sigs.k8s.io/yaml v1.2.0
+	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
 // Pinned to kubernetes-1.16.2

@@ -173,7 +173,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 				switch err {
 				case nil:
 					// all good
-				case err.(*cioerrors.LoadBalancerNotFoundError):
+				case err.(*cioerrors.LoadBalancerNotReadyError):
 					// couldn't find the load balancer - it's likely still queued for creation
 					SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 					r.client.Status().Update(context.TODO(), instance)
@@ -249,8 +249,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{}, err
-	case err.(*cioerrors.LoadBalancerNotFoundError):
-		// couldn't find the new ELB yet
+	case err.(*cioerrors.LoadBalancerNotReadyError):
 		SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil

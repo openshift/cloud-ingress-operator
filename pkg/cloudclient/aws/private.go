@@ -369,7 +369,7 @@ func (c *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case elb.ErrCodeAccessPointNotFoundException:
-				return &awsLoadBalancer{}, errors.NewLoadBalancerNotFoundError(elbName)
+				return &awsLoadBalancer{}, errors.NewLoadBalancerNotReadyError()
 			default:
 				return &awsLoadBalancer{}, err
 			}
