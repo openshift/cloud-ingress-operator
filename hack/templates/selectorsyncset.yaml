@@ -10,5 +10,4 @@ spec:
   clusterDeploymentSelector:
     matchLabels:
       api.openshift.com/managed: "true"
-      hive.openshift.io/cluster-platform: "aws"
   resourceApplyMode: Sync
