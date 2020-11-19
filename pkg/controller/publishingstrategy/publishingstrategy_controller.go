@@ -205,10 +205,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
 		err := cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
 		if err != nil {
-			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
+			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
 			return reconcile.Result{}, err
 		}
-		log.Info(fmt.Sprintf("Update api.%s alias to internal NLB successful", clusterBaseDomain))
+		log.Info(fmt.Sprintf("Update api.%s alias to external NLB successful", clusterBaseDomain))
 		return reconcile.Result{}, nil
 	}
 	return reconcile.Result{}, nil
