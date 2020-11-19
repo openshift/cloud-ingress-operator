@@ -56,7 +56,7 @@ func (c *Client) deleteSSHDNS(ctx context.Context, kclient client.Client, instan
 func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	intIPAddress, err := c.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
 	}
 	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
@@ -75,10 +75,16 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 	if err != nil {
 		return err
 	}
-	err = c.releaseExternalIP(region, oldIP)
+	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
 		return err
 	}
+	staticIPName := infrastructureName + "-cluster-public-ip"
+	err = c.releaseExternalIP(region, staticIPName)
+	if err != nil {
+		return err
+	}
+	log.Info("Succcessfully set default API to private", "URL", apiDNSName, "IP Address", intIPAddress)
 	return nil
 }
 
@@ -129,6 +135,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	if err != nil {
 		return err
 	}
+	log.Info("Successfully set default API load balancer to external", "URL", apiDNSName, "IP address", staticIPAddress)
 	return nil
 }
 
@@ -303,7 +310,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 			lbName = lb.Name
 			_, err := c.computeService.ForwardingRules.Delete(c.projectID, region, lbName).Do()
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("Failed to delete ForwardingRule for external load balancer %v: %v", lb.Name, err)
 			}
 			err = removeGCPLBFromMasterMachines(kclient, lbName, masterList)
 			if err != nil {
@@ -353,7 +360,12 @@ func removeGCPLBFromMasterMachines(kclient client.Client, lbName string, masterN
 }
 
 func getGCPDecodedProviderSpec(machine machineapi.Machine) (*gcpproviderapi.GCPMachineProviderSpec, error) {
-	codecFactory := serializer.NewCodecFactory(runtime.NewScheme())
+	s := runtime.NewScheme()
+	err := gcpproviderapi.SchemeBuilder.AddToScheme(s)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to register gcpproviderapi types to scheme: %v", err)
+	}
+	codecFactory := serializer.NewCodecFactory(s)
 	decoder := codecFactory.UniversalDecoder(gcpproviderapi.SchemeGroupVersion)
 	obj, gvk, err := decoder.Decode(machine.Spec.ProviderSpec.Value.Raw, nil, nil)
 	if err != nil {
@@ -368,11 +380,16 @@ func getGCPDecodedProviderSpec(machine machineapi.Machine) (*gcpproviderapi.GCPM
 
 func encodeProviderSpec(in runtime.Object) (*runtime.RawExtension, error) {
 	var buf bytes.Buffer
-	codecFactory := serializer.NewCodecFactory(runtime.NewScheme())
+	s := runtime.NewScheme()
+	err := gcpproviderapi.SchemeBuilder.AddToScheme(s)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to register gcpproviderapi types to scheme: %v", err)
+	}
+	codecFactory := serializer.NewCodecFactory(s)
 	serializerInfo := codecFactory.SupportedMediaTypes()
 	encoder := codecFactory.EncoderForVersion(serializerInfo[0].Serializer, gcpproviderapi.SchemeGroupVersion)
 	if err := encoder.Encode(in, &buf); err != nil {
-		return nil, fmt.Errorf("encoding failed: %v", err)
+		return nil, fmt.Errorf("Encoding ProviderSpec failed: %v", err)
 	}
 	return &runtime.RawExtension{Raw: buf.Bytes()}, nil
 }
@@ -400,6 +417,17 @@ func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []stri
 }
 
 func (c *Client) createExternalIP(name string, scheme string, region string) (ipAddress string, err error) {
+	// Check if an external IP with the correct name already exists
+	addyList, err := c.computeService.Addresses.List(c.projectID, region).Do()
+	if err != nil {
+		return "", fmt.Errorf("Failed to retrieve list of GCP project's IP addresses: %v", err)
+	}
+	for _, ip := range addyList.Items {
+		if ip.Name == name {
+			log.Info("Static IP has already been reserved with the correct name. Reusing.", "Name", ip.Name, "IP Address", ip.Address)
+			return ip.Address, nil
+		}
+	}
 	// Create an external IP
 	eip := &compute.Address{
 		Name:        name,
@@ -408,14 +436,14 @@ func (c *Client) createExternalIP(name string, scheme string, region string) (ip
 	insertCall := c.computeService.Addresses.Insert(c.projectID, region, eip)
 	eipResp, err := insertCall.Do()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Request to reserve a new static IP failed: %v", err)
 	}
 
 	waitResp, err := c.computeService.RegionOperations.Wait(c.projectID, region, eipResp.Name).Do()
 
 	// Fail if we couldn't reserve a static IP within 2 minutes.
 	if waitResp.Status != "DONE" {
-		return "", err
+		return "", fmt.Errorf("Failed to reserve a static IP after waiting 120s: %v", err)
 	}
 
 	getCall := c.computeService.Addresses.Get(c.projectID, region, name)
@@ -423,31 +451,39 @@ func (c *Client) createExternalIP(name string, scheme string, region string) (ip
 	if err != nil {
 		return "", err
 	}
+	log.Info("Reserved a new static IP for external load balancer", "IP address", address.Address)
 	return address.Address, nil
 }
 
-func (c *Client) releaseExternalIP(region string, address string) error {
-	_, err := c.computeService.Addresses.Delete(c.projectID, region, address).Do()
+func (c *Client) releaseExternalIP(region string, addressName string) error {
+	_, err := c.computeService.Addresses.Delete(c.projectID, region, addressName).Do()
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to release External IP %v: %v", addressName, err)
 	}
 	return nil
 }
 
 func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, region string, ip string) error {
+	//Confirm the target pool is present and get its selflink URL
+	tpResp, err := c.computeService.TargetPools.Get(c.projectID, region, targetPool).Do()
+	if err != nil {
+		return fmt.Errorf("Unable to find expected targetPool %v: %v", targetPool, err)
+	}
+	tpURL := tpResp.SelfLink
 	i := &compute.ForwardingRule{
 		IPAddress:           ip,
 		Name:                name,
 		LoadBalancingScheme: scheme,
 		NetworkTier:         "PREMIUM",
-		Target:              targetPool,
+		Target:              tpURL,
 		PortRange:           "6443-6443",
 		IPProtocol:          "TCP",
 	}
-	_, err := c.computeService.ForwardingRules.Insert(c.projectID, region, i).Do()
+	_, err = c.computeService.ForwardingRules.Insert(c.projectID, region, i).Do()
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to create new ForwardingRule for %v: %v", name, err)
 	}
+	log.Info("Successfully created new ForwardingRule", "Name", name)
 	return nil
 }
 
@@ -459,7 +495,7 @@ func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newI
 	}
 	pubZoneRecords, err := c.dnsService.ResourceRecordSets.List(c.projectID, clusterDNS.Spec.PublicZone.ID).Do()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Failed to retrieve list of ResourceRecordSets from public zone %v : %v", clusterDNS.Spec.PublicZone.ID, err)
 	}
 	apiRRSets := []*gdnsv1.ResourceRecordSet{}
 	for _, rrset := range pubZoneRecords.Rrsets {
@@ -473,6 +509,7 @@ func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newI
 	oldIP = apiRRSets[0].Rrdatas[0]
 	if oldIP == newIP {
 		// A record is already pointing to the correct IP, nothing to do
+		log.Info("Default API A record is already pointing to the correct IP. No update necessary.", "IP address", newIP)
 		return oldIP, nil
 	}
 	dnsChange := &gdnsv1.Change{}

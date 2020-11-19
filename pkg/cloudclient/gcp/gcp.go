@@ -66,7 +66,8 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
 	credentials, err := google.CredentialsFromJSON(
 		ctx, serviceAccountJSON,
-		dnsv1.NdevClouddnsReadwriteScope)
+		dnsv1.NdevClouddnsReadwriteScope,
+		computev1.ComputeScope)
 	if err != nil {
 		return nil, err
 	}
