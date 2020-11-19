@@ -3,17 +3,23 @@ package gcp
 // "Private" or non-interface conforming methods
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 
+	"google.golang.org/api/compute/v1"
 	gdnsv1 "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -48,13 +54,82 @@ func (c *Client) deleteSSHDNS(ctx context.Context, kclient client.Client, instan
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
 func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
-	return errors.New("setDefaultAPIPrivate is not implemented")
+	intIPAddress, err := c.removeLoadBalancerFromMasterNodes(ctx, kclient)
+	if err != nil {
+		return err
+	}
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
+	if err != nil {
+		return err
+	}
+	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
+	oldIP, err := c.updateAPIARecord(kclient, apiDNSName, intIPAddress)
+	if err != nil {
+		return err
+	}
+	// If the IP wasn't updated, there is nothing else to do
+	if oldIP == intIPAddress {
+		return nil
+	}
+	region, err := getClusterRegion(kclient)
+	if err != nil {
+		return err
+	}
+	err = c.releaseExternalIP(region, oldIP)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
 func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return errors.New("setDefaultAPIPublic is not implemented")
+	region, err := getClusterRegion(kclient)
+	if err != nil {
+		return err
+	}
+	listCall := c.computeService.ForwardingRules.List(c.projectID, region)
+	response, err := listCall.Do()
+	if err != nil {
+		return err
+	}
+	for _, lb := range response.Items {
+		// This list of forwardingrules (LBs) includes any service LBs
+		// for application routers so check the port range to identify
+		// the external API LB.
+		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" {
+			// If there is already an external LB serving over the API port, there is nothing to do.
+			return nil
+		}
+	}
+	// Create a new external LB
+	infrastructureName, err := baseutils.GetClusterName(kclient)
+	if err != nil {
+		return err
+	}
+	//GCP ForwardingRule and TargetPool share the same name
+	extNLBName := infrastructureName + "-api"
+	staticIPName := infrastructureName + "-cluster-public-ip"
+
+	staticIPAddress, err := c.createExternalIP(staticIPName, "EXTERNAL", region)
+	if err != nil {
+		return err
+	}
+	err = c.createNetworkLoadBalancer(extNLBName, "EXTERNAL", extNLBName, region, staticIPAddress)
+	if err != nil {
+		return err
+	}
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
+	if err != nil {
+		return err
+	}
+	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
+	_, err = c.updateAPIARecord(kclient, apiDNSName, staticIPAddress)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
@@ -200,4 +275,216 @@ func getIPAddressesFromService(svc *corev1.Service) ([]string, error) {
 	}
 
 	return ips, nil
+}
+
+func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, error) {
+	region, err := getClusterRegion(kclient)
+	if err != nil {
+		return "", err
+	}
+
+	listCall := c.computeService.ForwardingRules.List(c.projectID, region)
+	response, err := listCall.Do()
+	if err != nil {
+		return "", err
+	}
+
+	masterList, err := baseutils.GetMasterMachines(kclient)
+	if err != nil {
+		return "", err
+	}
+	var intIPAddress, lbName string
+	for _, lb := range response.Items {
+		// This list of forwardingrules (LBs) includes any service LBs
+		// for application routers so check the port range to identify
+		// the external API LB.
+		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" {
+			//delete the LB and remove it from the masters
+			lbName = lb.Name
+			_, err := c.computeService.ForwardingRules.Delete(c.projectID, region, lbName).Do()
+			if err != nil {
+				return "", err
+			}
+			err = removeGCPLBFromMasterMachines(kclient, lbName, masterList)
+			if err != nil {
+				return "", err
+			}
+		}
+		// we need this to update DNS
+		if lb.LoadBalancingScheme == "INTERNAL" && lb.BackendService != "" {
+			// Unlike AWS, GCP NLBs don't have automatically assigned A records, just an external IP address
+			// Save the internal NLB's IP Address in order to update the API's A record in the public DNS zone.
+			intIPAddress = lb.IPAddress
+		}
+	}
+	return intIPAddress, nil
+}
+
+func getClusterRegion(kclient client.Client) (string, error) {
+	infra, err := baseutils.GetInfrastructureObject(kclient)
+	if err != nil {
+		return "", err
+	}
+	return infra.Status.PlatformStatus.GCP.Region, nil
+}
+
+func removeGCPLBFromMasterMachines(kclient client.Client, lbName string, masterNodes *machineapi.MachineList) error {
+	for _, machine := range masterNodes.Items {
+		providerSpecDecoded, err := getGCPDecodedProviderSpec(machine)
+		if err != nil {
+			log.Error(err, "Error retrieving decoded ProviderSpec for machine", "machine", machine.Name)
+			return err
+		}
+		lbList := providerSpecDecoded.TargetPools
+		newLBList := []string{}
+		for _, lb := range lbList {
+			if lb != lbName {
+				log.Info("Machine's LB does not match LB to remove", "Machine LB", lb, "LB to remove", lbName)
+				log.Info("Keeping machine's LB in machine object", "LB", lb, "Machine", machine.Name)
+				newLBList = append(newLBList, lb)
+			}
+		}
+		err = updateGCPLBList(kclient, lbList, newLBList, machine, providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error updating LB list for machine", "machine", machine.Name)
+		}
+	}
+	return nil
+}
+
+func getGCPDecodedProviderSpec(machine machineapi.Machine) (*gcpproviderapi.GCPMachineProviderSpec, error) {
+	codecFactory := serializer.NewCodecFactory(runtime.NewScheme())
+	decoder := codecFactory.UniversalDecoder(gcpproviderapi.SchemeGroupVersion)
+	obj, gvk, err := decoder.Decode(machine.Spec.ProviderSpec.Value.Raw, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Could not decode GCP ProviderSpec: %v", err)
+	}
+	spec, ok := obj.(*gcpproviderapi.GCPMachineProviderSpec)
+	if !ok {
+		return nil, fmt.Errorf("Unexpected object: %#v", gvk)
+	}
+	return spec, nil
+}
+
+func encodeProviderSpec(in runtime.Object) (*runtime.RawExtension, error) {
+	var buf bytes.Buffer
+	codecFactory := serializer.NewCodecFactory(runtime.NewScheme())
+	serializerInfo := codecFactory.SupportedMediaTypes()
+	encoder := codecFactory.EncoderForVersion(serializerInfo[0].Serializer, gcpproviderapi.SchemeGroupVersion)
+	if err := encoder.Encode(in, &buf); err != nil {
+		return nil, fmt.Errorf("encoding failed: %v", err)
+	}
+	return &runtime.RawExtension{Raw: buf.Bytes()}, nil
+}
+
+func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []string, machineToPatch machineapi.Machine, providerSpecDecoded *gcpproviderapi.GCPMachineProviderSpec) error {
+	baseToPatch := client.MergeFrom(machineToPatch.DeepCopy())
+	if !reflect.DeepEqual(oldLBList, newLBList) {
+		providerSpecDecoded.TargetPools = newLBList
+		newProviderSpecEncoded, err := encodeProviderSpec(providerSpecDecoded)
+		if err != nil {
+			log.Error(err, "Error encoding provider spec for machine", "machine", machineToPatch.Name)
+			return err
+		}
+		machineToPatch.Spec.ProviderSpec.Value = newProviderSpecEncoded
+		machineObj := machineToPatch.DeepCopyObject()
+		if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
+			log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machineToPatch.Name)
+			return err
+		}
+		log.Info("Updated master machine's LBs in providerSpec", "masterMachine", machineToPatch.Name)
+		return nil
+	}
+	log.Info("No need to update LBs for master machine", "masterMachine", machineToPatch.Name)
+	return nil
+}
+
+func (c *Client) createExternalIP(name string, scheme string, region string) (ipAddress string, err error) {
+	// Create an external IP
+	eip := &compute.Address{
+		Name:        name,
+		AddressType: scheme,
+	}
+	insertCall := c.computeService.Addresses.Insert(c.projectID, region, eip)
+	eipResp, err := insertCall.Do()
+	if err != nil {
+		return "", err
+	}
+
+	waitResp, err := c.computeService.RegionOperations.Wait(c.projectID, region, eipResp.Name).Do()
+
+	// Fail if we couldn't reserve a static IP within 2 minutes.
+	if waitResp.Status != "DONE" {
+		return "", err
+	}
+
+	getCall := c.computeService.Addresses.Get(c.projectID, region, name)
+	address, err := getCall.Do()
+	if err != nil {
+		return "", err
+	}
+	return address.Address, nil
+}
+
+func (c *Client) releaseExternalIP(region string, address string) error {
+	_, err := c.computeService.Addresses.Delete(c.projectID, region, address).Do()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, region string, ip string) error {
+	i := &compute.ForwardingRule{
+		IPAddress:           ip,
+		Name:                name,
+		LoadBalancingScheme: scheme,
+		NetworkTier:         "PREMIUM",
+		Target:              targetPool,
+		PortRange:           "6443-6443",
+		IPProtocol:          "TCP",
+	}
+	_, err := c.computeService.ForwardingRules.Insert(c.projectID, region, i).Do()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newIP string) (oldIP string, err error) {
+	clusterDNS := &configv1.DNS{}
+	err = kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	if err != nil {
+		return "", err
+	}
+	pubZoneRecords, err := c.dnsService.ResourceRecordSets.List(c.projectID, clusterDNS.Spec.PublicZone.ID).Do()
+	if err != nil {
+		return "", err
+	}
+	apiRRSets := []*gdnsv1.ResourceRecordSet{}
+	for _, rrset := range pubZoneRecords.Rrsets {
+		if rrset.Name == recordName {
+			apiRRSets = append(apiRRSets, rrset)
+		}
+	}
+	if len(apiRRSets) != 1 {
+		return "", fmt.Errorf("Expected to find 1 A record for API, found %d", len(apiRRSets))
+	}
+	oldIP = apiRRSets[0].Rrdatas[0]
+	if oldIP == newIP {
+		// A record is already pointing to the correct IP, nothing to do
+		return oldIP, nil
+	}
+	dnsChange := &gdnsv1.Change{}
+	dnsChange.Deletions = append(dnsChange.Deletions, apiRRSets[0])
+	updatedRRSet := *apiRRSets[0]
+	updatedRRSet.Rrdatas = []string{newIP}
+	dnsChange.Additions = append(dnsChange.Additions, &updatedRRSet)
+	changesCall := c.dnsService.Changes.Create(c.projectID, clusterDNS.Spec.PublicZone.ID, dnsChange)
+	_, err = changesCall.Do()
+	if err != nil {
+		return "", err
+	}
+
+	return oldIP, nil
 }

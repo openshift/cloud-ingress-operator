@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"golang.org/x/oauth2/google"
+	computev1 "google.golang.org/api/compute/v1"
 	dnsv1 "google.golang.org/api/dns/v1"
 	"google.golang.org/api/option"
 
@@ -27,8 +28,9 @@ var (
 
 // Client represents a GCP Client
 type Client struct {
-	projectID  string
-	dnsService *dnsv1.Service
+	projectID      string
+	dnsService     *dnsv1.Service
+	computeService *computev1.Service
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
@@ -74,9 +76,15 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 		return nil, err
 	}
 
+	computeService, err := computev1.NewService(ctx, option.WithCredentials(credentials))
+	if err != nil {
+		return nil, err
+	}
+
 	return &Client{
-		projectID:  credentials.ProjectID,
-		dnsService: dnsService,
+		projectID:      credentials.ProjectID,
+		dnsService:     dnsService,
+		computeService: computeService,
 	}, nil
 }
 
