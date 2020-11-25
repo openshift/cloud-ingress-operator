@@ -1,19 +1,13 @@
 package publishingstrategy
 
 import (
-	"context"
-	"fmt"
-	"reflect"
-	"strings"
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
-	"github.com/openshift/cloud-ingress-operator/pkg/apis"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -211,64 +205,6 @@ func mockPublishingStrategy() *cloudingressv1alpha1.PublishingStrategy {
 	}
 }
 
-// Tests the convertIngressControllerToMap function to make sure we have the correct maps
-func TestConvertIngressControllerToMap(t *testing.T) {
-
-	convert := convertIngressControllerToMap(mockIngressControllerList().Items)
-
-	expected := map[string]operatorv1.IngressController{"example-domain": mockIngressControllerList().Items[0], "example-non-default-domain": mockIngressControllerList().Items[1], "example-domain-3": mockIngressControllerList().Items[2]}
-
-	equal := reflect.DeepEqual(convert, expected)
-	if !equal {
-		t.Errorf("got %v, expect %v \n", convert, expected)
-	}
-}
-
-// Tests the isOnCluster function given an applicationingress and an ingresscontroller
-func TestIsOnCluster(t *testing.T) {
-
-	onCluster := isOnCluster(mockApplicationIngress(), mockIngressControllerList().Items[0])
-	if !onCluster {
-		t.Logf("compare scope %s, %s", string(mockIngressControllerList().Items[0].Status.EndpointPublishingStrategy.LoadBalancer.Scope), strings.Title(strings.ToLower(string(mockApplicationIngress().Listening))))
-		t.Logf("compare domain %s, %s", mockIngressControllerList().Items[0].Spec.Domain, mockApplicationIngress().DNSName)
-		t.Logf("compare certificate %s, %s", mockIngressControllerList().Items[0].Spec.DefaultCertificate.Name, mockApplicationIngress().Certificate.Name)
-		t.Errorf("got false but expect true")
-	}
-
-	notOnCluster := isOnCluster(mockApplicationIngress(), mockIngressControllerList().Items[1])
-	if notOnCluster == true {
-		t.Errorf("got true but expect false \n")
-	}
-}
-
-// nil
-func TestIsOnClusterNil(t *testing.T) {
-	onCluster := isOnCluster(mockApplicationIngressExternal(), mockIngressControllerList().Items[2])
-	if !onCluster {
-		t.Logf("compare domain %s, %s", mockIngressControllerList().Items[2].Spec.Domain, mockApplicationIngressExternal().DNSName)
-		t.Logf("compare certificate %s, %s", mockIngressControllerList().Items[2].Spec.DefaultCertificate.Name, mockApplicationIngressExternal().Certificate.Name)
-		t.Errorf("got false but expect true")
-	}
-}
-
-// Tests the checkExistingIngress function
-// Given a map of existing ingresscontroller and an application ingress, if applicationingress is there expect true
-// If applicationingress is not on cluster, expect false
-func TestCheckExistingIngress(t *testing.T) {
-
-	existingIngressMap := map[string]operatorv1.IngressController{"example-domain": mockIngressControllerList().Items[0], "example-non-default-domain": mockIngressControllerList().Items[1]}
-
-	check0 := checkExistingIngress(existingIngressMap, mockApplicationIngress())
-	if !check0 {
-		t.Errorf("got false but expect true \n")
-	}
-
-	check1 := checkExistingIngress(existingIngressMap, mockApplicationIngressNotOnCluster())
-	if check1 {
-		t.Errorf("got true but expect false \n")
-	}
-}
-
 func TestGetIngressName(t *testing.T) {
 
 	domainName := "apps2.test.domain_name.org"
@@ -281,7 +217,7 @@ func TestGetIngressName(t *testing.T) {
 	}
 }
 
-func TestNewApplicationIngressControllerCR(t *testing.T) {
+func TestGenerateIngressController(t *testing.T) {
 
 	// expected result
 	expected := &operatorv1.IngressController{
@@ -293,7 +229,7 @@ func TestNewApplicationIngressControllerCR(t *testing.T) {
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: "example-cert-nondefault",
 			},
-			Domain: "example-domain-nondefault",
+			Domain: "example-domain-nondefault.example.com",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 				Type: operatorv1.LoadBalancerServiceStrategyType,
 				LoadBalancer: &operatorv1.LoadBalancerStrategy{
@@ -306,15 +242,14 @@ func TestNewApplicationIngressControllerCR(t *testing.T) {
 		},
 	}
 
-	// set up function param
-	listening := string(mockApplicationIngressNotOnCluster().Listening)
-	domain := mockApplicationIngressNotOnCluster().DNSName
-	newCertificate := &corev1.LocalObjectReference{
-		Name: mockApplicationIngressNotOnCluster().Certificate.Name,
+	applicationIngress := cloudingressv1alpha1.ApplicationIngress{
+		Listening:   "External",
+		Default:     false,
+		DNSName:     "example-domain-nondefault.example.com",
+		Certificate: corev1.SecretReference{Name: "example-cert-nondefault", Namespace: "openshift-ingress-operator"},
 	}
-	routeSelector := mockApplicationIngressNotOnCluster().RouteSelector.MatchLabels
 
-	result, _ := newApplicationIngressControllerCR("apps3", listening, domain, newCertificate, routeSelector)
+	result := generateIngressController(applicationIngress)
 
 	// since these are pointers to different struct the pointer addresses are not the same, therefore reflect.DeepEqual won't work
 	// compare parts that we can
@@ -323,243 +258,300 @@ func TestNewApplicationIngressControllerCR(t *testing.T) {
 	}
 }
 
-// create new fake k8s client to mock API calls
-func newTestReconciler() *ReconcilePublishingStrategy {
-	return &ReconcilePublishingStrategy{
-		client: fake.NewFakeClient(),
-		scheme: scheme.Scheme,
+func TestValidateStaticStatus(t *testing.T) {
+
+	// Build ApplicationIngress
+	applicationIngress := cloudingressv1alpha1.ApplicationIngress{
+		Listening:   "internal",
+		Default:     true,
+		DNSName:     "example.com",
+		Certificate: corev1.SecretReference{Name: "example-cert-nondefault", Namespace: "openshift-ingress-operator"},
 	}
-}
+	// Generate desired IngressContoller
+	desiredIngressController := generateIngressController(applicationIngress)
 
-// TestIngressHandle tests both the defaultIngressHandle and the nonDefaultIngressHandle functions
-func TestIngressHandle(t *testing.T) {
-	// set up schemes
-	ctx := context.TODO()
-	r := newTestReconciler()
-	s := scheme.Scheme
-
-	if err := operatorv1.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
-	}
-
-	if err := apis.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add route scheme (%v)", err)
-	}
-
-	err := r.client.Create(ctx, mockDefaultIngressController())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	err = r.client.Create(ctx, mockNonDefaultIngressController())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	err = r.client.Create(ctx, mockPublishingStrategy())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	list := &operatorv1.IngressControllerList{}
-	opts := client.ListOptions{}
-
-	err = r.client.List(ctx, list, &opts)
-	if err != nil {
-		t.Errorf("couldn't get ingresscontroller list %s", err)
-	}
-	// given a new defaultIngressController that does not exist on cluster
-	// the result should be this new default ingresscontroller
-
-	newCertificate := &corev1.LocalObjectReference{
-		Name: "new-certificate",
-	}
-
-	err = r.defaultIngressHandle(mockPublishingStrategy().Spec.ApplicationIngress[0], list, newCertificate)
-	if err != nil {
-		t.Fatalf("couldn't handle default ingress")
-	}
-
-	err = r.nonDefaultIngressHandle(mockPublishingStrategy().Spec.ApplicationIngress[1], list, newCertificate)
-	if err != nil {
-		t.Fatalf("couldn't handle non-default ingress")
-	}
-}
-
-// TestDeleteIngressWithAnnotation tests the deleteIngressWithAnnotation
-func TestDeleteIngressWithAnnotation(t *testing.T) {
-	// set up schemes
-	ctx := context.TODO()
-	r := newTestReconciler()
-	s := scheme.Scheme
-
-	if err := operatorv1.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
-	}
-
-	if err := apis.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add route scheme (%v)", err)
-	}
-
-	err := r.client.Create(ctx, mockNonDefaultIngressController())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	err = r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
-	if err != nil {
-		t.Errorf("couldn't create ingress without annotation")
-	}
-
-	err = r.client.Create(ctx, mockPublishingStrategy())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	ingressControllerList := &operatorv1.IngressControllerList{}
-	opts := client.ListOptions{}
-
-	err = r.client.List(ctx, ingressControllerList, &opts)
-	if err != nil {
-		t.Errorf("couldn't get ingresscontroller list %s", err)
-	}
-	// if ingress without annotation hit method, then it should not be removed
-	err = r.deleteIngressWithAnnotation(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
-	if err != nil {
-		t.Fatalf("couldn't delete ingress")
-	}
-
-	err = r.client.List(ctx, ingressControllerList, &opts)
-	if err != nil {
-		t.Errorf("couldn't get ingresscontroller list %s", err)
-	}
-
-	t.Logf(fmt.Sprintf("ingress list: %v", ingressControllerList.Items))
-
-	if ingressControllerList.Items[1].Spec.Domain != "apps2.exaple-nondefault-domain-with-no-annotation" {
-		t.Fatalf("expect nondefault ingress to be on cluster but it is not")
-	}
-}
-
-func TestContains(t *testing.T) {
-	// set up schemes
-	ctx := context.TODO()
-	r := newTestReconciler()
-	s := scheme.Scheme
-
-	if err := operatorv1.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
-	}
-
-	err := r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	if err := apis.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add route scheme (%v)", err)
-	}
-
-	err = r.client.Create(ctx, mockPublishingStrategy())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	checkContains := contains(mockPublishingStrategy().Spec.ApplicationIngress, mockNonDefaultIngressNoAnnotation())
-	if checkContains {
-		t.Errorf("expect false but got true")
-	}
-}
-
-func TestEnsureIngressControllersExist(t *testing.T) {
-	// set up schemes
-	ctx := context.TODO()
-	r := newTestReconciler()
-	s := scheme.Scheme
-
-	if err := operatorv1.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add operatorv1 scheme (%v)", err)
-	}
-
-	if err := apis.AddToScheme(s); err != nil {
-		t.Fatalf("Unable to add route scheme (%v)", err)
-	}
-
-	err := r.client.Create(ctx, mockNonDefaultIngressController())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	err = r.client.Create(ctx, mockNonDefaultIngressNoAnnotation())
-	if err != nil {
-		t.Errorf("couldn't create ingress without annotation")
-	}
-
-	err = r.client.Create(ctx, mockPublishingStrategy())
-	if err != nil {
-		t.Errorf("couldn't create ingresscontroller %s", err)
-	}
-
-	ingressControllerList := &operatorv1.IngressControllerList{}
-	opts := client.ListOptions{}
-
-	err = r.client.List(ctx, ingressControllerList, &opts)
-	if err != nil {
-		t.Errorf("couldn't get ingresscontroller list %s", err)
-	}
-
-	t.Logf(fmt.Sprintf("ingress list: %v", ingressControllerList.Items))
-	t.Logf(fmt.Sprintf("appingress list: %v", mockPublishingStrategy().Spec.ApplicationIngress))
-
-	// expected to return false as applicationIngressList does not match with IngressControllerList
-	ensureFalse := r.ensureIngressControllersExist(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerList)
-	if ensureFalse {
-		t.Errorf("Expected false but got true")
-	}
-
-	ingressControllerListTrue := &operatorv1.IngressControllerList{
-		Items: []operatorv1.IngressController{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Spec: operatorv1.IngressControllerSpec{
-					Domain: "exaple-domain-to-pass-in",
-					DefaultCertificate: &corev1.LocalObjectReference{
-						Name: "",
-					},
-				},
-				Status: operatorv1.IngressControllerStatus{
-					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
-						Type: operatorv1.LoadBalancerServiceStrategyType,
-						LoadBalancer: &operatorv1.LoadBalancerStrategy{
-							Scope: operatorv1.LoadBalancerScope("External"),
-						},
-					},
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "apps2",
-				},
-				Spec: operatorv1.IngressControllerSpec{
-					Domain: "apps2.exaple-nondefault-domain-to-pass-in",
-				},
-				Status: operatorv1.IngressControllerStatus{
-					EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
-						Type: operatorv1.LoadBalancerServiceStrategyType,
-						LoadBalancer: &operatorv1.LoadBalancerStrategy{
-							Scope: operatorv1.LoadBalancerScope("External"),
-						},
-					},
+	var replicas int32 = 2
+	// Build "actual" IngressController that should fail
+	actualIngressController1 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			Replicas: &replicas,
+		},
+		Status: operatorv1.IngressControllerStatus{
+			Domain: "example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
 				},
 			},
 		},
 	}
 
-	// applicationIngress list matches with ingressController list, expected true
-	ensureTrue := r.ensureIngressControllersExist(mockPublishingStrategy().Spec.ApplicationIngress, ingressControllerListTrue)
-	if !ensureTrue {
-		t.Errorf("Expected false but got true")
+	result := validateStaticStatus(*actualIngressController1, desiredIngressController.Spec)
+
+	if result == true {
+		t.Errorf("Expected IngressController and desired config to be different")
+	}
+
+	// Build "actual" IngressController that should pass
+	actualIngressController2 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			Replicas: &replicas,
+		},
+		Status: operatorv1.IngressControllerStatus{
+			Domain: "example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.InternalLoadBalancer,
+				},
+			},
+		},
+	}
+
+	result2 := validateStaticStatus(*actualIngressController2, desiredIngressController.Spec)
+
+	if result2 == false {
+		t.Errorf("Expected IngressController and desired config to be the same: %+v\n %+v\n", actualIngressController2.Status.EndpointPublishingStrategy.LoadBalancer.Scope, desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope)
+	}
+}
+
+func TestValidateStaticSpec(t *testing.T) {
+
+	// Build ApplicationIngress
+	applicationIngress := cloudingressv1alpha1.ApplicationIngress{
+		Listening:   "external",
+		Default:     false,
+		DNSName:     "example-domain-nondefault.example.com",
+		Certificate: corev1.SecretReference{Name: "example-cert-nondefault", Namespace: "openshift-ingress-operator"},
+	}
+	// Generate desired IngressContoller
+	desiredIngressController := generateIngressController(applicationIngress)
+
+	// Build "actual" IngressController that should fail
+	actualIngressController1 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{},
+			},
+		},
+	}
+
+	result := validateStaticSpec(*actualIngressController1, desiredIngressController.Spec)
+
+	if result == true {
+		t.Errorf("Expected IngressController and desired config to be different")
+	}
+
+	// Build "actual" IngressController that should pass
+	actualIngressController2 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain-nondefault.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{},
+			},
+		},
+	}
+
+	result2 := validateStaticSpec(*actualIngressController2, desiredIngressController.Spec)
+
+	if result2 == false {
+		t.Errorf("Expected IngressController and desired config to be the same: %+v\n %+v\n", actualIngressController2.Spec.EndpointPublishingStrategy, desiredIngressController.Spec.EndpointPublishingStrategy)
+	}
+
+}
+
+func TestValidatePatchableSpec(t *testing.T) {
+
+	// Build ApplicationIngress
+	applicationIngress := cloudingressv1alpha1.ApplicationIngress{
+		Listening:   "External",
+		Default:     true,
+		DNSName:     "example-domain-nondefault.example.com",
+		Certificate: corev1.SecretReference{Name: "example-cert-nondefault", Namespace: "openshift-ingress-operator"},
+		RouteSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"foo": "bar"},
+		},
+	}
+	// Generate desired IngressContoller
+	desiredIngressController := generateIngressController(applicationIngress)
+
+	// Build "actual" IngressController that should fail
+	actualIngressController1 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{},
+			},
+		},
+	}
+
+	result, field := validatePatchableSpec(*actualIngressController1, desiredIngressController.Spec)
+
+	if result == true {
+		t.Errorf("Expected IngressController and desired config to be different")
+	} else if field != IngressControllerSelector {
+		t.Errorf("Expected IngressController and desired config to have different RouteSelectors different")
+	}
+
+	// Build "actual" IngressController that should pass
+	actualIngressController2 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"foo": "bar"},
+			},
+		},
+	}
+
+	result2, _ := validatePatchableSpec(*actualIngressController2, desiredIngressController.Spec)
+
+	if result2 == false {
+		t.Errorf("Expected IngressController and desired config to be the same %+v\n %+v\n", actualIngressController2.Spec.RouteSelector.MatchLabels, desiredIngressController.Spec.RouteSelector.MatchLabels)
+	}
+}
+
+func TestValidatePatchableStatus(t *testing.T) {
+
+	// Build ApplicationIngress
+	applicationIngress := cloudingressv1alpha1.ApplicationIngress{
+		Listening:   "External",
+		Default:     true,
+		DNSName:     "example-domain-nondefault.example.com",
+		Certificate: corev1.SecretReference{Name: "example-cert-nondefault", Namespace: "openshift-ingress-operator"},
+		RouteSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{"foo": "bar"},
+		},
+	}
+	// Generate desired IngressContoller
+	desiredIngressController := generateIngressController(applicationIngress)
+
+	// Build "actual" IngressController that should fail
+	actualIngressController1 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+			RouteSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{},
+			},
+		},
+	}
+
+	result, field := validatePatchableStatus(*actualIngressController1, desiredIngressController.Spec)
+
+	if result == true {
+		t.Errorf("Expected IngressController and desired config to be different")
+	} else if field != IngressControllerSelector {
+		t.Errorf("Expected IngressController and desired config to have different RouteSelectors different")
+	}
+
+	// Build "actual" IngressController that should pass
+	actualIngressController2 := &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "apps3",
+			Namespace: "openshift-ingress-operator",
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &corev1.LocalObjectReference{
+				Name: "example-cert-nondefault",
+			},
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: operatorv1.ExternalLoadBalancer,
+				},
+			},
+		},
+		Status: operatorv1.IngressControllerStatus{
+			Selector: "foo=bar",
+		},
+	}
+
+	result2, _ := validatePatchableStatus(*actualIngressController2, desiredIngressController.Spec)
+
+	if result2 == false {
+		t.Errorf("Expected IngressController and desired config to be the same %+v\n %+v\n", actualIngressController2.Status.Selector, desiredIngressController.Spec.RouteSelector.MatchLabels)
+	}
+}
+
+// create new fake k8s client to mock API calls
+func newTestReconciler() *ReconcilePublishingStrategy {
+	return &ReconcilePublishingStrategy{
+		client: fake.NewFakeClient(),
+		scheme: scheme.Scheme,
 	}
 }

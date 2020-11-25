@@ -127,6 +127,7 @@ objects:
         - get
         - list
         - watch
+        - patch
         - delete
         - create
       - apiGroups:
