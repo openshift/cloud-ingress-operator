@@ -100,15 +100,6 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	if err != nil {
 		return err
 	}
-	for _, lb := range response.Items {
-		// This list of forwardingrules (LBs) includes any service LBs
-		// for application routers so check the port range to identify
-		// the external API LB.
-		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" {
-			// If there is already an external LB serving over the API port, there is nothing to do.
-			return nil
-		}
-	}
 	// Create a new external LB
 	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
@@ -117,7 +108,15 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	//GCP ForwardingRule and TargetPool share the same name
 	extNLBName := infrastructureName + "-api"
 	staticIPName := infrastructureName + "-cluster-public-ip"
-
+	for _, lb := range response.Items {
+		// This list of forwardingrules (LBs) includes any service LBs
+		// for application routers so check the port range to identify
+		// the external API LB.
+		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" && lb.Name == extNLBName {
+			// If there is already an external LB serving over the API port, there is nothing to do.
+			return nil
+		}
+	}
 	staticIPAddress, err := c.createExternalIP(staticIPName, "EXTERNAL", region)
 	if err != nil {
 		return err
@@ -300,12 +299,18 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	if err != nil {
 		return "", err
 	}
+	infrastructureName, err := baseutils.GetClusterName(kclient)
+	if err != nil {
+		return "", err
+	}
+	extNLBName := infrastructureName + "-api"
+	intLBName := infrastructureName + "-api-internal"
 	var intIPAddress, lbName string
 	for _, lb := range response.Items {
 		// This list of forwardingrules (LBs) includes any service LBs
-		// for application routers so check the port range to identify
+		// for application routers so check the port range and name to identify
 		// the external API LB.
-		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" {
+		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" && lb.Name == extNLBName {
 			//delete the LB and remove it from the masters
 			lbName = lb.Name
 			_, err := c.computeService.ForwardingRules.Delete(c.projectID, region, lbName).Do()
@@ -318,7 +323,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 			}
 		}
 		// we need this to update DNS
-		if lb.LoadBalancingScheme == "INTERNAL" && lb.BackendService != "" {
+		if lb.LoadBalancingScheme == "INTERNAL" && lb.BackendService != "" && lb.Name == intLBName {
 			// Unlike AWS, GCP NLBs don't have automatically assigned A records, just an external IP address
 			// Save the internal NLB's IP Address in order to update the API's A record in the public DNS zone.
 			intIPAddress = lb.IPAddress
