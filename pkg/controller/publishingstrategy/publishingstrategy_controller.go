@@ -40,11 +40,6 @@ type patchField string
 var IngressControllerSelector patchField = "IngressControllerSelector"
 var IngressControllerCertificate patchField = "IngressControllerCertificate"
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -120,6 +115,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 
+	// Retrieve the cluster base domain. Discard the error since it's just for logging messages.
+	// In case of failure, clusterBaseDomain is an empty string.
+	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.client)
+
 	ownedIngressControllers := getIngressWithCloudIngressOpreatorOwnerAnnotation(*ingressControllerList)
 
 	/* To ensure that the set of all IngressControllers owned by cloud-ingress-operator
@@ -160,11 +159,20 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 
 		// Set the IngressController CRs name based on the DNSName
 		ingressName := getIngressName(ingressDefinition.DNSName)
-		// The default IngressController should be named "default" which is expected by cluster-ingress-operator
+
 		if ingressDefinition.Default {
+			// The default IngressController should be named "default" which is expected by cluster-ingress-operator
 			ingressName = "default"
+
+			// Safety check, to ensure that the default ingress controller DNS name matches the cluster's base domain
+			// This protects against malformed publishing strategies
+			if !strings.HasSuffix(ingressDefinition.DNSName, clusterBaseDomain) {
+				return reconcile.Result{}, fmt.Errorf("default ingress DNS doesn't match cluster's base domain: got %v, expected to end in %v", ingressDefinition.DNSName, clusterBaseDomain)
+			}
 		}
+
 		reqLogger.Info(fmt.Sprintf("Checking ApplicationIngress for %s IngressController CR", ingressName))
+
 		/* Each ApplicationIngress refers to an IngressController CR. Here, the namespaced name
 		is built based on that reference so that an attempt can be made to GET the IngressController
 		This verifies that the IngressController exists and uses that for other checks, or triggers a creation
@@ -300,10 +308,6 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 		return reconcile.Result{}, err
 	}
 	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
-
-	// Discard the error since it's just for logging messages.
-	// In case of failure, clusterBaseDomain is an empty string.
-	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.client)
 
 	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
 		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
