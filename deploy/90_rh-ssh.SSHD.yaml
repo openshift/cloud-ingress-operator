@@ -7,3 +7,7 @@ spec:
   dnsName: rh-ssh
   allowedCIDRBlocks: "${{ALLOWED_CIDR_BLOCKS}}"
   image: quay.io/app-sre/sre-ssh-proxy:v49-1fde8e5
+  configMapSelector:
+    matchExpressions:
+    - key: api.openshift.com/authorized-keys
+      operator: Exists
