@@ -213,8 +213,10 @@ func TestAWSProviderDecode(t *testing.T) {
 
 type mockDescribeELBv2LoadBalancers struct {
 	elbv2iface.ELBV2API
-	Resp    elbv2.DescribeLoadBalancersOutput
-	ErrResp string
+	Resp        elbv2.DescribeLoadBalancersOutput
+	ErrResp     string
+	TagsResp    elbv2.DescribeTagsOutput
+	TagsErrResp string
 }
 
 func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancers(_ *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
@@ -225,10 +227,53 @@ func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancers(_ *elbv2.DescribeL
 	return &m.Resp, e
 }
 
-func TestListAllNLBs(t *testing.T) {
+func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancersPages(input *elbv2.DescribeLoadBalancersInput, fn func(*elbv2.DescribeLoadBalancersOutput, bool) bool) error {
+	out, e := m.DescribeLoadBalancers(input)
+	if e != nil {
+		return e
+	}
+	// Simulate multiple output pages by sending the callback function
+	// one LoadBalancer at a time.
+	for index, loadBalancer := range out.LoadBalancers {
+		fakeOut := &elbv2.DescribeLoadBalancersOutput{
+			LoadBalancers: []*elbv2.LoadBalancer{loadBalancer},
+		}
+		lastPage := index+1 == len(out.LoadBalancers)
+		if !fn(fakeOut, lastPage) {
+			break
+		}
+	}
+	return nil
+}
+
+func (m mockDescribeELBv2LoadBalancers) DescribeTags(input *elbv2.DescribeTagsInput) (*elbv2.DescribeTagsOutput, error) {
+	var e awserr.Error
+	if m.TagsErrResp != "" {
+		e = awserr.New(m.TagsErrResp, m.TagsErrResp, fmt.Errorf("Error raised by test"))
+	}
+	return &m.TagsResp, e
+}
+
+func TestListOwnedNLBs(t *testing.T) {
+	clusterName := "list-owned-nlbs-test"
+	infraObj := testutils.CreateInfraObject(clusterName, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+	objs := []runtime.Object{infraObj}
+	mocks := testutils.NewTestMock(t, objs)
+
+	ownedTag := &elbv2.Tag{
+		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+		Value: aws.String("owned"),
+	}
+	sharedTag := &elbv2.Tag{
+		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+		Value: aws.String("shared"),
+	}
+
 	tests := []struct {
-		// Resp is the mocked response
+		// Resp is the mocked DescribeLoadBalancers response
 		Resp elbv2.DescribeLoadBalancersOutput
+		// TagsResp is the mocked DescribeTags response
+		TagsResp elbv2.DescribeTagsOutput
 		// Expected is what the test wants to see given the input
 		Expected      []loadBalancerV2
 		ErrResp       string
@@ -238,10 +283,11 @@ func TestListAllNLBs(t *testing.T) {
 			// Nothing back from Amazon
 			ErrorExpected: false,
 			Resp:          elbv2.DescribeLoadBalancersOutput{LoadBalancers: []*elbv2.LoadBalancer{}},
+			TagsResp:      elbv2.DescribeTagsOutput{},
 			Expected:      []loadBalancerV2{},
 		},
 		{
-			// Return one NLB
+			// One NLB, but not owned by the cluster
 			ErrResp: "",
 			Resp: elbv2.DescribeLoadBalancersOutput{
 				LoadBalancers: []*elbv2.LoadBalancer{
@@ -269,6 +315,53 @@ func TestListAllNLBs(t *testing.T) {
 					},
 				},
 			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123456"),
+						Tags:        []*elbv2.Tag{},
+					},
+				},
+			},
+			Expected: []loadBalancerV2{},
+		},
+		{
+			// One NLB, owned by the cluster
+			ErrResp: "",
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb-ext"),
+						Scheme:                aws.String("internal-facing"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123456"),
+						Tags:        []*elbv2.Tag{ownedTag},
+					},
+				},
+			},
 			Expected: []loadBalancerV2{
 				{
 					canonicalHostedZoneNameID: "/test/ABC123",
@@ -280,13 +373,92 @@ func TestListAllNLBs(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Two NLBs, but only one is owned by the cluster
+			ErrResp: "",
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test1.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb1-ext"),
+						Scheme:                aws.String("internal-facing"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test2.example.com"),
+						LoadBalancerArn:       aws.String("arn:654321"),
+						LoadBalancerName:      aws.String("testlb2-ext"),
+						Scheme:                aws.String("internal-facing"),
+						VpcId:                 aws.String("vpc-654321"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("bar"),
+										IpAddress:    aws.String("20.20.20.20"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123456"),
+						Tags:        []*elbv2.Tag{sharedTag},
+					},
+					{
+						ResourceArn: aws.String("arn:654321"),
+						Tags:        []*elbv2.Tag{ownedTag},
+					},
+				},
+			},
+			Expected: []loadBalancerV2{
+				{
+					canonicalHostedZoneNameID: "/test/ABC123",
+					dnsName:                   "test2.example.com",
+					loadBalancerArn:           "arn:654321",
+					loadBalancerName:          "testlb2-ext",
+					scheme:                    "internal-facing",
+					vpcID:                     "vpc-654321",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		client := &Client{
-			elbv2Client: mockDescribeELBv2LoadBalancers{Resp: test.Resp, ErrResp: test.ErrResp},
+			elbv2Client: mockDescribeELBv2LoadBalancers{
+				Resp:        test.Resp,
+				ErrResp:     test.ErrResp,
+				TagsResp:    test.TagsResp,
+				TagsErrResp: "",
+			},
 		}
-		resp, err := client.listAllNLBs()
+		resp, err := client.listOwnedNLBs(mocks.FakeKubeClient)
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
 			t.Fatalf("Test return mismatch. Expect error? %t: Return %+v", test.ErrorExpected, err)
 		}

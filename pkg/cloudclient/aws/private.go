@@ -192,7 +192,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
 func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	nlbs, err := c.listAllNLBs()
+	nlbs, err := c.listOwnedNLBs(kclient)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func (c *Client) subnetNameToSubnetIDLookup(subnetNames []string) ([]string, err
 
 // removeLoadBalancerFromMasterNodes
 func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, string, error) {
-	nlbs, err := c.listAllNLBs()
+	nlbs, err := c.listOwnedNLBs(kclient)
 	if err != nil {
 		return "", "", err
 	}
@@ -695,16 +695,72 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	return intDNSName, intHostedZoneID, nil
 }
 
-// listAllNLBs uses the DescribeLoadBalancersV2 to get back a list of all
-// Network Load Balancers
-func (c *Client) listAllNLBs() ([]loadBalancerV2, error) {
-	i := &elbv2.DescribeLoadBalancersInput{}
-	output, err := c.elbv2Client.DescribeLoadBalancers(i)
+// listOwnedNLBs uses the DescribeLoadBalancersV2 to get back a list of all
+// Network Load Balancers, then filters the list to those owned by the cluster
+func (c *Client) listOwnedNLBs(kclient client.Client) ([]loadBalancerV2, error) {
+	// Build the load balancer tag to look for.
+	clusterName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
 		return []loadBalancerV2{}, err
 	}
-	loadBalancers := make([]loadBalancerV2, 0)
-	for _, loadBalancer := range output.LoadBalancers {
+	ownedTag := &elbv2.Tag{
+		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+		Value: aws.String("owned"),
+	}
+
+	// Collect all load balancers into a map, indexed by ARN.
+	// Simultaneously, collect all load balancer ARNs into a slice.
+	// The slice is used to request load balancer tags in batches.
+	resourceArns := make([]string, 0, 20)
+	loadBalancerMap := make(map[string]*elbv2.LoadBalancer)
+	err = c.elbv2Client.DescribeLoadBalancersPages(
+		&elbv2.DescribeLoadBalancersInput{},
+		func(page *elbv2.DescribeLoadBalancersOutput, lastPage bool) bool {
+			for _, loadBalancer := range page.LoadBalancers {
+				arn := aws.StringValue(loadBalancer.LoadBalancerArn)
+				resourceArns = append(resourceArns, arn)
+				loadBalancerMap[arn] = loadBalancer
+			}
+			return true
+		},
+	)
+	if err != nil {
+		return []loadBalancerV2{}, err
+	}
+
+	// Request tags for up to 20 load balancers at a time.
+	for i := 0; i < len(resourceArns); i += 20 {
+		end := i + 20
+		if end > len(resourceArns) {
+			end = len(resourceArns)
+		}
+		tagsOutput, err := c.elbv2Client.DescribeTags(
+			&elbv2.DescribeTagsInput{
+				ResourceArns: aws.StringSlice(resourceArns[i:end]),
+			},
+		)
+		if err != nil {
+			return []loadBalancerV2{}, err
+		}
+
+		// Keep only load balancers owned by the cluster.
+		for _, tagDescription := range tagsOutput.TagDescriptions {
+			var foundTag bool
+			for _, tag := range tagDescription.Tags {
+				if reflect.DeepEqual(tag, ownedTag) {
+					foundTag = true
+					break
+				}
+			}
+			if !foundTag {
+				arn := aws.StringValue(tagDescription.ResourceArn)
+				delete(loadBalancerMap, arn)
+			}
+		}
+	}
+
+	loadBalancers := make([]loadBalancerV2, 0, len(loadBalancerMap))
+	for _, loadBalancer := range loadBalancerMap {
 		loadBalancers = append(loadBalancers, loadBalancerV2{
 			canonicalHostedZoneNameID: aws.StringValue(loadBalancer.CanonicalHostedZoneId),
 			dnsName:                   aws.StringValue(loadBalancer.DNSName),
