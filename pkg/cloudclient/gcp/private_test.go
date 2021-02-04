@@ -1,11 +1,15 @@
 package gcp
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
+	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 )
@@ -93,5 +97,46 @@ func TestGetIPAddressesFromService(t *testing.T) {
 		if actualErrorType != expectErrorType {
 			t.Errorf("%s error: expected %v, got %v", test.name, actualErrorType, expectErrorType)
 		}
+	}
+}
+
+func TestGetClusterRegion(t *testing.T) {
+	infraObj := testutils.CreateGCPInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+	objs := []runtime.Object{infraObj}
+	mocks := testutils.NewTestMock(t, objs)
+
+	region, err := getClusterRegion(mocks.FakeKubeClient)
+	if err != nil {
+		t.Fatalf("Could not get cluster region: %v", err)
+	}
+	if region != testutils.DefaultRegionName {
+		t.Fatalf("Cluster region name mismatch. Expected %s, got %s", testutils.DefaultRegionName, region)
+	}
+
+}
+
+func TestGCPProviderDecodeEncode(t *testing.T) {
+	machine := testutils.CreateGCPMachineObj("master-0", "decode", "master", "us-east1", "us-east1-b")
+	objs := []runtime.Object{&machine}
+	mocks := testutils.NewTestMock(t, objs)
+	machineInfo := types.NamespacedName{
+		Name:      machine.GetName(),
+		Namespace: machine.GetNamespace(),
+	}
+
+	err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
+	if err != nil {
+		t.Fatalf("Couldn't reload machine %s: %v", machine.GetName(), err)
+	}
+
+	decodedSpec, err := getGCPDecodedProviderSpec(machine)
+	if err != nil {
+		t.Fatalf("Failed to decode machine %s: %v", machine.GetName(), err)
+	}
+
+	_, err = encodeProviderSpec(decodedSpec)
+
+	if err != nil {
+		t.Fatalf("Failed to encode ProviderSpec for machine %s: %v", machine.GetName(), err)
 	}
 }
