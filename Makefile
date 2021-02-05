@@ -28,7 +28,8 @@ operator-sdk-generate:
 .PHONY: generate-syncset
 generate-syncset:
 	if [ "${IN_CONTAINER}" == "true" ]; then \
-		$(CONTAINER_ENGINE) run --rm -v `pwd -P`:`pwd -P` quay.io/app-sre/python:2.7.15 /bin/sh -c "cd `pwd`; pip install oyaml; `pwd`/${GEN_SYNCSET}"; \
+		$(CONTAINER_ENGINE) pull quay.io/app-sre/python:3 && $(CONTAINER_ENGINE) tag quay.io/app-sre/python:3 python:3 || true; \
+		$(CONTAINER_ENGINE) run --rm -v `pwd -P`:`pwd -P` python:3 /bin/sh -c "cd `pwd`; pip install oyaml; `pwd`/${GEN_SYNCSET}"; \
 	else \
 		${GEN_SYNCSET}; \
 	fi
