@@ -10,6 +10,9 @@ parameters:
 - name: REPO_NAME
   value: cloud-ingress-operator
   required: true
+- name: DISPLAY_NAME
+  value: Cloud Ingress Operator
+  required: true
 - name: ALLOWED_CIDR_BLOCKS
   required: true
 - name: ENABLE_MANAGEMENT_API_SERVER_INGRESS
@@ -20,6 +23,10 @@ objects:
 - apiVersion: hive.openshift.io/v1
   kind: SelectorSyncSet
   metadata:
+    annotations:
+      component-display-name: ${DISPLAY_NAME}
+      component-name: ${REPO_NAME}
+      telemeter-query: csv_succeeded{_id="$CLUSTER_ID",name=~"${REPO_NAME}.*",exported_namespace=~"openshift-.*",namespace="openshift-operator-lifecycle-manager"} == 1
     labels:
       managed.openshift.io/gitHash: ${IMAGE_TAG}
       managed.openshift.io/gitRepoName: ${REPO_NAME}
