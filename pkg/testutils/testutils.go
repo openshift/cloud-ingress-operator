@@ -9,6 +9,7 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 
 	awsclient "github.com/openshift/cloud-ingress-operator/pkg/awsclient/mock"
+	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -211,6 +212,58 @@ func CreateMachineObj(name, clusterid, role, region, zone string) machineapi.Mac
 	return ret
 }
 
+// CreateGCPMachineObj makes a single AWS-style machinev1beta1.Machine object
+func CreateGCPMachineObj(name, clusterid, role, region, zone string) machineapi.Machine {
+	projectID := "o-1234567"
+	provider := &gcpproviderapi.GCPMachineProviderSpec{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "gcpprovider.openshift.io/v1beta1",
+			Kind:       "GCPMachineProviderSpec",
+		},
+		CanIPForward:       false,
+		DeletionProtection: false,
+		Metadata:           []*gcpproviderapi.GCPMetadata{},
+		NetworkInterfaces:  []*gcpproviderapi.GCPNetworkInterface{},
+		MachineType:        "custom-1-2345",
+		Disks:              []*gcpproviderapi.GCPDisk{},
+		ServiceAccounts:    []gcpproviderapi.GCPServiceAccount{},
+		Tags:               []string{clusterid + "-master"},
+		UserDataSecret:     &corev1.LocalObjectReference{Name: "gcp-cloud-credentials"},
+		Region:             region,
+		Zone:               zone,
+		ProjectID:          projectID,
+		TargetPools:        []string{clusterid + "-api"},
+	}
+	labels := make(map[string]string)
+	labels[masterMachineLabel] = role
+	ret := machineapi.Machine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "openshift-machine-api",
+			Labels:    labels,
+		},
+		Spec: machineapi.MachineSpec{
+			ProviderSpec: machineapi.ProviderSpec{
+				Value: &runtime.RawExtension{Object: provider},
+			},
+			ProviderID: pointer.StringPtr(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
+		},
+	}
+	return ret
+}
+
+// CreateGCPMachineObjectList makes a MachineList from the slice of names, and returns also a slice of Machine objects for convenience
+func CreateGCPMachineObjectList(name []string, clusterid, role, region, zone string) (*machineapi.MachineList, []machineapi.Machine) {
+	machines := make([]machineapi.Machine, 0)
+	for _, n := range name {
+		machines = append(machines, CreateGCPMachineObj(n, clusterid, role, region, zone))
+	}
+	ret := &machineapi.MachineList{
+		Items: machines,
+	}
+	return ret, machines
+}
+
 // CreateLegacyClusterConfig creates kube-config/configmaps/cluster-config-v1
 // To test https://bugzilla.redhat.com/show_bug.cgi?id=1814332
 func CreateLegacyClusterConfig(clusterdomain, infraName, region string, workerCount, masterCount int) *corev1.ConfigMap {
@@ -271,6 +324,33 @@ func CreateInfraObject(infraName, apiInternalURL, apiURL, region string) *config
 			PlatformStatus: &configv1.PlatformStatus{
 				Type: configv1.AWSPlatformType,
 				AWS: &configv1.AWSPlatformStatus{
+					Region: region,
+				},
+			},
+		},
+	}
+}
+
+// CreateGCPInfraObject creates an configv1.Infrastructure object
+func CreateGCPInfraObject(infraName, apiInternalURL, apiURL, region string) *configv1.Infrastructure {
+	return &configv1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "",
+		},
+		Spec: configv1.InfrastructureSpec{
+			CloudConfig: configv1.ConfigMapFileReference{
+				Name: "",
+			},
+		},
+		Status: configv1.InfrastructureStatus{
+			InfrastructureName:   infraName,
+			APIServerInternalURL: apiInternalURL,
+			APIServerURL:         apiURL,
+			Platform:             configv1.GCPPlatformType,
+			PlatformStatus: &configv1.PlatformStatus{
+				Type: configv1.GCPPlatformType,
+				GCP: &configv1.GCPPlatformStatus{
 					Region: region,
 				},
 			},
