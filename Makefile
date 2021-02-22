@@ -1,3 +1,5 @@
+include boilerplate/generated-includes.mk
+
 SHELL := /usr/bin/env bash
 
 # Include shared Makefiles
@@ -34,3 +36,7 @@ generate-syncset:
 		${GEN_SYNCSET}; \
 	fi
 
+
+.PHONY: boilerplate-update
+boilerplate-update:
+	@boilerplate/update
