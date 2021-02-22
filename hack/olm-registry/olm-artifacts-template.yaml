@@ -291,6 +291,33 @@ objects:
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
       metadata:
+        name: sre-sshd-signer
+        namespace: openshift-kube-controller-manager
+      rules:
+      - apiGroups:
+        - ''
+        resourceNames:
+        - csr-signer
+        resources:
+        - secrets
+        verbs:
+        - get
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: sre-sshd-signer
+        namespace: openshift-kube-controller-manager
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: sre-sshd-signer
+      subjects:
+      - kind: ServiceAccount
+        name: default
+        namespace: openshift-sre-sshd
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
         name: prometheus-k8s
         namespace: openshift-cloud-ingress-operator
       rules:

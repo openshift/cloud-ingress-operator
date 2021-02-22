@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sre-sshd-signer
+  namespace: openshift-kube-controller-manager
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - csr-signer
+  resources:
+  - secrets
+  verbs:
+  - get
