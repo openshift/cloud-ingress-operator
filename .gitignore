@@ -80,3 +80,7 @@ build/_output
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+.venv/
+
+# vscode workspace files
+*.code-workspace

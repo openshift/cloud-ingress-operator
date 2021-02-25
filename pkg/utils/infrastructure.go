@@ -55,5 +55,5 @@ func GetPlatformType(kclient client.Client) (*configv1.PlatformType, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &infra.Status.Platform, nil
+	return &infra.Status.PlatformStatus.Type, nil
 }

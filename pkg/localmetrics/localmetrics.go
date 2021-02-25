@@ -2,10 +2,7 @@ package localmetrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
-
-var log = logf.Log.WithName("localmetrics")
 
 var (
 	MetricDefaultIngressController = prometheus.NewGauge(prometheus.GaugeOpts{

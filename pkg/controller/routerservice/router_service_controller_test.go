@@ -10,15 +10,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 // TestRouterServiceController runs ReconcileRouterService.Reconcile() against a
 // fake client that tracks a Service object.
 func TestRouterServiceController(t *testing.T) {
 	// Set the logger to development mode for verbose logs.
-	logf.SetLogger(logf.ZapLogger(true))
+	logf.SetLogger(zap.New())
 
 	var (
 		name      = "router-default"

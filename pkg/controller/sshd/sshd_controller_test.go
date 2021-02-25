@@ -25,8 +25,6 @@ const (
 	placeholderName      string = "placeholderName"
 	placeholderNamespace string = "placeholderNamespace"
 	placeholderImage     string = "placeholderImage"
-
-	rsaKeyModulusSize int = (4096 / 8)
 )
 
 // tests
@@ -211,10 +209,9 @@ func TestNewSSHDeployment(t *testing.T) {
 }
 
 func TestNewSSHService(t *testing.T) {
-	var service *corev1.Service
-
 	// Verify SSHD parameters are honored
-	service = newSSHDService(cr)
+	var service *corev1.Service = newSSHDService(cr)
+
 	if service.ObjectMeta.Name != cr.ObjectMeta.Name {
 		t.Errorf("Service has wrong name %q, expected %q",
 			service.ObjectMeta.Name, cr.ObjectMeta.Name)

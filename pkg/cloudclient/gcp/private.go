@@ -249,10 +249,8 @@ func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service,
 			return err
 		}
 
-		// There will be at most one result but loop anyway.
-		for _, rrset := range response.Rrsets {
-			dnsChange.Deletions = append(dnsChange.Deletions, rrset)
-		}
+		// There will be at most one result but append anyway.
+		dnsChange.Deletions = append(dnsChange.Deletions, response.Rrsets...)
 
 		if len(dnsChange.Deletions) > 0 {
 			log.Info("Submitting DNS changes:", "Zone", zone.ID, "Deletions", dnsChange.Deletions)
