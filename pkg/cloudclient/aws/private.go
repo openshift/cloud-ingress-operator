@@ -4,6 +4,7 @@ package aws
 
 import (
 	"context"
+	goError "errors"
 	"fmt"
 	"path"
 	"reflect"
@@ -209,14 +210,13 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 		return err
 	}
 	extNLBName := infrastructureName + "-ext"
-	subnets, err := getMasterNodeSubnets(kclient)
-	if err != nil {
+
+	subnetIDs, err := c.getPublicSubnets(kclient)
+	if len(subnetIDs) == 0 {
+		err = goError.New("No public subnets, can't change API to public")
 		return err
 	}
-	subnetIDs, err := c.subnetNameToSubnetIDLookup([]string{subnets["public"]})
-	if err != nil {
-		return err
-	}
+
 	newNLBs, err := c.createNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0])
 	if err != nil {
 		return err
@@ -310,6 +310,149 @@ func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 	subnets["private"] = fmt.Sprintf("%s-private-%s", infra.Status.InfrastructureName, awsconfig.Placement.AvailabilityZone)
 
 	return subnets, nil
+}
+
+func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
+
+	var publicSubnets []string
+
+	machineList, err := baseutils.GetMasterMachines(kclient)
+
+	if err != nil {
+		log.Error(err, "No master machines found")
+		return nil, err
+	}
+
+	// Get the first master machine in the list
+	masterMachine := machineList.Items[0]
+
+	// Get the AWS ProviderSpec from the machine
+	machineProviderSpec, err := getAWSDecodedProviderSpec(masterMachine)
+	if err != nil {
+		log.Error(err, "Cannot decode AWS Provider Spec")
+		return nil, err
+	}
+
+	// Get the subnet the master machine is in
+	initalSubnet := machineProviderSpec.Subnet.ID
+
+	// Look up the subnet metadata
+	describeSubnetOutput, err := c.ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{SubnetIds: []*string{initalSubnet}})
+
+	// Extract the VPC ID from the subnet metadata
+	targetVPC := describeSubnetOutput.Subnets[0].VpcId
+
+	// List all subnets in the VPC
+	allSubnets, err := c.getAllSubnetsInVPC(*targetVPC)
+
+	// List all route tables associated with the VPC
+	routeTables, err := c.getAllRouteTablesInVPC(*targetVPC)
+
+	for _, subnet := range allSubnets {
+		isPublic, err := isSubnetPublic(routeTables, *subnet.SubnetId)
+
+		if err != nil {
+			log.Error(err, "Error while determining if subnet is public")
+			return nil, err
+		}
+		if isPublic {
+			publicSubnets = append(publicSubnets, *subnet.SubnetId)
+		}
+	}
+
+	return publicSubnets, nil
+}
+
+func (c *Client) getAllSubnetsInVPC(vpcID string) ([]*ec2.Subnet, error) {
+
+	var subnetIDs []*ec2.Subnet
+	token := aws.String("initString")
+
+	for token != nil {
+		describeSubnetOutput, err := c.ec2Client.DescribeSubnets(
+			&ec2.DescribeSubnetsInput{
+				Filters: []*ec2.Filter{
+					{
+						Name:   aws.String("vpc-id"),
+						Values: []*string{aws.String(vpcID)},
+					},
+				},
+			})
+		if err != nil {
+			log.Error(err, "Error while describing subnets")
+			return nil, err
+		}
+		subnetIDs = append(subnetIDs, describeSubnetOutput.Subnets...)
+
+		token = describeSubnetOutput.NextToken
+	}
+
+	return subnetIDs, nil
+}
+
+func (c *Client) getAllRouteTablesInVPC(vpcID string) ([]*ec2.RouteTable, error) {
+
+	var routeTables []*ec2.RouteTable
+	token := aws.String("initString")
+
+	for token != nil {
+		describeRouteTablesOutput, err := c.ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{Filters: []*ec2.Filter{{Name: aws.String("vpc-id"), Values: []*string{aws.String(vpcID)}}}})
+		if err != nil {
+			log.Error(err, "Error while describing route tables")
+			return nil, err
+		}
+		routeTables = append(routeTables, describeRouteTablesOutput.RouteTables...)
+
+		token = describeRouteTablesOutput.NextToken
+	}
+
+	return routeTables, nil
+}
+
+func isSubnetPublic(rt []*ec2.RouteTable, subnetID string) (bool, error) {
+	var subnetTable *ec2.RouteTable
+	for _, table := range rt {
+		for _, assoc := range table.Associations {
+			if aws.StringValue(assoc.SubnetId) == subnetID {
+				subnetTable = table
+				break
+			}
+		}
+	}
+
+	if subnetTable == nil {
+		// If there is no explicit association, the subnet will be implicitly
+		// associated with the VPC's main routing table.
+		for _, table := range rt {
+			for _, assoc := range table.Associations {
+				if aws.BoolValue(assoc.Main) {
+					log.Info(fmt.Sprintf(
+						"Assuming implicit use of main routing table %s for %s",
+						aws.StringValue(table.RouteTableId), subnetID))
+					subnetTable = table
+					break
+				}
+			}
+		}
+	}
+
+	if subnetTable == nil {
+		return false, fmt.Errorf("could not locate routing table for %s", subnetID)
+	}
+
+	for _, route := range subnetTable.Routes {
+		// There is no direct way in the AWS API to determine if a subnet is public or private.
+		// A public subnet is one which has an internet gateway route
+		// we look for the gatewayId and make sure it has the prefix of igw to differentiate
+		// from the default in-subnet route which is called "local"
+		// or other virtual gateway (starting with vgv)
+		// or vpc peering connections (starting with pcx).
+		if strings.HasPrefix(aws.StringValue(route.GatewayId), "igw") {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 //getClusterRegion returns the installed cluster's AWS region
