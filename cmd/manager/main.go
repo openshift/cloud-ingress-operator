@@ -28,8 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/collector"
-	// OSD metrics
-	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	osdmetrics "github.com/openshift/operator-custom-metrics/pkg/metrics"
 )
 
@@ -137,7 +135,7 @@ func main() {
 	metricsServer := osdmetrics.NewBuilder().
 		WithPort(osdMetricsPort).
 		WithPath(osdMetricsPath).
-		WithCollectors(append(localmetrics.MetricsList, collector.NewCloudIngressCollector(mgr.GetClient()))).
+		WithCollectors(collector.NewCloudIngressCollectorList(mgr.GetClient())).
 		WithServiceName("localmetrics-cloud-ingress-operator").
 		WithServiceMonitor().
 		GetConfig()

@@ -24,12 +24,6 @@ type CloudIngressCollector struct {
 	client client.Client
 }
 
-func NewCloudIngressCollector(c client.Client) prometheus.Collector {
-	return &CloudIngressCollector{
-		client: c,
-	}
-}
-
 // Describe implements the prometheus.Collector interface.
 func (cic *CloudIngressCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- APISchemesDesc
