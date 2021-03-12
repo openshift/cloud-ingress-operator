@@ -421,6 +421,18 @@ func TestValidatePatchableSpec(t *testing.T) {
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: "example-cert-nondefault",
 			},
+			NodePlacement: &operatorv1.NodePlacement{
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"node-role.kubernetes.io/infra": ""},
+				},
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "node-role.kubernetes.io/infra",
+						Effect:   corev1.TaintEffectNoSchedule,
+						Operator: corev1.TolerationOpExists,
+					},
+				},
+			},
 			Domain: "example-domain.example.com",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
 				Type: operatorv1.LoadBalancerServiceStrategyType,
@@ -451,6 +463,18 @@ func TestValidatePatchableSpec(t *testing.T) {
 		Spec: operatorv1.IngressControllerSpec{
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: "example-cert-nondefault",
+			},
+			NodePlacement: &operatorv1.NodePlacement{
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"node-role.kubernetes.io/infra": ""},
+				},
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "node-role.kubernetes.io/infra",
+						Effect:   corev1.TaintEffectNoSchedule,
+						Operator: corev1.TolerationOpExists,
+					},
+				},
 			},
 			Domain: "example-domain.example.com",
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
