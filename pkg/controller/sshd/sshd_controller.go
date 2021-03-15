@@ -176,7 +176,6 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 				// all good
 			case err.(*cioerrors.LoadBalancerNotReadyError):
 				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
-				r.client.Status().Update(context.TODO(), instance)
 				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 			default:
 				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
@@ -363,7 +362,6 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 		// all good
 	case err.(*cioerrors.LoadBalancerNotReadyError):
 		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
-		r.client.Status().Update(context.TODO(), instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
 		r.SetSSHDStatusError(instance, "Failed to ensure the DNS record", err)
@@ -616,5 +614,9 @@ func (r *ReconcileSSHD) SetSSHDStatus(cr *cloudingressv1alpha1.SSHD, message str
 	cr.Status.State = state
 	cr.Status.Message = message
 
-	r.client.Status().Update(context.TODO(), cr)
+	err := r.client.Status().Update(context.TODO(), cr)
+	// TODO: Should we return an error here if this update fails?
+	if err != nil {
+		log.Error(err, "Error updating cr status")
+	}
 }

@@ -124,8 +124,7 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	if cloudClient == nil {
 		cloudPlatform, err := baseutils.GetPlatformType(r.client)
 		if err != nil {
-			SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
-			r.client.Status().Update(context.TODO(), instance)
+			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
 			return reconcile.Result{}, err
 		}
 		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
@@ -175,12 +174,11 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 					// all good
 				case err.(*cioerrors.LoadBalancerNotReadyError):
 					// couldn't find the load balancer - it's likely still queued for creation
-					SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
-					r.client.Status().Update(context.TODO(), instance)
+					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 				default:
 					reqLogger.Error(err, "Failed to delete the DNS record")
-					SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
+					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
 					return reconcile.Result{}, err
 				}
 			}
@@ -241,17 +239,14 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 	switch err {
 	case nil:
 		// no problems
-		SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
-		r.client.Status().Update(context.TODO(), instance)
+		r.SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 		return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 	case err.(*cioerrors.DnsUpdateError):
 		// couldn't update DNS
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
+		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		return reconcile.Result{}, err
 	case err.(*cioerrors.LoadBalancerNotReadyError):
-		SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
-		r.client.Status().Update(context.TODO(), instance)
+		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
 		// not one of ours
@@ -294,7 +289,7 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 }
 
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
-func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
+func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
 	crObject.Status.Conditions = utils.SetAPISchemeCondition(
 		crObject.Status.Conditions,
 		ctype,
@@ -303,6 +298,12 @@ func SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, messag
 		message,
 		utils.UpdateConditionNever)
 	crObject.Status.State = ctype
+
+	err := r.client.Status().Update(context.TODO(), crObject)
+	// TODO: Should we return an error here if this update fails?
+	if err != nil {
+		log.Error(err, "Error updating cr status")
+	}
 }
 
 func sliceEquals(left, right []string) bool {

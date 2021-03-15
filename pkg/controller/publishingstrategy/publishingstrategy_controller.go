@@ -17,7 +17,6 @@ import (
 
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,12 +27,10 @@ import (
 )
 
 const (
-	defaultIngressName         = "default"
 	ingressControllerNamespace = "openshift-ingress-operator"
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
-var serializer = json.NewSerializerWithOptions(nil, nil, nil, json.SerializerOptions{})
 
 type patchField string
 
@@ -228,7 +225,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 					// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
 					// the actual default IngressController must be deleted
 					reqLogger.Info("Static Spec and Status do not match for default IngressController, deleting")
-					r.client.Delete(context.TODO(), ingressController)
+					// TODO: Should we return an error here if this delete fails?
+					if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+						reqLogger.Error(err, "Error deleting IngressController")
+					}
 					return reconcile.Result{Requeue: true}, nil
 				}
 			} else {
@@ -236,7 +236,10 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
 				// the IngressController must be deleted
 				reqLogger.Info(fmt.Sprintf("Static Spec does not match for for IngressController %s, deleting", ingressName))
-				r.client.Delete(context.TODO(), ingressController)
+				// TODO: Should we return an error here if this delete fails?
+				if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+					reqLogger.Error(err, "Error deleting IngressController")
+				}
 				return reconcile.Result{Requeue: true}, nil
 			}
 		}

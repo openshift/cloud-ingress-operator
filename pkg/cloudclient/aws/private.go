@@ -20,7 +20,7 @@ import (
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 
