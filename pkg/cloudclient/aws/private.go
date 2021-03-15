@@ -346,7 +346,7 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 	}
 
 	if len(describeSubnetOutput.Subnets) == 0 {
-		err = goError.New("No Subnets Found") 
+		err = goError.New("No Subnets Found")
 		return nil, err
 	}
 
@@ -802,23 +802,6 @@ func (c *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID,
 	}
 	// public
 	return nil
-}
-
-// EC2
-
-func (c *Client) subnetNameToSubnetIDLookup(subnetNames []string) ([]string, error) {
-	r := make([]string, len(subnetNames))
-	for i, name := range subnetNames {
-		filter := []*ec2.Filter{{Name: aws.String("tag:Name"), Values: aws.StringSlice([]string{name})}}
-		res, err := c.ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{
-			Filters: filter,
-		})
-		if err != nil {
-			return []string{}, err
-		}
-		r[i] = *res.Subnets[0].SubnetId
-	}
-	return r, nil
 }
 
 // ELBv2

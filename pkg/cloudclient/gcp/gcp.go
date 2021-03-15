@@ -105,7 +105,7 @@ func NewClient(kclient client.Client) *Client {
 	}
 	serviceAccountJSON, ok := secret.Data["service_account.json"]
 	if !ok {
-		panic(fmt.Sprintf("Access credentials missing service account"))
+		panic("Access credentials missing service account")
 	}
 
 	c, err := newClient(ctx, serviceAccountJSON)
