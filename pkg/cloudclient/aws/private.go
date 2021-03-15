@@ -212,6 +212,9 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	extNLBName := infrastructureName + "-ext"
 
 	subnetIDs, err := c.getPublicSubnets(kclient)
+	if err != nil {
+		return err
+	}
 	if len(subnetIDs) == 0 {
 		err = goError.New("No public subnets, can't change API to public")
 		return err
@@ -338,15 +341,29 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 
 	// Look up the subnet metadata
 	describeSubnetOutput, err := c.ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{SubnetIds: []*string{initalSubnet}})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(describeSubnetOutput.Subnets) == 0 {
+		err = goError.New("No Subnets Found") 
+		return nil, err
+	}
 
 	// Extract the VPC ID from the subnet metadata
 	targetVPC := describeSubnetOutput.Subnets[0].VpcId
 
 	// List all subnets in the VPC
 	allSubnets, err := c.getAllSubnetsInVPC(*targetVPC)
+	if err != nil {
+		return nil, err
+	}
 
 	// List all route tables associated with the VPC
 	routeTables, err := c.getAllRouteTablesInVPC(*targetVPC)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, subnet := range allSubnets {
 		isPublic, err := isSubnetPublic(routeTables, *subnet.SubnetId)
