@@ -5,6 +5,9 @@ SHELL := /usr/bin/env bash
 # Extend Makefile after here
 CONTAINER_ENGINE?=docker
 
+# Needed for build-catalog-image
+CATALOG_REGISTRY_ORGANIZATION?=app-sre
+
 # TODO: remove this include once boilerplate supports generating package
 include functions.mk
 
