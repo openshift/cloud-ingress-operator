@@ -17,14 +17,10 @@ spec:
       description: APIScheme is the Schema for the APISchemes API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -32,48 +28,39 @@ spec:
           description: APISchemeSpec defines the desired state of APIScheme
           properties:
             managementAPIServerIngress:
-              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                Important: Run "operator-sdk generate k8s" to regenerate code after
-                modifying this file Add custom validation using kubebuilder tags:
-                https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
               properties:
                 allowedCIDRBlocks:
-                  description: AllowedCIDRBlocks is the list of CIDR blocks that should
-                    be allowed to access the management API
+                  description: AllowedCIDRBlocks is the list of CIDR blocks that should be allowed to access the management API
                   items:
                     type: string
                   type: array
                 dnsName:
-                  description: DNSName is the name that should be used for DNS of
-                    the management API, eg rh-api
+                  description: DNSName is the name that should be used for DNS of the management API, eg rh-api
                   type: string
                 enabled:
                   description: Enabled to create the Management API endpoint or not.
                   type: boolean
               required:
-              - allowedCIDRBlocks
-              - dnsName
-              - enabled
+                - allowedCIDRBlocks
+                - dnsName
+                - enabled
               type: object
           required:
-          - managementAPIServerIngress
+            - managementAPIServerIngress
           type: object
         status:
           description: APISchemeStatus defines the observed state of APIScheme
           properties:
             cloudLoadBalancerDNSName:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                of cluster Important: Run "operator-sdk generate k8s" to regenerate
-                code after modifying this file Add custom validation using kubebuilder
-                tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
               type: string
             conditions:
               items:
                 description: APISchemeCondition is the history of transitions
                 properties:
                   allowedCIDRBlocks:
-                    description: AllowedCIDRBlocks currently allowed (as of the last
-                      successful Security Group update)
+                    description: AllowedCIDRBlocks currently allowed (as of the last successful Security Group update)
                     items:
                       type: string
                     type: array
@@ -98,11 +85,11 @@ spec:
                     description: Type is the type of condition
                     type: string
                 required:
-                - lastProbeTime
-                - lastTransitionTime
-                - message
-                - reason
-                - status
+                  - lastProbeTime
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
                 type: object
               type: array
             state:
@@ -110,10 +97,9 @@ spec:
               type: string
           type: object
       required:
-      - spec
-      type: object
+        - spec
   version: v1alpha1
   versions:
-  - name: v1alpha1
-    served: true
-    storage: true
+    - name: v1alpha1
+      served: true
+      storage: true
