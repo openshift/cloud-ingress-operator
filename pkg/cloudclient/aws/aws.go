@@ -112,11 +112,11 @@ func NewClient(kclient client.Client) *Client {
 	}
 	accessKeyID, ok := secret.Data["aws_access_key_id"]
 	if !ok {
-		panic(fmt.Sprintf("Access credentials missing key"))
+		panic("Access credentials missing key")
 	}
 	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
 	if !ok {
-		panic(fmt.Sprintf("Access credentials missing secret key"))
+		panic("Access credentials missing secret key")
 	}
 
 	c, err := newClient(
