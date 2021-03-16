@@ -51,7 +51,7 @@ type APISchemeStatus struct {
 // APIScheme is the Schema for the APISchemes API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=APISchemes,scope=Namespaced
+// +kubebuilder:resource:path=apischemes,scope=Namespaced
 type APIScheme struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
