@@ -13,11 +13,11 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"./pkg/apis/cloudingress/v1alpha1.APIScheme":       schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref),
-		"./pkg/apis/cloudingress/v1alpha1.APISchemeSpec":   schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref),
-		"./pkg/apis/cloudingress/v1alpha1.APISchemeStatus": schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref),
-		"./pkg/apis/cloudingress/v1alpha1.SSHDSpec":        schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref),
-		"./pkg/apis/cloudingress/v1alpha1.SSHDStatus":      schema_pkg_apis_cloudingress_v1alpha1_SSHDStatus(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APIScheme":       schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec":   schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus": schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.SSHDSpec":        schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref),
+		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.SSHDStatus":      schema_pkg_apis_cloudingress_v1alpha1_SSHDStatus(ref),
 	}
 }
 
@@ -49,12 +49,12 @@ func schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref common.ReferenceCallbac
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./pkg/apis/cloudingress/v1alpha1.APISchemeSpec"),
+							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("./pkg/apis/cloudingress/v1alpha1.APISchemeStatus"),
+							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus"),
 						},
 					},
 				},
@@ -62,7 +62,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref common.ReferenceCallbac
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/cloudingress/v1alpha1.APISchemeSpec", "./pkg/apis/cloudingress/v1alpha1.APISchemeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec", "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -76,7 +76,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref common.ReferenceCal
 					"managementAPIServerIngress": {
 						SchemaProps: spec.SchemaProps{
 							Description: "INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html",
-							Ref:         ref("./pkg/apis/cloudingress/v1alpha1.ManagementAPIServerIngress"),
+							Ref:         ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ManagementAPIServerIngress"),
 						},
 					},
 				},
@@ -84,7 +84,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref common.ReferenceCal
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/cloudingress/v1alpha1.ManagementAPIServerIngress"},
+			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ManagementAPIServerIngress"},
 	}
 }
 
@@ -108,7 +108,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceC
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("./pkg/apis/cloudingress/v1alpha1.APISchemeCondition"),
+										Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeCondition"),
 									},
 								},
 							},
@@ -124,7 +124,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceC
 			},
 		},
 		Dependencies: []string{
-			"./pkg/apis/cloudingress/v1alpha1.APISchemeCondition"},
+			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeCondition"},
 	}
 }
 
