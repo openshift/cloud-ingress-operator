@@ -30,6 +30,7 @@ import (
 const (
 	defaultIngressName         = "default"
 	ingressControllerNamespace = "openshift-ingress-operator"
+	infraNodeLabelKey          = "node-role.kubernetes.io/infra"
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
@@ -378,11 +379,11 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operator
 			},
 			NodePlacement: &operatorv1.NodePlacement{
 				NodeSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"node-role.kubernetes.io/infra": ""},
+					MatchLabels: map[string]string{infraNodeLabelKey: ""},
 				},
 				Tolerations: []corev1.Toleration{
 					{
-						Key:      "node-role.kubernetes.io/infra",
+						Key:      infraNodeLabelKey,
 						Effect:   corev1.TaintEffectNoSchedule,
 						Operator: corev1.TolerationOpExists,
 					},
