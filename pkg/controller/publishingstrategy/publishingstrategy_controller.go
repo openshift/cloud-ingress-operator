@@ -28,6 +28,7 @@ import (
 
 const (
 	ingressControllerNamespace = "openshift-ingress-operator"
+	infraNodeLabelKey          = "node-role.kubernetes.io/infra"
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
@@ -36,6 +37,7 @@ type patchField string
 
 var IngressControllerSelector patchField = "IngressControllerSelector"
 var IngressControllerCertificate patchField = "IngressControllerCertificate"
+var IngressControllerNodePlacement patchField = "IngressControllerNodePlacement"
 
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -277,7 +279,11 @@ func (r *ReconcilePublishingStrategy) Reconcile(request reconcile.Request) (reco
 				} else if field == IngressControllerCertificate {
 					// If the DefaultCertificate doesn't match, replace the existing spec with the desired Spec
 					ingressController.Spec.DefaultCertificate = desiredIngressController.Spec.DefaultCertificate
+				} else if field == IngressControllerNodePlacement {
+					// If the NodePlacement doesn't match, replace the existing spec with the desired Spec
+					ingressController.Spec.NodePlacement = desiredIngressController.Spec.NodePlacement
 				}
+
 				// Perform the patch on the existing IngressController using the base to patch against and the
 				// changes added to bring the exsting CR to the desired state
 				err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
@@ -373,6 +379,18 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operator
 		Spec: operatorv1.IngressControllerSpec{
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: appIngress.Certificate.Name,
+			},
+			NodePlacement: &operatorv1.NodePlacement{
+				NodeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{infraNodeLabelKey: ""},
+				},
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      infraNodeLabelKey,
+						Effect:   corev1.TaintEffectNoSchedule,
+						Operator: corev1.TolerationOpExists,
+					},
+				},
 			},
 			Domain: appIngress.DNSName,
 			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
@@ -481,6 +499,15 @@ func validatePatchableSpec(ingressController operatorv1.IngressController, desir
 
 	if !(desiredSpec.DefaultCertificate.Name == ingressController.Spec.DefaultCertificate.Name) {
 		return false, IngressControllerCertificate
+	}
+
+	// Preventing nil pointer errors
+	if ingressController.Spec.NodePlacement == nil {
+		return false, IngressControllerNodePlacement
+	}
+
+	if !(reflect.DeepEqual(desiredSpec.NodePlacement.NodeSelector.MatchLabels, ingressController.Spec.NodePlacement.NodeSelector.MatchLabels)) {
+		return false, IngressControllerNodePlacement
 	}
 
 	return true, ""
