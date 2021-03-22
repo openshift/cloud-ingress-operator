@@ -329,29 +329,32 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 	// Get the first master machine in the list
 	masterMachine := machineList.Items[0]
 
-	// Get the AWS ProviderSpec from the machine
-	machineProviderSpec, err := getAWSDecodedProviderSpec(masterMachine)
-	if err != nil {
-		log.Error(err, "Cannot decode AWS Provider Spec")
+	// Get the instance ID of the machine in the form of aws:///us-east-1a/i-<hash>
+	instanceIDLong := masterMachine.Spec.ProviderID
+
+	split := strings.Split(*instanceIDLong, "/")
+
+	// The instance ID should be the last element of the split
+	instanceID := split[len(split)-1]
+
+	// Ensure we acutally have an instnace ID by erroring if its missing
+	if instanceID == "" {
+		err = goError.New("Instance ID is blank")
 		return nil, err
 	}
 
-	// Get the subnet the master machine is in
-	initalSubnet := machineProviderSpec.Subnet.ID
-
-	// Look up the subnet metadata
-	describeSubnetOutput, err := c.ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{SubnetIds: []*string{initalSubnet}})
+	// Get VPC the instance is in
+	describeInstanceOutput, err := c.ec2Client.DescribeInstances(
+		&ec2.DescribeInstancesInput{
+			InstanceIds: []*string{aws.String(instanceID)},
+		},
+	)
 	if err != nil {
-		return nil, err
-	}
-
-	if len(describeSubnetOutput.Subnets) == 0 {
-		err = goError.New("No Subnets Found")
 		return nil, err
 	}
 
 	// Extract the VPC ID from the subnet metadata
-	targetVPC := describeSubnetOutput.Subnets[0].VpcId
+	targetVPC := describeInstanceOutput.Reservations[0].Instances[0].VpcId
 
 	// List all subnets in the VPC
 	allSubnets, err := c.getAllSubnetsInVPC(*targetVPC)
