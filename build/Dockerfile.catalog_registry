@@ -1,6 +1,4 @@
-FROM quay.io/openshift/origin-operator-registry:4.5
-
-ARG SRC_BUNDLES
+FROM quay.io/openshift/origin-operator-registry:latest
 
 COPY ${SRC_BUNDLES} manifests
 RUN initializer --permissive
