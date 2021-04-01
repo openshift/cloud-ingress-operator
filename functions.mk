@@ -39,7 +39,13 @@ define create_push_catalog_image
 	else \
 		previous_version="$(OPERATOR_NAME).v$${previous_version}" ;\
 	fi ;\
-	python $(7) bundles-$(1)/$(OPERATOR_NAME) $(OPERATOR_NAME) $(OPERATOR_NAMESPACE) $(OPERATOR_VERSION) $(OPERATOR_IMAGE_URI) $(1) true $$previous_version ;\
+	image_digest=$$(skopeo inspect docker://${OPERATOR_IMAGE_URI} | jq -r .Digest) ;\
+	if [[ -z "$$image_digest" ]]; then \
+		echo "Couldn't discover image_digest for docker://${OPERATOR_IMAGE_URI}!" ;\
+		exit 1 ;\
+	fi ;\
+	repo_digest=${OPERATOR_IMAGE}@$$image_digest ;\
+	python $(7) bundles-$(1)/$(OPERATOR_NAME) $(OPERATOR_NAME) $(OPERATOR_NAMESPACE) $(OPERATOR_VERSION) $$repo_digest $(1) true $$previous_version ;\
 	new_version=$$(find bundles-$(1) -mindepth 2 -maxdepth 2 -type d | grep -v .git | sort -V | tail -n 1 | cut -d / -f 3-) ;\
 	if [[ $(OPERATOR_NAME).v$${new_version} == $$previous_version ]]; then \
 		echo "Already built this, so no need to continue" ;\
