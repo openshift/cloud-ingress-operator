@@ -50,6 +50,7 @@ func SetAPISchemeCondition(
 					Reason:             reason,
 					Message:            message,
 					LastTransitionTime: now,
+					LastProbeTime:      now,
 				},
 			)
 		}
