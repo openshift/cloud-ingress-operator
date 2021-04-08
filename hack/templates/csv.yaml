@@ -11,8 +11,8 @@ metadata:
     createdAt: "2019-04-10T17:34:33Z"
     support: Red Hat SRE
 spec:
-  displayName: cloud-ingress`-operator
-  description: Operator to Manage Rbac Permissions for OpenShift Clusters.
+  displayName: cloud-ingress-operator
+  description: SRE operator - cloud-ingress-operator
   keywords:
   - kubernetes
   - ingress

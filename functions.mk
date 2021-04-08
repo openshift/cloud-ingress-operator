@@ -49,20 +49,20 @@ define create_push_catalog_image
 			-e "s/!OPERATOR_NAME!/$(OPERATOR_NAME)/g" \
 			-e "s/!VERSION!/$${new_version}/g" \
 			hack/templates/package.yaml > bundles-$(1)/$(OPERATOR_NAME)/$(OPERATOR_NAME).package.yaml ;\
-	cd bundles-$(1) ;\
-		git add . ;\
-		git commit -m "add version $(COMMIT_NUMBER)-$(CURRENT_COMMIT)" -m "replaces: $$previous_version" -m "removed versions: $$removed_versions" ;\
-		git push origin $(1) ;\
-	cd .. ;\
-	$(CONTAINER_ENGINE) build \
-		-f build/Dockerfile.catalog_registry \
-		--build-arg=SRC_BUNDLES=$$(find bundles-$(1) -mindepth 1 -maxdepth 1 -type d | grep -v .git) \
-		-t quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest \
-		. ;\
-	skopeo copy --dest-creds $$QUAY_USER:$$QUAY_TOKEN \
-		"docker-daemon:quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" \
-		"docker://quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" ;\
-	skopeo copy --dest-creds $$QUAY_USER:$$QUAY_TOKEN \
-		"docker-daemon:quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" \
-		"docker://quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-$(CURRENT_COMMIT)"
+	# cd bundles-$(1) ;\
+	# 	git add . ;\
+	# 	git commit -m "add version $(COMMIT_NUMBER)-$(CURRENT_COMMIT)" -m "replaces: $$previous_version" -m "removed versions: $$removed_versions" ;\
+	#	git push origin $(1) ;\
+	# cd .. ;\
+	# $(CONTAINER_ENGINE) build \
+	# 	-f build/Dockerfile.catalog_registry \
+	# 	--build-arg=SRC_BUNDLES=$$(find bundles-$(1) -mindepth 1 -maxdepth 1 -type d | grep -v .git) \
+	# 	-t quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest \
+	# 	. ;\
+	# skopeo copy --dest-creds $$QUAY_USER:$$QUAY_TOKEN \
+	# 	"docker-daemon:quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" \
+	# 	"docker://quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" ;\
+	# skopeo copy --dest-creds $$QUAY_USER:$$QUAY_TOKEN \
+	# 	"docker-daemon:quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-latest" \
+	# 	"docker://quay.io/$(8)/$(OPERATOR_NAME)-registry:$(1)-$(CURRENT_COMMIT)"
 endef

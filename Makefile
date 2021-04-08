@@ -8,6 +8,9 @@ CONTAINER_ENGINE?=docker
 # Needed for build-catalog-image
 CATALOG_REGISTRY_ORGANIZATION?=app-sre
 
+# Enable boilerplate OLM CSV generate script
+DEFAULT_CSV_GENRATOR=common
+
 # TODO: remove this include once boilerplate supports generating package
 include functions.mk
 

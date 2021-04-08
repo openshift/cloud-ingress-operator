@@ -31,12 +31,12 @@ if __name__ == '__main__':
     operator_assets_dir = os.path.join("deploy")
     # Check to see if the deploy directory exists before going on.
     if not os.path.exists(operator_assets_dir):
-        print >> sys.stderr, "ERROR Operator asset directory {} does not exist. Giving up.".format(operator_assets_dir)
+        print("ERROR Operator asset directory {} does not exist. Giving up.".format(operator_assets_dir))
         sys.exit(1)
 
     version_dir = os.path.join(operator_dir, operator_version)
     if os.path.exists(version_dir):
-        print >> sys.stderr, "INFO version already exists, skipping: {}".format(version_dir)
+        print("INFO version already exists, skipping: {}".format(version_dir))
         sys.exit(0)
 
     # doesn't exist, create the target version
@@ -131,7 +131,7 @@ if __name__ == '__main__':
                                 print(obj['roleRef']['kind'])
                             except KeyError:
                                 # require a well formed roleRef, olm doesn't check this until deployed and InstallPlan fails
-                                print >> sys.stderr, "ERROR {} '{}' is missing .roleRef.kind in file {}".format(obj['kind'], obj['metadata']['name'], file_path)
+                                print("ERROR {} '{}' is missing .roleRef.kind in file {}".format(obj['kind'], obj['metadata']['name'], file_path))
                                 sys.exit(1)
 
                         print('Adding {} to Catalog: {}'.format(obj['kind'], file_path))
@@ -142,7 +142,7 @@ if __name__ == '__main__':
                         shutil.copyfile(file_path, os.path.join(version_dir, bundle_filename))
 
     if len(csv['spec']['install']['spec']['deployments']) == 0:
-        print >> sys.stderr, "ERROR Did not find any Deployments in {}. There is nothing to deploy, so giving up.".format(operator_assets_dir)
+        print("ERROR Did not find any Deployments in {}. There is nothing to deploy, so giving up.".format(operator_assets_dir))
         sys.exit(1)
 
 
