@@ -41,16 +41,23 @@ if [ ! -d "${SAAS_OPERATOR_DIR}/.git" ] ; then
     exit 1
 fi
 
-# create package yaml
-cat <<EOF > $BUNDLE_DIR/${operator_name}.package.yaml
-packageName: ${operator_name}
-channels:
-- name: ${operator_channel}
-  currentCSV: ${operator_name}.v${OPERATOR_NEW_VERSION}
-EOF
+# Read the bundle version we're attempting to publish
+# in the OLM catalog from the package yaml
+PACKAGE_YAML_PATH="${BUNDLE_DIR}/${operator_name}.package.yaml"
+PACKAGE_YAML_VERSION=$(awk '$1 == "currentCSV:" {print $2}' ${PACKAGE_YAML_PATH})
+
+# Ensure we're commiting and pushing the version we think we are pushing
+# Since we build the bundle in catalog-build.sh this script could be run
+# independently and push a version we're not expecting.
+if ! [ "${operator_name}.v${OPERATOR_NEW_VERSION}" = "${PACKAGE_YAML_VERSION}" ]; then
+    echo "You are attemping to push a bundle that's pointing to a version of this catalog you are not building"
+    echo "You are building version: ${operator_name}.v${OPERATOR_NEW_VERSION}"
+    echo "Your local package yaml version is: ${PACKAGE_YAML_VERSION}"
+    exit 1
+fi
 
 # add, commit & push
-pushd ${SAAS_OPERATOR_DIR}
+pushd "${SAAS_OPERATOR_DIR}"
 
 git add .
 
@@ -62,7 +69,7 @@ removed versions: ${REMOVED_VERSIONS}"
 git commit -m "${MESSAGE}"
 git push origin "${operator_channel}"
 
-if [ $? -ne 0 ] ; then 
+if [ $? -ne 0 ] ; then
     echo "git push failed, exiting..."
     exit 1
 fi
@@ -71,22 +78,22 @@ popd
 
 if [ "$push_catalog" = true ] ; then
     REGISTRY_IMG="quay.io/app-sre/${operator_name}-registry"
-    
+
     # push image
     skopeo copy --dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
         "docker-daemon:${REGISTRY_IMG}:${operator_channel}-latest" \
         "docker://${REGISTRY_IMG}:${operator_channel}-latest"
 
-    if [ $? -ne 0 ] ; then 
+    if [ $? -ne 0 ] ; then
         echo "skopeo push of ${REGISTRY_IMG}:${operator_channel}-latest failed, exiting..."
         exit 1
     fi
-    
+
     skopeo copy --dest-creds "${QUAY_USER}:${QUAY_TOKEN}" \
         "docker-daemon:${REGISTRY_IMG}:${operator_channel}-latest" \
         "docker://${REGISTRY_IMG}:${operator_channel}-${operator_commit_hash}"
 
-    if [ $? -ne 0 ] ; then 
+    if [ $? -ne 0 ] ; then
         echo "skopeo push of ${REGISTRY_IMG}:${operator_channel}-${operator_commit_hash} failed, exiting..."
         exit 1
     fi
