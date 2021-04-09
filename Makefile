@@ -11,9 +11,6 @@ CATALOG_REGISTRY_ORGANIZATION?=app-sre
 # Enable boilerplate OLM CSV generate script
 DEFAULT_CSV_GENRATOR=common
 
-# TODO: remove this include once boilerplate supports generating package
-include functions.mk
-
 # TODO: Remove once app-interface config is updated
 .PHONY: build
 build: docker-build
