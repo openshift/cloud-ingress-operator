@@ -23,7 +23,7 @@ var log = logf.Log.WithName("controller_router_service")
 const (
 	RouterServiceNamespace = "openshift-ingress"
 	ELBAnnotationKey       = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
-	ELBAnnotationValue     = "600"
+	ELBAnnotationValue     = "1800"
 )
 
 // Add creates a new Controller and adds it to the Manager. The Manager will set fields on the Controller

@@ -32,7 +32,7 @@ import (
 const (
 	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
 	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
-	elbAnnotationValue    = "600"
+	elbAnnotationValue    = "1800"
 )
 
 var (
