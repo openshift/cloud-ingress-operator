@@ -2,10 +2,10 @@
 
 source `dirname $0`/common.sh
 
-usage() { echo "Usage: $0 -o operator_name -c saas-repository-channel -H operator_commit_hash -n operator_commit_number -i operator_image -g [hack|common][-d]" 1>&2; exit 1; }
+usage() { echo "Usage: $0 -o operator-name -c saas-repository-channel -H operator-commit-hash -n operator-commit-number -i operator-image -V operator-version -g [hack|common][-d]" 1>&2; exit 1; }
 
 # TODO : Add support of long-options 
-while getopts "c:dg:H:i:n:o:" option; do
+while getopts "c:dg:H:i:n:o:V:" option; do
     case "${option}" in
         c)
             operator_channel=${OPTARG}
@@ -25,6 +25,8 @@ while getopts "c:dg:H:i:n:o:" option; do
             operator_commit_hash=${OPTARG}
             ;;
         i)
+            # This should be $OPERATOR_IMAGE from standard.mk
+            # I.e. the URL to the image repository with *no* tag.
             operator_image=${OPTARG}
             ;;
         n)
@@ -33,13 +35,27 @@ while getopts "c:dg:H:i:n:o:" option; do
         o)
             operator_name=${OPTARG}
             ;;
+        V)
+            # This should be $OPERATOR_VERSION from standard.mk:
+            # `{major}.{minor}.{commit-number}-{hash}`
+            # Notably, it does *not* start with `v`.
+            operator_version=${OPTARG}
+            ;;
         *)
             usage
     esac
 done
 
 # Checking parameters
-check_mandatory_params operator_channel operator_image operator_name operator_commit_hash operator_commit_number generate_script
+check_mandatory_params operator_channel operator_image operator_version operator_name operator_commit_hash operator_commit_number generate_script
+
+# Get the image URI as repo URL + image digest
+IMAGE_DIGEST=$(skopeo inspect docker://${operator_image}:v${operator_version} | jq -r .Digest)
+if [[ -z "$IMAGE_DIGEST" ]]; then
+    echo "Couldn't discover IMAGE_DIGEST for docker://${operator_image}:v${operator_version}!"
+    exit 1
+fi
+REPO_DIGEST=${operator_image}@${IMAGE_DIGEST}
 
 # If no override, using the gitlab repo
 if [ -z "$GIT_PATH" ] ; then 
@@ -68,8 +84,8 @@ else
     if [[ "$operator_channel" == "production" ]]; then
         if [ -z "$DEPLOYED_HASH" ] ; then
             DEPLOYED_HASH=$(
-                curl -s "https://gitlab.cee.redhat.com/service/app-interface/raw/master/data/services/osd-operators/cicd/saas/saas-${_OPERATOR_NAME}.yaml" | \
-                    docker run --rm -i quay.io/app-sre/yq yq r - "resourceTemplates[*].targets(namespace.\$ref==/services/osd-operators/namespaces/hivep01ue1/${_OPERATOR_NAME}.yml).ref"
+                curl -s "https://gitlab.cee.redhat.com/service/app-interface/raw/master/data/services/osd-operators/cicd/saas/saas-${operator_name}.yaml" | \
+                    docker run --rm -i quay.io/app-sre/yq:3.4.1 yq r - "resourceTemplates[*].targets(namespace.\$ref==/services/osd-operators/namespaces/hivep01ue1/${operator_name}.yml).ref"
             )
         fi
     
@@ -90,21 +106,20 @@ else
             fi
         done
     fi
-    # TODO : Clean handling of major version (should be variable from consumer repo and default to 0.1 is undefined)
     OPERATOR_PREV_VERSION=$(ls "$BUNDLE_DIR" | sort -t . -k 3 -g | tail -n 1)
-    OPERATOR_NEW_VERSION="0.1.${operator_commit_number}-${operator_commit_hash}"
+    OPERATOR_NEW_VERSION="${operator_version}"
     OUTPUT_DIR=${BUNDLE_DIR}
 fi
 
 if [[ "$generate_script" = "common" ]] ; then
-    ./boilerplate/openshift/golang-osd-operator/csv-generate/common-generate-operator-bundle.py -o ${operator_name} -d ${OUTPUT_DIR} -p ${OPERATOR_PREV_VERSION} -n ${operator_commit_number} -c ${operator_commit_hash} -i ${operator_image}
+    ./boilerplate/openshift/golang-osd-operator/csv-generate/common-generate-operator-bundle.py -o ${operator_name} -d ${OUTPUT_DIR} -p ${OPERATOR_PREV_VERSION} -i ${REPO_DIGEST} -V ${operator_version}
 elif [[ "$generate_script" = "hack" ]] ; then
     if [ -z "$OPERATOR_PREV_VERSION" ] ; then 
         OPERATOR_PREV_VERSION="no-version"
         DELETE_REPLACE=true
     fi
     
-    ./hack/generate-operator-bundle.py ${OUTPUT_DIR} ${OPERATOR_PREV_VERSION} ${operator_commit_number} ${operator_commit_hash} ${operator_image}
+    ./hack/generate-operator-bundle.py ${OUTPUT_DIR} ${OPERATOR_PREV_VERSION} ${operator_commit_number} ${operator_commit_hash} ${REPO_DIGEST}
     
     if [ ! -z "${DELETE_REPLACE}" ] ; then
         yq d -i output-comparison/${OPERATOR_NEW_VERSION}/*.clusterserviceversion.yaml 'spec.replaces'
