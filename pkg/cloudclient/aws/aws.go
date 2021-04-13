@@ -3,10 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
-	"os"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -20,9 +17,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/config"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,6 +36,14 @@ type Client struct {
 	route53Client route53iface.Route53API
 	elbClient     elbiface.ELBAPI
 	elbv2Client   elbv2iface.ELBV2API
+
+	config Config
+}
+
+// Config contains input to configure AWS client
+type Config struct {
+	// SharedCredentialFile is the path to aws shared creds file used by SDK to congfigure creds
+	SharedCredentialFile string
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
@@ -73,15 +76,21 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
-func newClient(accessID, accessSecret, token, region string) (*Client, error) {
-	awsConfig := &aws.Config{Region: aws.String(region)}
-	if token == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
-		os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
-	} else {
-		awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
-	}
-	s, err := session.NewSession(awsConfig)
+func newClient(config Config, region string) (*Client, error) {
+	// awsConfig := &aws.Config{Region: aws.String(region)}
+	// if token == "" {
+	// 	os.Setenv("AWS_ACCESS_KEY_ID", accessID)
+	// 	os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
+	// } else {
+	// 	awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
+	// }
+	// s, err := session.NewSession(awsConfig)
+
+	s, err := session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+		SharedConfigFiles: []string{config.SharedCredentialFile},
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -90,39 +99,49 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 		elbClient:     elb.New(s),
 		elbv2Client:   elbv2.New(s),
 		route53Client: route53.New(s),
+		config:        config,
 	}, nil
 }
 
 // NewClient creates a new CloudClient for use with AWS.
-func NewClient(kclient client.Client) *Client {
+func NewClient(config Config, kclient client.Client) *Client {
 	region, err := getClusterRegion(kclient)
 	if err != nil {
 		panic(fmt.Sprintf("Couldn't get cluster region %s", err.Error()))
 	}
-	secret := &corev1.Secret{}
-	err = kclient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      config.AWSSecretName,
-			Namespace: config.OperatorNamespace,
-		},
-		secret)
+	creds := &corev1.Secret{}
+	// err = kclient.Get(
+	// 	context.TODO(),
+	// 	types.NamespacedName{
+	// 		Name:      config.AWSSecretName,
+	// 		Namespace: config.OperatorNamespace,
+	// 	},
+	// 	secret)
+	// if err != nil {
+	// 	panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+	// }
+	// accessKeyID, ok := secret.Data["aws_access_key_id"]
+	// if !ok {
+	// 	panic(fmt.Sprintf("Access credentials missing key"))
+	// }
+	// secretAccessKey, ok := secret.Data["aws_secret_access_key"]
+	// if !ok {
+	// 	panic(fmt.Sprintf("Access credentials missing secret key"))
+	// }
+
+	// get sharedCredsFile from secret
+	sharedCredsFile, err := SharedCredentialsFileFromSecret(creds)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
-	}
-	accessKeyID, ok := secret.Data["aws_access_key_id"]
-	if !ok {
-		panic("Access credentials missing key")
-	}
-	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
-	if !ok {
-		panic("Access credentials missing secret key")
+		return nil
 	}
 
+	config.SharedCredentialFile = sharedCredsFile
+
 	c, err := newClient(
-		string(accessKeyID),
-		string(secretAccessKey),
-		"",
+		// string(accessKeyID),
+		// string(secretAccessKey),
+		// "",
+		config,
 		region)
 
 	if err != nil {
