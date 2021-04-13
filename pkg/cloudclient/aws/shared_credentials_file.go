@@ -36,7 +36,7 @@ func SharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
 
 	}
 
-	f, err := ioutil.TempFile("", "invalid secret for aws credentials")
+	f, err := ioutil.TempFile("", "aws-shared-credentials")
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create file for shared credentials")
 	}
