@@ -85,3 +85,10 @@ build/_output
 
 # vscode workspace files
 *.code-workspace
+
+### Local testing of app-sre pipeline creates these
+# The docker hidden dir is created by make
+# for Jenkins credentials to work
+.docker/
+Dockerfile.olm-registry
+saas-cloud-ingress-operator-bundle
