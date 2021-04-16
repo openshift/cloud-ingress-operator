@@ -29,6 +29,7 @@ IMG?=$(OPERATOR_IMAGE):$(OPERATOR_IMAGE_TAG)
 OPERATOR_IMAGE_URI=${IMG}
 OPERATOR_IMAGE_URI_LATEST=$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):latest
 OPERATOR_DOCKERFILE ?=build/Dockerfile
+REGISTRY_IMAGE=$(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME)-registry
 
 OLM_BUNDLE_IMAGE = $(OPERATOR_IMAGE)-bundle
 OLM_CATALOG_IMAGE = $(OPERATOR_IMAGE)-catalog
@@ -207,7 +208,7 @@ coverage:
 # TODO: Boilerplate this script.
 .PHONY: build-push
 build-push:
-	hack/app_sre_build_deploy.sh
+	${CONVENTION_DIR}/app-sre-build-deploy.sh ${OPERATOR_IMAGE_URI} ${REGISTRY_IMAGE} ${CURRENT_COMMIT}
 
 .PHONY: opm-build-push
 opm-build-push: docker-push
