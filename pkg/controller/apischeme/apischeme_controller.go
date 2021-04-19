@@ -31,6 +31,8 @@ import (
 
 const (
 	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
+	elbAnnotationValue    = "1800"
 )
 
 var (
@@ -234,6 +236,17 @@ func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
+	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
+		found.Annotations[elbAnnotationKey] != elbAnnotationValue {
+		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationKey, elbAnnotationValue)
+		err = r.client.Update(context.TODO(), found)
+		if err != nil {
+			reqLogger.Error(err, "Error updating service annotation")
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationValue))
+	}
+
 	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.client, instance, found)
 	// Check for error types that this operator knows about
 	switch err {
@@ -264,13 +277,17 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 		"apiserver": "true",
 		"app":       "openshift-kube-apiserver",
 	}
+	annotations := map[string]string{
+		elbAnnotationKey: elbAnnotationValue,
+	}
 	// Note: This owner reference should nbnot be expected to work
 	//ref := metav1.NewControllerRef(instance, instance.GetObjectKind().GroupVersionKind())
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
-			Namespace: "openshift-kube-apiserver",
-			Labels:    labels,
+			Name:        instance.Spec.ManagementAPIServerIngress.DNSName,
+			Namespace:   "openshift-kube-apiserver",
+			Labels:      labels,
+			Annotations: annotations,
 			//OwnerReferences: []metav1.OwnerReference{*ref},
 		},
 		Spec: corev1.ServiceSpec{
