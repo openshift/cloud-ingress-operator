@@ -7,6 +7,8 @@ parameters:
   required: true
 - name: IMAGE_TAG
   required: true
+- name: REPO_DIGEST
+  requred: true
 - name: REPO_NAME
   value: cloud-ingress-operator
   required: true
@@ -325,7 +327,7 @@ objects:
         name: ${REPO_NAME}-registry
         namespace: openshift-${REPO_NAME}
       spec:
-        image: ${REGISTRY_IMG}:${CHANNEL}-${IMAGE_TAG}
+        image: ${REPO_DIGEST}
         affinity:
           nodeAffinity:
             preferredDuringSchedulingIgnoredDuringExecution:
