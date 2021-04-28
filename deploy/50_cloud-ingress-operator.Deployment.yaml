@@ -44,6 +44,7 @@ spec:
             - name: OPERATOR_NAME
               value: "cloud-ingress-operator"
           resources:
+            requests:
+              cpu: "200m"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              memory: "4G"
