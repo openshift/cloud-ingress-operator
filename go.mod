@@ -15,6 +15,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.2.1
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.4.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	google.golang.org/api v0.35.0
 	gopkg.in/yaml.v2 v2.2.8
