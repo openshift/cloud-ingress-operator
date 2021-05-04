@@ -643,25 +643,74 @@ func (c *Client) deleteARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceR
 	return err
 }
 
+// recordExists checks if a specific RecordSet already exist in route53
+func (c *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publicHostedZoneID string) (bool, error) {
+	if resourceRecordSet == nil {
+		return false, goError.New("resourceRecordSet can't be nil")
+	}
+	if resourceRecordSet.Name == nil {
+		return false, goError.New("resourceRecordSet Name is required")
+	}
+	// Route53 assumes that the domain name that you specify is fully qualified.
+	// Therefore, it doesn't mind if the trailing "." is missing.
+	// However, adding the trailing "." make the future comparaison easier, since route53 listResourceRecordSets contains trailing dots
+	if !strings.HasSuffix(*resourceRecordSet.Name, ".") {
+		*resourceRecordSet.Name += "."
+	}
+	if resourceRecordSet.AliasTarget != nil && !strings.HasSuffix(*resourceRecordSet.AliasTarget.DNSName, ".") {
+		*resourceRecordSet.AliasTarget.DNSName += "."
+	}
+
+	var recordExists bool
+	input := &route53.ListResourceRecordSetsInput{
+		HostedZoneId: aws.String(publicHostedZoneID),
+	}
+
+	// Check if any property of the record was changed.
+	// aws-go-sdk may potentially give all results in multiple pages, so this will go
+	// through every page given in response to the API call
+	err := c.route53Client.ListResourceRecordSetsPages(input, func(p *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
+		for _, record := range p.ResourceRecordSets {
+			if *record.Name == *resourceRecordSet.Name && *record.Type == *resourceRecordSet.Type && reflect.DeepEqual(record.AliasTarget, resourceRecordSet.AliasTarget) {
+				log.Info("Record already exists, skipping UPSERT.", "Record", aws.StringValue(record.Name))
+				recordExists = true
+				return false
+			}
+		}
+		// we didn't find the record in this page, keep looking
+		return true
+	})
+
+	return recordExists, err
+}
+
 func (c *Client) upsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
 	publicHostedZoneID, err := c.getPublicHostedZoneID(clusterDomain)
 	if err != nil {
 		return err
 	}
+
+	resourceRecordSet := &route53.ResourceRecordSet{
+		AliasTarget: &route53.AliasTarget{
+			DNSName:              aws.String(DNSName),
+			EvaluateTargetHealth: aws.Bool(targetHealth),
+			HostedZoneId:         aws.String(aliasDNSZoneID),
+		},
+		Name: aws.String(resourceRecordSetName),
+		Type: aws.String("A"),
+	}
+
+	recordExists, err := c.recordExists(resourceRecordSet, publicHostedZoneID)
+	if err != nil || recordExists {
+		return err
+	}
+
 	change := &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53.ChangeBatch{
 			Changes: []*route53.Change{
 				{
-					Action: aws.String("UPSERT"),
-					ResourceRecordSet: &route53.ResourceRecordSet{
-						AliasTarget: &route53.AliasTarget{
-							DNSName:              aws.String(DNSName),
-							EvaluateTargetHealth: aws.Bool(targetHealth),
-							HostedZoneId:         aws.String(aliasDNSZoneID),
-						},
-						Name: aws.String(resourceRecordSetName),
-						Type: aws.String("A"),
-					},
+					Action:            aws.String("UPSERT"),
+					ResourceRecordSet: resourceRecordSet,
 				},
 			},
 			Comment: aws.String(comment),
