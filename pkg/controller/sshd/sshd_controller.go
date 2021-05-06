@@ -31,14 +31,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_sshd")
+
+const SSHDNamespace string = "openshift-sre-sshd"
 
 // Add creates a new SSHD Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -66,8 +70,20 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	//       which gets passed to the Manager object in main() to
 	//       enable cluster-wide watches.
 
+	// OSD-7118 - limit requests for only `openshift-sre-sshd` as
+	// it is defined in olm as well:
+	// https://github.com/openshift/cloud-ingress-operator/blob/master/hack/olm-registry/olm-artifacts-template.yaml#L379
+	p := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return e.Meta.GetNamespace() == SSHDNamespace
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.MetaNew.GetNamespace() == SSHDNamespace
+		},
+	}
+
 	// Watch for changes to primary resource SSHD
-	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.SSHD{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.SSHD{}}, &handler.EnqueueRequestForObject{}, p)
 	if err != nil {
 		return err
 	}
