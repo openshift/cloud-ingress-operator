@@ -52,9 +52,9 @@ spec:
             - name: bound-sa-token
               mountPath: /var/run/secrets/openshift/serviceaccount
       volumes:
-        - name: bound-sa-token
+      - name: bound-sa-token
         projected:
           sources:
           - serviceAccountToken:
-            path: token
-            audience: openshift
+              path: token
+              audience: openshift
