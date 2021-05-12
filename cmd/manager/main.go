@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
 	"strings"
 
+	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	"github.com/openshift/cloud-ingress-operator/version"
@@ -146,17 +148,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	metricsServer := osdmetrics.NewBuilder().
-		WithPort(osdMetricsPort).
-		WithPath(osdMetricsPath).
-		WithCollectors(localmetrics.MetricsList).
-		WithServiceName("localmetrics-cloud-ingress-operator").
-		WithServiceMonitor().
-		GetConfig()
-
-	if err := osdmetrics.ConfigureMetrics(context.TODO(), *metricsServer); err != nil {
-		log.Error(err, "Failed to configure OSD metrics")
-	}
+	addMetrics(ctx)
 
 	log.Info("Starting the Cmd.")
 
@@ -164,5 +156,29 @@ func main() {
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
+	}
+}
+
+// addMetrics will create the Services and Service Monitors to allow the operator export the metrics by using
+// the Prometheus operator
+func addMetrics(ctx context.Context) {
+	// Get the namespace the operator is currently deployed in.
+	operatorNs, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		if errors.Is(err, k8sutil.ErrRunLocal) {
+			log.Info("Skipping OSD metrics server creation; not running in a cluster.")
+			return
+		}
+	}
+
+	metricsServer := osdmetrics.NewBuilder(operatorNs, operatorconfig.OperatorName).
+		WithPort(osdMetricsPort).
+		WithPath(osdMetricsPath).
+		WithCollectors(localmetrics.MetricsList).
+		WithServiceMonitor().
+		GetConfig()
+
+	if err := osdmetrics.ConfigureMetrics(ctx, *metricsServer); err != nil {
+		log.Error(err, "Failed to configure OSD metrics")
 	}
 }
