@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
+	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	"github.com/openshift/cloud-ingress-operator/version"
@@ -22,6 +25,7 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -89,10 +93,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{
+	options := manager.Options{
 		Namespace: namespace,
-	})
+	}
+
+	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
+	// Note that this is not intended to be used for excluding namespaces, this is better done via a Predicate
+	// Also note that you may face performance issues when using this with a high number of namespaces.
+	// More Info: https://godoc.org/github.com/kubernetes-sigs/controller-runtime/pkg/cache#MultiNamespacedCacheBuilder
+	if strings.Contains(namespace, ",") {
+		options.Namespace = ""
+		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(namespace, ","))
+	}
+
+	// Create a new Cmd to provide shared dependencies and start components
+	mgr, err := manager.New(cfg, options)
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
@@ -133,17 +148,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	metricsServer := osdmetrics.NewBuilder().
-		WithPort(osdMetricsPort).
-		WithPath(osdMetricsPath).
-		WithCollectors(localmetrics.MetricsList).
-		WithServiceName("localmetrics-cloud-ingress-operator").
-		WithServiceMonitor().
-		GetConfig()
-
-	if err := osdmetrics.ConfigureMetrics(context.TODO(), *metricsServer); err != nil {
-		log.Error(err, "Failed to configure OSD metrics")
-	}
+	addMetrics(ctx)
 
 	log.Info("Starting the Cmd.")
 
@@ -151,5 +156,29 @@ func main() {
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
+	}
+}
+
+// addMetrics will create the Services and Service Monitors to allow the operator export the metrics by using
+// the Prometheus operator
+func addMetrics(ctx context.Context) {
+	// Get the namespace the operator is currently deployed in.
+	operatorNs, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		if errors.Is(err, k8sutil.ErrRunLocal) {
+			log.Info("Skipping OSD metrics server creation; not running in a cluster.")
+			return
+		}
+	}
+
+	metricsServer := osdmetrics.NewBuilder(operatorNs, operatorconfig.OperatorName).
+		WithPort(osdMetricsPort).
+		WithPath(osdMetricsPath).
+		WithCollectors(localmetrics.MetricsList).
+		WithServiceMonitor().
+		GetConfig()
+
+	if err := osdmetrics.ConfigureMetrics(ctx, *metricsServer); err != nil {
+		log.Error(err, "Failed to configure OSD metrics")
 	}
 }
