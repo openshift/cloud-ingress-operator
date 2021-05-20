@@ -38,6 +38,11 @@ objects:
     clusterDeploymentSelector:
       matchLabels:
         api.openshift.com/managed: 'true'
+      matchExpressions:
+      - key: api.openshift.com/sts
+        operator: NotIn
+        values:
+        - "true"
     resourceApplyMode: Sync
     resources:
     - kind: Namespace
