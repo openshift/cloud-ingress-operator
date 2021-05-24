@@ -120,7 +120,7 @@ const (
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling SSHD")
 
@@ -260,10 +260,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Install Deployment
 	foundDeployment := &appsv1.Deployment{}
 	deployment := newSSHDDeployment(instance, configMapList, hostKeysSecret)
-	deploymentName, err := client.ObjectKeyFromObject(deployment)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
+	deploymentName := client.ObjectKeyFromObject(deployment)
 	if err = r.client.Get(context.TODO(), deploymentName, foundDeployment); err != nil {
 		if errors.IsNotFound(err) {
 			// Create a new Deployment.
@@ -298,10 +295,7 @@ func (r *ReconcileSSHD) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Install Service
 	foundService := &corev1.Service{}
 	service := newSSHDService(instance)
-	serviceName, err := client.ObjectKeyFromObject(service)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
+	serviceName := client.ObjectKeyFromObject(service)
 	if err = r.client.Get(context.TODO(), serviceName, foundService); err != nil {
 		if errors.IsNotFound(err) {
 			// Create a new Service.

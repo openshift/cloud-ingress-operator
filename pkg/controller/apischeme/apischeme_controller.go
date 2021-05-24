@@ -97,7 +97,7 @@ type LoadBalancer struct {
 // 1. Create Service
 // 2. Add DNS CNAME from rh-api to the ELB created by AWS provider
 // 3. Ready for work (Ready)
-func (r *ReconcileAPIScheme) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIScheme")
 

@@ -106,7 +106,7 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 		t.Fatalf("Couldn't add cloudingressv1alpha1 scheme: (%v)", err)
 	}
 	ret := &Mocks{
-		FakeKubeClient: fake.NewFakeClientWithScheme(s, localObjs...),
+		FakeKubeClient: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(localObjs...).Build(),
 		MockCtrl:       mockctrl,
 		MockAws:        awsclient.NewMockClient(mockctrl),
 		Scheme:         s,

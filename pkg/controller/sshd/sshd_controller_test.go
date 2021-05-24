@@ -245,7 +245,7 @@ func TestReconcile(t *testing.T) {
 		cloudClient: cloud,
 	}
 
-	result, err := r.Reconcile(reconcile.Request{
+	result, err := r.Reconcile(context.TODO(), reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      placeholderName,
 			Namespace: placeholderNamespace,
@@ -334,9 +334,7 @@ func setUpTestClient(t *testing.T) (testClient client.Client, s *runtime.Scheme)
 		},
 	}
 
-	objects := []runtime.Object{cr, svc, secret}
-
-	testClient = fake.NewFakeClientWithScheme(s, objects...)
+	testClient = fake.NewClientBuilder().WithScheme(s).WithObjects(secret, svc, cr).Build()
 	return
 }
 
