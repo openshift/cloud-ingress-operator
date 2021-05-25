@@ -129,7 +129,7 @@ func updateAWSLBList(kclient client.Client, oldLBList []awsproviderapi.LoadBalan
 			return err
 		}
 		machineToPatch.Spec.ProviderSpec = *newProviderSpecEncoded
-		machineObj := machineToPatch.DeepCopyObject()
+		machineObj := machineToPatch.DeepCopy()
 		if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
 			log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machineToPatch.Name)
 			return err

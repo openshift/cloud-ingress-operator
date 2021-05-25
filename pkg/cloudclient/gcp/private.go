@@ -407,7 +407,7 @@ func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []stri
 			return err
 		}
 		machineToPatch.Spec.ProviderSpec.Value = newProviderSpecEncoded
-		machineObj := machineToPatch.DeepCopyObject()
+		machineObj := machineToPatch.DeepCopy()
 		if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
 			log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machineToPatch.Name)
 			return err

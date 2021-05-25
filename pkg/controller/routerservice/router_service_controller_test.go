@@ -6,7 +6,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -37,16 +36,15 @@ func TestRouterServiceController(t *testing.T) {
 		},
 	}
 
-	// Objects to track in the fake client.
-	objs := []runtime.Object{
-		routerDefaultSvc,
-	}
-
 	// Register operator types with the runtime scheme.
 	s := scheme.Scheme
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
+	cl := fake.
+		NewClientBuilder().
+		WithScheme(s).
+		WithObjects(routerDefaultSvc).
+		Build()
 
 	s.AddKnownTypes(corev1.SchemeGroupVersion, routerDefaultSvc)
 
@@ -63,7 +61,7 @@ func TestRouterServiceController(t *testing.T) {
 		},
 	}
 	log.Info("Calling Reconcile()")
-	res, err := r.Reconcile(req)
+	res, err := r.Reconcile(context.TODO(), req)
 	if err != nil {
 		t.Fatalf("reconcile: (%v)", err)
 	}
@@ -75,7 +73,7 @@ func TestRouterServiceController(t *testing.T) {
 
 	// Reconcile again so Reconcile() checks routes and updates the Service
 	// resources' Status.
-	res, err = r.Reconcile(req)
+	res, err = r.Reconcile(context.TODO(), req)
 	if err != nil {
 		t.Fatalf("reconcile: (%v)", err)
 	}
