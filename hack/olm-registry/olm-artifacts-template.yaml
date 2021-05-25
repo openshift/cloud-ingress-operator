@@ -43,7 +43,7 @@ objects:
         operator: NotIn
         values:
         - "true"
-    resourceApplyMode: Sync
+    resourceApplyMode: Upsert
     resources:
     - kind: Namespace
       apiVersion: v1
