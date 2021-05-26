@@ -15,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
+	"github.com/aws/aws-sdk-go/service/route53"
+	"github.com/aws/aws-sdk-go/service/route53/route53iface"
 )
 
 func TestUpdateAWSLBList(t *testing.T) {
@@ -675,4 +677,180 @@ func TestNoInfraObj(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
 	}
+}
+
+type mockRoute53Client struct {
+	route53iface.Route53API
+}
+
+func (m mockRoute53Client) ListResourceRecordSetsPages(input *route53.ListResourceRecordSetsInput, fn func(*route53.ListResourceRecordSetsOutput, bool) bool) error {
+	resps := []*route53.ListResourceRecordSetsOutput{
+		{
+			ResourceRecordSets: []*route53.ResourceRecordSet{
+				{
+					Name: aws.String("rh-api.osd-cluster.org."),
+					Type: aws.String("A"),
+					AliasTarget: &route53.AliasTarget{
+						DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+						EvaluateTargetHealth: aws.Bool(false),
+						HostedZoneId:         aws.String("AAAAAAAAAA"),
+					},
+				},
+				{
+					Name: aws.String("api-osd-cluster.org."),
+					Type: aws.String("A"),
+					AliasTarget: &route53.AliasTarget{
+						DNSName:              aws.String("0123456.elb.us-east-1.amazonaws.com."),
+						EvaluateTargetHealth: aws.Bool(false),
+						HostedZoneId:         aws.String("BBBBBBBBBB"),
+					},
+				},
+			},
+			IsTruncated: aws.Bool(false),
+			MaxItems:    aws.String("100"),
+		},
+	}
+	for _, resp := range resps {
+		if !fn(resp, true) {
+			break
+		}
+	}
+	return nil
+}
+
+func TestRecordExists(t *testing.T) {
+	tests := []struct {
+		Name          string
+		Record        *route53.ResourceRecordSet // the record to check
+		Resp          bool
+		ErrResp       string
+		ErrorExpected bool
+	}{
+		{
+			Name: "Record should exist",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+					EvaluateTargetHealth: aws.Bool(false),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: aws.String("rh-api.osd-cluster.org."),
+				Type: aws.String("A"),
+			},
+			Resp:          true,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name: "Record with non FDQN name should still exist",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com"),
+					EvaluateTargetHealth: aws.Bool(false),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: aws.String("rh-api.osd-cluster.org"),
+				Type: aws.String("A"),
+			},
+			Resp:          true,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name: "Record shouldn't exist",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+					EvaluateTargetHealth: aws.Bool(false),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: aws.String("rh-ssh.osd-cluster.org."),
+				Type: aws.String("A"),
+			},
+			Resp:          false,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name: "Record with matching Name but missmatched Type shouldn't exist",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+					EvaluateTargetHealth: aws.Bool(false),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: aws.String("rh-ssh.osd-cluster.org."),
+				Type: aws.String("AAAA"),
+			},
+			Resp:          false,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name: "Record with matching Name and Type, but no AliasTarget, shoudn't exist",
+			Record: &route53.ResourceRecordSet{
+				Name: aws.String("rh-ssh.osd-cluster.org."),
+				Type: aws.String("A"),
+			},
+			Resp:          false,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name: "Record with matching Name and Type, but missmatched AliasTarget.EvaluateTargetHealth , shoudn't exist",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+					EvaluateTargetHealth: aws.Bool(true),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: aws.String("rh-ssh.osd-cluster.org."),
+				Type: aws.String("A"),
+			},
+			Resp:          false,
+			ErrResp:       "",
+			ErrorExpected: false,
+		},
+		{
+			Name:          "nil Record should error",
+			Record:        nil,
+			Resp:          false,
+			ErrResp:       "resourceRecordSet can't be nil",
+			ErrorExpected: true,
+		},
+		{
+			Name: "nil Record.Name should error",
+			Record: &route53.ResourceRecordSet{
+				AliasTarget: &route53.AliasTarget{
+					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
+					EvaluateTargetHealth: aws.Bool(false),
+					HostedZoneId:         aws.String("AAAAAAAAAA"),
+				},
+				Name: nil,
+				Type: aws.String("A"),
+			},
+			Resp:          false,
+			ErrResp:       "resourceRecordSet Name is required",
+			ErrorExpected: true,
+		},
+	}
+
+	for _, test := range tests {
+		client := &Client{
+			route53Client: mockRoute53Client{},
+		}
+		resp, err := client.recordExists(test.Record, "publicHostedZoneID")
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && err.Error() != test.ErrResp {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrResp, err.Error())
+		}
+		if resp != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, resp)
+		}
+
+	}
+
 }
