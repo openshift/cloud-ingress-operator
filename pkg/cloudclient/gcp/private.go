@@ -18,7 +18,9 @@ import (
 	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -165,8 +167,7 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 		Ttl:              30,
 	}
 
-	clusterDNS := &configv1.DNS{}
-	err = kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return err
 	}
@@ -225,8 +226,7 @@ func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service,
 	}
 	FQDN := dnsName + "." + baseDomain + "."
 
-	clusterDNS := &configv1.DNS{}
-	err = kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return err
 	}
@@ -491,8 +491,7 @@ func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPoo
 }
 
 func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newIP string) (oldIP string, err error) {
-	clusterDNS := &configv1.DNS{}
-	err = kclient.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, clusterDNS)
+	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return "", err
 	}
@@ -527,4 +526,30 @@ func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newI
 	}
 
 	return oldIP, nil
+}
+
+func getClusterDNS(kclient client.Client) (*configv1.DNS, error) {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "",
+		Version: "config.openshift.io/v1",
+		Kind:    "dns",
+	})
+	ns := types.NamespacedName{
+		Namespace: "",
+		Name:      "cluster",
+	}
+	err := kclient.Get(context.TODO(), ns, u)
+	if err != nil {
+		return nil, err
+	}
+
+	uContent := u.UnstructuredContent()
+	var dns *configv1.DNS
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(uContent, &dns)
+	if err != nil {
+		return nil, err
+	}
+
+	return dns, nil
 }
