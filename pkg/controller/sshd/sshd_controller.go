@@ -171,10 +171,10 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 			}
 
 			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
-			switch err {
+			switch err := err.(type) {
 			case nil:
 				// all good
-			case err.(*cioerrors.LoadBalancerNotReadyError):
+			case *cioerrors.LoadBalancerNotReadyError:
 				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
 				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 			default:
@@ -351,10 +351,10 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 	}
 
 	err = r.cloudClient.EnsureSSHDNS(context.TODO(), r.client, instance, foundService)
-	switch err {
+	switch err := err.(type) {
 	case nil:
 		// all good
-	case err.(*cioerrors.LoadBalancerNotReadyError):
+	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready yet.")
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:

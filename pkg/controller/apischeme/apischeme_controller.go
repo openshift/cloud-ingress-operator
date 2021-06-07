@@ -171,10 +171,10 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 
 			if found != nil {
 				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
-				switch err {
+				switch err := err.(type) {
 				case nil:
 					// all good
-				case err.(*cioerrors.LoadBalancerNotReadyError):
+				case *cioerrors.LoadBalancerNotReadyError:
 					// couldn't find the load balancer - it's likely still queued for creation
 					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
@@ -249,16 +249,16 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 
 	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.client, instance, found)
 	// Check for error types that this operator knows about
-	switch err {
+	switch err := err.(type) {
 	case nil:
 		// no problems
 		r.SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 		return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
-	case err.(*cioerrors.DnsUpdateError):
+	case *cioerrors.DnsUpdateError:
 		// couldn't update DNS
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		return reconcile.Result{}, err
-	case err.(*cioerrors.LoadBalancerNotReadyError):
+	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
