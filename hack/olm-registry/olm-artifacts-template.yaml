@@ -15,10 +15,6 @@ parameters:
 - name: DISPLAY_NAME
   value: Cloud Ingress Operator
   required: true
-- name: ALLOWED_CIDR_BLOCKS
-  required: true
-- name: ENABLE_MANAGEMENT_API_SERVER_INGRESS
-  required: true
 metadata:
   name: selectorsyncset-template
 objects:
@@ -373,32 +369,3 @@ objects:
         name: ${REPO_NAME}
         source: ${REPO_NAME}-registry
         sourceNamespace: openshift-${REPO_NAME}
-    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
-      kind: APIScheme
-      metadata:
-        name: rh-api
-        namespace: openshift-cloud-ingress-operator
-        annotations:
-          allowedCIDRBlocks: ${ALLOWED_CIDR_BLOCKS}
-      spec:
-        managementAPIServerIngress:
-          enabled: ${{ENABLE_MANAGEMENT_API_SERVER_INGRESS}}
-          dnsName: rh-api
-          allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
-    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
-      kind: SSHD
-      metadata:
-        name: rh-ssh
-        namespace: openshift-sre-sshd
-        labels:
-            # Keep this in sync with image
-            managed.openshift.io/version: v49-1fde8e5
-      spec:
-        dnsName: rh-ssh
-        allowedCIDRBlocks: ${{ALLOWED_CIDR_BLOCKS}}
-        # Keep the managed.openshift.io/version label in sync with this.
-        image: quay.io/app-sre/sre-ssh-proxy@sha256:67ecbf78aa15cc991d92643675d0c947fe4efea1e7a30d743d34e21f84cc2ed8
-        configMapSelector:
-          matchExpressions:
-          - key: api.openshift.com/authorized-keys
-            operator: Exists
