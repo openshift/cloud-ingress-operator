@@ -102,3 +102,35 @@ have all the attributes of the first `applicationIngress` replacing the old `def
 # Development
 
 The operator is built with [operator-sdk](https://github.com/operator-framework/operator-sdk). There is a tight dependency on the AWS cluster provider but the dependency is pinned to the [OpenShift fork](https://github.com/openshift/cluster-api-provider-aws) for access to v1beta1 API features.
+
+## Debugging the operator
+
+You can quickly debug the operator on your existing OSD cluster by following the below steps. It is recommended to do this against a staging cluster. 
+
+1. Connect to your cluster through backplane or directly
+
+2. Elevate your permissions: `oc adm groups add-users osd-sre-cluster-admins $(oc whoami)`
+
+3. Scale down `cluster-version-operator` and `cloud-ingress-operator`
+  ```bash
+  oc scale --replicas 0 -n openshift-cluster-version deployments/cluster-version-operator
+
+  oc scale --replicas 0 -n openshift-cloud-ingress-operator deployments cloud-ingress-operator
+  ```
+
+4. Debug! If you are using VSCode, create/update your `launch.json` as followed
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [{
+        "type": "go",
+        "request": "launch",
+        "name": "Launch Program",
+        "program": "${workspaceFolder}/cmd/manager/main.go",
+        "env":{
+            "WATCH_NAMESPACE": "openshift-sre-sshd,openshift-cloud-ingress-operator,openshift-ingress,openshift-ingress-operator,openshift-kube-apiserver,openshift-machine-api"
+        }
+    }]
+}
+``` 

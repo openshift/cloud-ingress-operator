@@ -672,7 +672,6 @@ func (c *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publ
 	err := c.route53Client.ListResourceRecordSetsPages(input, func(p *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
 		for _, record := range p.ResourceRecordSets {
 			if *record.Name == *resourceRecordSet.Name && *record.Type == *resourceRecordSet.Type && reflect.DeepEqual(record.AliasTarget, resourceRecordSet.AliasTarget) {
-				log.Info("Record already exists, skipping UPSERT.", "Record", aws.StringValue(record.Name))
 				recordExists = true
 				return false
 			}

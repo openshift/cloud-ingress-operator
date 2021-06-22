@@ -6,10 +6,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
+	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,11 +26,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"time"
 )
 
 const (
 	ingressControllerNamespace = "openshift-ingress-operator"
 	infraNodeLabelKey          = "node-role.kubernetes.io/infra"
+	CloudIngressFinalizer      = "cloudingress.managed.openshift.io/finalizer-cloud-ingress-controller"
+	ClusterIngressFinalizer    = "ingresscontroller.operator.openshift.io/finalizer-ingresscontroller"
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
@@ -205,140 +211,33 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// Mark the IngressControllers as existing
 		ownedIngressExistingMap[ingressController.Name] = true
 
-		/* When an ingresscontroller is being deleted, it takes time as it needs to delete several
-		services (ie the load balancer service has finalizers for the cloud provider resource cleanup)/
-		If ingresscontroller still has these finalizers, there is no point in trying to re-create it. This
-		check ensures ingresscontroller is deleted before we try and create so we don't fill up cluster-ingress-operator
-		logs with a bunch of error messages
-		*/
+		// When an ingresscontroller is being deleted, it takes time as it needs to delete several
+		// services (ie the load balancer service has finalizers for the cloud provider resource cleanup)
 		if !ingressController.DeletionTimestamp.IsZero() {
-			reqLogger.Info(fmt.Sprintf("IngressController %s is in the process of being deleted, requeing", ingressName))
-			return reconcile.Result{Requeue: true}, nil
+			return r.ensureIngressController(reqLogger, ingressController, desiredIngressController)
 		}
 
-		reqLogger.Info(fmt.Sprintf("Checking Static Spec for IngressController %s ", ingressName))
-		// Compare the Spec fields that cannot be patched in the desired IngressController and the actual IngressController
-		if !validateStaticSpec(*ingressController, desiredIngressController.Spec) {
-			// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
-			if ingressDefinition.Default {
-				reqLogger.Info("Static Spec does not match for default IngressController, checking Status")
-				if !validateStaticStatus(*ingressController, desiredIngressController.Spec) {
-					// Since the default IngressController CR spec + status does not match the desired IngressController
-					// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
-					// the actual default IngressController must be deleted
-					reqLogger.Info("Static Spec and Status do not match for default IngressController, deleting")
-					// TODO: Should we return an error here if this delete fails?
-					if err := r.client.Delete(context.TODO(), ingressController); err != nil {
-						reqLogger.Error(err, "Error deleting IngressController")
-					}
-					return reconcile.Result{Requeue: true}, nil
-				}
-			} else {
-				// Since the default IngressController CR spec does not match the desired IngressController
-				// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
-				// the IngressController must be deleted
-				reqLogger.Info(fmt.Sprintf("Static Spec does not match for for IngressController %s, deleting", ingressName))
-				// TODO: Should we return an error here if this delete fails?
-				if err := r.client.Delete(context.TODO(), ingressController); err != nil {
-					reqLogger.Error(err, "Error deleting IngressController")
-				}
-				return reconcile.Result{Requeue: true}, nil
-			}
+		result, err := r.ensureStaticSpec(reqLogger, ingressController, desiredIngressController)
+		if err != nil || result.Requeue {
+			return result, err
 		}
 
-		reqLogger.Info(fmt.Sprintf("Checking Patchable Spec for IngressController %s ", ingressName))
-		// All the remaining fields are mutable and don't require a deletion of the IngresscController
-		// If any of the fields are differet, that field will be patched
-		if valid, field := validatePatchableSpec(*ingressController, desiredIngressController.Spec); !valid {
-			// Generates the base CR to patch against
-			baseToPatch := client.MergeFrom(ingressController.DeepCopy())
-			// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
-			if ingressDefinition.Default && field == IngressControllerSelector {
-				reqLogger.Info("Patchable Spec does not match for default IngressController, checking Status")
-				// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
-				if valid, _ := validatePatchableStatus(*ingressController, desiredIngressController.Spec); !valid {
-					// Check Status can only return RouteSelector or nil
-					// If the RouteSelector doesn't match, replace the existing spec with the desired Spec
-					reqLogger.Info("Patchable Spec and Status do not match for default IngressController, patching RouteSelector")
-					ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
-					// Perform the patch on the existing IngressController using the base to patch against and the
-					// changes added to bring the exsting CR to the desired state
-					err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
-					if err != nil {
-						return reconcile.Result{}, err
-					}
-					return reconcile.Result{Requeue: true}, nil
-				}
-			} else {
-				reqLogger.Info(fmt.Sprintf("Patchable Spec does not match for IngressController %s, patching field %s", ingressName, field))
-				// Any other IngressController that is not default needs to be patched if the spec doesn't match
-				// Only patch the field that doesn't match
-				if field == IngressControllerSelector {
-					// If the RouteSelector doesn't match, replace the existing spec with the desired Spec
-					ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
-				} else if field == IngressControllerCertificate {
-					// If the DefaultCertificate doesn't match, replace the existing spec with the desired Spec
-					ingressController.Spec.DefaultCertificate = desiredIngressController.Spec.DefaultCertificate
-				} else if field == IngressControllerNodePlacement {
-					// If the NodePlacement doesn't match, replace the existing spec with the desired Spec
-					ingressController.Spec.NodePlacement = desiredIngressController.Spec.NodePlacement
-				}
-
-				// Perform the patch on the existing IngressController using the base to patch against and the
-				// changes added to bring the exsting CR to the desired state
-				err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
-				if err != nil {
-					return reconcile.Result{}, err
-				}
-				return reconcile.Result{Requeue: true}, nil
-			}
+		result, err = r.ensurePatchableSpec(reqLogger, ingressController, desiredIngressController)
+		if err != nil || result.Requeue {
+			return result, err
 		}
 	}
 
-	// Delete all IngressControllers that are owned by cloud-ingress-operator but not in PublishingStrategy
-	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
-		if !inPublishingStrategy {
-			// Delete requires an object referece, so we must get it first
-			ingressToDelete := &operatorv1.IngressController{}
-			err = r.client.Get(context.TODO(), types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}, ingressToDelete)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			err = r.client.Delete(context.TODO(), ingressToDelete)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
+	result, err := r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
 	}
 
-	cloudPlatform, err := baseutils.GetPlatformType(r.client)
-	if err != nil {
-		log.Error(err, "Failed to create a Cloud Client")
-		return reconcile.Result{}, err
-	}
-	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
-
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
-		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
-			return reconcile.Result{}, err
-		}
-		log.Info(fmt.Sprintf("Update api.%s alias to internal NLB successful", clusterBaseDomain))
-		return reconcile.Result{}, nil
+	result, err = r.ensureAliasScope(reqLogger, instance, clusterBaseDomain)
+	if err != nil || result.Requeue {
+		return result, err
 	}
 
-	// if CR is wanted the default server API to be internet-facing, we
-	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
-		err := cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
-			return reconcile.Result{}, err
-		}
-		log.Info(fmt.Sprintf("Update api.%s alias to external NLB successful", clusterBaseDomain))
-		return reconcile.Result{}, nil
-	}
 	return reconcile.Result{}, nil
 }
 
@@ -527,4 +426,205 @@ func getIngressWithCloudIngressOpreatorOwnerAnnotation(ingressList operatorv1.In
 	}
 
 	return ownedIngressList
+}
+
+// deleteUnpublishedIngressControllers deletes all IngressControllers owned by cloud-ingress-controller which are not in the publishingstategy
+func (r *ReconcilePublishingStrategy) deleteUnpublishedIngressControllers(ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	// Delete all IngressControllers that are owned by cloud-ingress-operator but not in PublishingStrategy
+	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
+		if !inPublishingStrategy {
+			// Delete requires an object referece, so we must get it first
+			ingressToDelete := &operatorv1.IngressController{}
+			err = r.client.Get(context.TODO(), types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}, ingressToDelete)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			err = r.client.Delete(context.TODO(), ingressToDelete)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+	return result, err
+}
+
+// ensureStaticSpec deletes or marks an IngressController for deletion when a static spec has been changed in the publishing strategy
+func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (result reconcile.Result, err error) {
+	reqLogger.Info(fmt.Sprintf("Checking Static Spec for IngressController %s ", desiredIngressController.Name))
+	// Compare the Spec fields that cannot be patched in the desired IngressController and the actual IngressController
+	if !validateStaticSpec(*ingressController, desiredIngressController.Spec) {
+		// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
+		if desiredIngressController.Name == "default" {
+			reqLogger.Info("Static Spec does not match for default IngressController, checking Status")
+			if !validateStaticStatus(*ingressController, desiredIngressController.Spec) {
+				// Since the default IngressController CR spec + status does not match the desired IngressController
+				// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
+				// the actual default IngressController must be deleted
+				reqLogger.Info("Static Spec and Status do not match for default IngressController, deleting")
+				// TODO: Should we return an error here if this delete fails?
+
+				// Prior to deleting the ingress controller, we are  adding a finalizer.
+				// While we need cluster-ingress-operator to delete dependencies,
+				// cloud-ingress will take care of the final IngressController delete.
+				if !ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+					err = r.addFinalizer(reqLogger, ingressController, CloudIngressFinalizer)
+					if err != nil {
+						return reconcile.Result{Requeue: true}, err
+					}
+				}
+				// initiate the delete => asking cluster-ingress-operator to delete the dependencies
+				if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+					reqLogger.Error(err, "Error deleting IngressController")
+				}
+				return reconcile.Result{Requeue: true}, nil
+			}
+		} else {
+			// Since the default IngressController CR spec does not match the desired IngressController
+			// spec that was generated based on the ApplicationIngress, and the fields checked are immutable,
+			// the IngressController must be deleted
+			reqLogger.Info(fmt.Sprintf("Static Spec does not match for for IngressController %s, deleting", desiredIngressController.Name))
+			// TODO: Should we return an error here if this delete fails?
+			if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+				reqLogger.Error(err, "Error deleting IngressController")
+			}
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+	// do nothing, continue
+	return result, err
+}
+
+// ensurePatchableSpec patches an IngressController when a patchable field as been changed in the publishingstrategy
+func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (result reconcile.Result, err error) {
+	reqLogger.Info(fmt.Sprintf("Checking Patchable Spec for IngressController %s ", desiredIngressController.Name))
+	// All the remaining fields are mutable and don't require a deletion of the IngresscController
+	// If any of the fields are differet, that field will be patched
+	if valid, field := validatePatchableSpec(*ingressController, desiredIngressController.Spec); !valid {
+		// Generates the base CR to patch against
+		baseToPatch := client.MergeFrom(ingressController.DeepCopy())
+		// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
+		if desiredIngressController.Name == "default" && field == IngressControllerSelector {
+			reqLogger.Info("Patchable Spec does not match for default IngressController, checking Status")
+			// "The default" CR also needs a status check as the config isn't always guaranteed to be in the spec
+			if valid, _ := validatePatchableStatus(*ingressController, desiredIngressController.Spec); !valid {
+				// Check Status can only return RouteSelector or nil
+				// If the RouteSelector doesn't match, replace the existing spec with the desired Spec
+				reqLogger.Info("Patchable Spec and Status do not match for default IngressController, patching RouteSelector")
+				ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
+				// Perform the patch on the existing IngressController using the base to patch against and the
+				// changes added to bring the exsting CR to the desired state
+				err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{Requeue: true}, nil
+			}
+		} else {
+			reqLogger.Info(fmt.Sprintf("Patchable Spec does not match for IngressController %s, patching field %s", desiredIngressController.Name, field))
+			// Any other IngressController that is not default needs to be patched if the spec doesn't match
+			// Only patch the field that doesn't match
+			if field == IngressControllerSelector {
+				// If the RouteSelector doesn't match, replace the existing spec with the desired Spec
+				ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
+			} else if field == IngressControllerCertificate {
+				// If the DefaultCertificate doesn't match, replace the existing spec with the desired Spec
+				ingressController.Spec.DefaultCertificate = desiredIngressController.Spec.DefaultCertificate
+			} else if field == IngressControllerNodePlacement {
+				// If the NodePlacement doesn't match, replace the existing spec with the desired Spec
+				ingressController.Spec.NodePlacement = desiredIngressController.Spec.NodePlacement
+			}
+
+			// Perform the patch on the existing IngressController using the base to patch against and the
+			// changes added to bring the exsting CR to the desired state
+			err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+	// do nothing, continue
+	return result, err
+}
+
+// ensureAliasScope updates the loadbalancer to match the scope of the ingress in the publishingstrategy
+func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *cloudingressv1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
+	cloudPlatform, err := baseutils.GetPlatformType(r.client)
+	if err != nil {
+		log.Error(err, "Failed to create a Cloud Client")
+		return reconcile.Result{}, err
+	}
+	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
+
+	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
+		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
+			return reconcile.Result{}, err
+		}
+		log.Info(fmt.Sprintf("Update api.%s alias to internal NLB successful", clusterBaseDomain))
+		return reconcile.Result{}, nil
+	}
+
+	// if CR is wanted the default server API to be internet-facing, we
+	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
+	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
+		err = cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
+			return reconcile.Result{}, err
+		}
+		log.Info(fmt.Sprintf("Update api.%s alias to external NLB successful", clusterBaseDomain))
+		return reconcile.Result{}, nil
+	}
+	return result, err
+}
+
+// ensureIngressController makes sure that an IngressController being deleted, gets recreated by cloud-ingress-operator, instead of cluster-ingress-operator
+func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (reconcile.Result, error) {
+	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
+	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
+	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
+		reqLogger.Info(fmt.Sprintf("%s IngressController's  is in the process of being deleted, requeing", ingressController.Name))
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// At this point, ClusterIngressFinalizer is gone, meaning cluster-ingress-operator has completed dependency cleanup
+	// so we can proceed with deleting the IngressController
+	if ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+		// First remove the CloudIngressFinalizer, to allow it to be deleted
+		if err := r.removeFinalizer(reqLogger, ingressController, CloudIngressFinalizer); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+	}
+
+	// Make sure there is no other finalizer preventing the delete
+	if len(ingressController.GetFinalizers()) != 0 {
+		reqLogger.Info(fmt.Sprintf("IngressController %s  still has the following Finalizer(s) %v , requeing", ingressController.Name, ingressController.GetFinalizers()))
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// At this point, if the IngressController still exists, and has no Finalizer
+	// Therefore, it is ready to be deleted
+	if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+		if k8serr.IsNotFound(err) {
+			// It is possible that cluster-ingress-operator might be faster to delete the IngressController
+			// If that's the case, we proceed
+			reqLogger.Info("IngressController already deleted")
+		} else {
+			reqLogger.Error(err, "Error deleting IngressController")
+			return reconcile.Result{Requeue: true}, err
+		}
+	}
+
+	// At this point, the IngressController doesn't exist anymore
+	// Create the desiredIngressController (hopefully before cluster-ingress-operator did)
+	reqLogger.Info(fmt.Sprintf("Create IngressController %s", ingressController.Name))
+	if err := r.client.Create(context.TODO(), desiredIngressController); err != nil {
+		reqLogger.Error(err, "Error creating the IngressController")
+		return reconcile.Result{Requeue: true}, err
+	}
+	// If the CR was created, requeue PublishingStrategy
+	return reconcile.Result{Requeue: true}, nil
+
 }

@@ -1,12 +1,24 @@
 package publishingstrategy
 
 import (
+	"fmt"
 	"testing"
+	"time"
+
+	"context"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestGetIngressName(t *testing.T) {
@@ -373,5 +385,568 @@ func TestValidatePatchableStatus(t *testing.T) {
 
 	if result2 == false {
 		t.Errorf("Expected IngressController and desired config to be the same %+v\n %+v\n", actualIngressController2.Status.Selector, desiredIngressController.Spec.RouteSelector.MatchLabels)
+	}
+}
+
+func TestEnsureIngressController(t *testing.T) {
+	desiredIngressController := makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer})
+
+	tests := []struct {
+		Name              string
+		IngressController *operatorv1.IngressController
+		Resp              reconcile.Result
+		ClientErr         map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected     bool
+		ErrorReason       string
+	}{
+		{
+			Name:              "Should wait for ClusterIngressFinalizer to be deleted",
+			IngressController: makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			Resp:              reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected:     false,
+		},
+		{
+			Name:              "Should wait for RandomIngressFinalizer to be deleted",
+			IngressController: makeIngressControllerCR("default", "external", []string{"RandomIngressFinalizer"}),
+			Resp:              reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected:     false,
+		},
+		{
+			Name:              "Should requeue when failing to delete CloudIngressFinalizer",
+			IngressController: makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
+			ClientErr:         map[string]string{"on": "Update", "type": "InternalError"},
+			Resp:              reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected:     true,
+			ErrorReason:       "InternalError",
+		},
+		{
+			Name:              "Should requeue when failing to delete the IngressContoller",
+			IngressController: makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
+			ClientErr:         map[string]string{"on": "Delete", "type": "InternalError"},
+			Resp:              reconcile.Result{Requeue: true},
+			ErrorExpected:     true,
+			ErrorReason:       "InternalError",
+		},
+		{
+			Name:              "Should proceed if cluster-ingress already deleted the IngressController. However requeue and error if cluster-ingress was faster recreating it",
+			IngressController: makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
+			ClientErr:         map[string]string{"on": "Delete", "type": "IsNotFound"},
+			Resp:              reconcile.Result{Requeue: true},
+			ErrorExpected:     true,
+			ErrorReason:       "AlreadyExists",
+		},
+		{
+			Name:              "Should requeue and create desiredIngressController if deletion was successful",
+			IngressController: makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
+			Resp:              reconcile.Result{Requeue: true},
+			ErrorExpected:     false,
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.ensureIngressController(log, test.IngressController, desiredIngressController)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+
+}
+
+func TestDeleteUnpublishedIngressControllers(t *testing.T) {
+	tests := []struct {
+		Name              string
+		IngressController *operatorv1.IngressController
+		Map               map[string]bool
+		Resp              reconcile.Result
+		ErrorExpected     bool
+		ErrorReason       string
+		ClientErr         map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+	}{
+		{
+			Name:              "Should do nothing when there all IngressController are in the publishingstrategy",
+			IngressController: &operatorv1.IngressController{},
+			Map:               map[string]bool{"default": true},
+			Resp:              reconcile.Result{},
+			ErrorExpected:     false,
+		},
+		{
+			Name:              "Should error when failing to get the IngressController to delete",
+			IngressController: makeIngressControllerCR("test-ingress-controller", "external", []string{ClusterIngressFinalizer}),
+			Map:               map[string]bool{"test-ingress-controller": false},
+			Resp:              reconcile.Result{},
+			ErrorExpected:     true,
+			ErrorReason:       "NotFound",
+			ClientErr:         map[string]string{"on": "Get", "type": "IsNotFound"},
+		},
+		{
+			Name:              "Should error when failing to delete the IngressController",
+			IngressController: makeIngressControllerCR("test-ingress-controller", "external", []string{ClusterIngressFinalizer}),
+			Map:               map[string]bool{"test-ingress-controller": false},
+			Resp:              reconcile.Result{},
+			ErrorExpected:     true,
+			ErrorReason:       "NotFound",
+			ClientErr:         map[string]string{"on": "Delete", "type": "IsNotFound"},
+		},
+	}
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.deleteUnpublishedIngressControllers(test.Map)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func TestEnsureStaticSpec(t *testing.T) {
+	tests := []struct {
+		Name                     string
+		IngressController        *operatorv1.IngressController
+		DesiredIngressController *operatorv1.IngressController
+		Resp                     reconcile.Result
+		ErrorExpected            bool
+		ErrorReason              string
+		ClientErr                map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+	}{
+		{
+			Name:                     "Should requeue with error when failing to add CloudIngressFinalizer",
+			IngressController:        makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            true,
+			ErrorReason:              "InternalError",
+			ClientErr:                map[string]string{"on": "Update", "type": "InternalError"},
+		},
+		{
+			Name:                     "Should requeue without error when failing to mark default IngressController for Deletion",
+			IngressController:        makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            false,
+			ClientErr:                map[string]string{"on": "Delete", "type": "InternalError"},
+		},
+		{
+			Name:                     "Should requeue without error when failing to mark non-default IngressController for Deletion",
+			IngressController:        makeIngressControllerCR("non-default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("non-default", "internal", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            false,
+			ClientErr:                map[string]string{"on": "Delete", "type": "InternalError"},
+		},
+		{
+			Name:                     "Should do nothing when IngressController and DesiredIngressController match",
+			IngressController:        makeIngressControllerCR("non-default", "internal", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("non-default", "internal", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{},
+			ErrorExpected:            false,
+		},
+	}
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.ensureStaticSpec(log, test.IngressController, test.DesiredIngressController)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func TestEnsurePatchableSpec(t *testing.T) {
+	testDefaultCert := corev1.LocalObjectReference{Name: "random-cert-name"}
+	testNodePlacement := operatorv1.NodePlacement{
+		NodeSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{"random": "label"},
+		},
+	}
+	testRouterSelector := metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}
+
+	tests := []struct {
+		Name                     string
+		IngressController        *operatorv1.IngressController
+		DesiredIngressController *operatorv1.IngressController
+		Resp                     reconcile.Result
+		ErrorExpected            bool
+		ErrorReason              string
+		ClientErr                map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+	}{
+		{
+			Name:                     "Should do nothing when there are no patchable spec changes",
+			IngressController:        makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{},
+			ErrorExpected:            false,
+		},
+		{
+			Name:                     "Should error when failing to patch default IngressController",
+			IngressController:        makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, testRouterSelector),
+			Resp:                     reconcile.Result{},
+			ErrorExpected:            true,
+			ErrorReason:              "InternalError",
+			ClientErr:                map[string]string{"on": "Patch", "type": "InternalError"},
+		},
+		{
+			Name:                     "Should requeue without error when successfully patching default IngressController",
+			IngressController:        makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, testRouterSelector),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            false,
+		},
+		{
+			Name:                     "Should error when failing to patch non-default IngressController",
+			IngressController:        makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}, testRouterSelector),
+			Resp:                     reconcile.Result{},
+			ErrorExpected:            true,
+			ErrorReason:              "InternalError",
+			ClientErr:                map[string]string{"on": "Patch", "type": "InternalError"},
+		},
+		{
+			Name:                     "Should requeue without error when patching IngressControllerCertificate of non-default IngressController",
+			IngressController:        makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}),
+			DesiredIngressController: makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}, testDefaultCert),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            false,
+		},
+		{
+			Name:                     "Should requeue without error when patching IngressControllerNodePlacement of non-default IngressController",
+			IngressController:        makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}, testNodePlacement),
+			DesiredIngressController: makeIngressControllerCR("nondefault", "external", []string{ClusterIngressFinalizer}),
+			Resp:                     reconcile.Result{Requeue: true},
+			ErrorExpected:            false,
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.ensurePatchableSpec(log, test.IngressController, test.DesiredIngressController)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func TestReconcile(t *testing.T) {
+	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "publishingstrategy",
+			Namespace: "openshift-cloud-ingress-operator",
+		},
+		Spec: cloudingressv1alpha1.PublishingStrategySpec{
+			DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
+			ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "example-domain.example.com",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		Name          string
+		Resp          reconcile.Result
+		ClientObj     []client.Object
+		RuntimeObj    []runtime.Object
+		ClientErr     map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected bool
+		ErrorReason   string
+	}{
+		{
+			Name:          "Should complete without error when PublishingStrategy is NotFound",
+			Resp:          reconcile.Result{},
+			ErrorExpected: false,
+			ClientErr:     map[string]string{"on": "Get", "type": "IsNotFound"},
+		},
+		{
+			Name:          "Should error when failing to retrieve PublishingStrategy",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
+		},
+		{
+			Name:          "Should error when failing to list IngressControllerList",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy},
+			ClientErr:     map[string]string{"on": "List", "type": "InternalError"},
+		},
+		{
+			Name:          "Should error when failing to retrieve ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, &operatorv1.IngressController{}},
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError", "target": "*v1.IngressController"},
+			RuntimeObj:    []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should error when failing to create missing ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, &operatorv1.IngressController{}},
+			ClientErr:     map[string]string{"on": "Create", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue when succesfully creating missing ingresscontroller",
+			Resp:          reconcile.Result{Requeue: true},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, &operatorv1.IngressController{}},
+			RuntimeObj:    []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue with delay when ingresscontroller is marked as deleted",
+			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			RuntimeObj:    []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue with erorr when failing to ensure static specs on ingresscontroller",
+			Resp:          reconcile.Result{Requeue: true},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer})},
+			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should erorr when failing to ensure patchable specs on ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
+			},
+			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+		{
+			Name:          "Should erorr when failing delete punblished ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+				makeIngressControllerCR("unpublished-ingress", "external", []string{}),
+			},
+			ClientErr:  map[string]string{"on": "Delete", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&operatorv1.IngressControllerList{}},
+		},
+	}
+
+	for _, test := range tests {
+		testClient, testScheme := setUpTestClient(test.ClientObj, test.RuntimeObj, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.Reconcile(context.TODO(), reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "publishingstrategy",
+				Namespace: "openshift-cloud-ingress-operator",
+			},
+		})
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+// utils
+// makeIngressControllerCR creates an IngressControllerCR
+func makeIngressControllerCR(name, lbScope string, finalizers []string, overrides ...interface{}) *operatorv1.IngressController {
+	var scope operatorv1.LoadBalancerScope
+	var timestamp metav1.Time
+
+	routerSelector := metav1.LabelSelector{}
+	defaultCert := corev1.LocalObjectReference{Name: "test-cert-bundle-secret"}
+	nodeSelector := operatorv1.NodePlacement{
+		NodeSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{infraNodeLabelKey: ""},
+		},
+		Tolerations: []corev1.Toleration{
+			{
+				Key:      infraNodeLabelKey,
+				Effect:   corev1.TaintEffectNoSchedule,
+				Operator: corev1.TolerationOpExists,
+			},
+		},
+	}
+
+	switch lbScope {
+	case "internal":
+		scope = operatorv1.InternalLoadBalancer
+	default:
+		scope = operatorv1.ExternalLoadBalancer
+	}
+
+	for _, override := range overrides {
+		switch v := override.(type) {
+		case metav1.Time:
+			timestamp = v
+		case corev1.LocalObjectReference:
+			defaultCert = v
+		case metav1.LabelSelector:
+			routerSelector = v
+		case operatorv1.NodePlacement:
+			nodeSelector = v
+		}
+
+	}
+
+	return &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "openshift-ingress-operator",
+			Annotations: map[string]string{
+				"Owner": "cloud-ingress-operator",
+			},
+			Finalizers:        finalizers,
+			DeletionTimestamp: &timestamp,
+		},
+		Spec: operatorv1.IngressControllerSpec{
+			DefaultCertificate: &defaultCert,
+
+			Domain: "example-domain.example.com",
+			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
+				Type: operatorv1.LoadBalancerServiceStrategyType,
+				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+					Scope: scope,
+				},
+			},
+			NodePlacement: &nodeSelector,
+			RouteSelector: &routerSelector,
+		},
+	}
+}
+
+//setUpTestClient builds and returns a fakeclient for testing
+//func setUpTestClient(cr *operatorv1.IngressController, errorOn, errorType string) (*customClient, *runtime.Scheme) {
+func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType, errorTarget string) (*customClient, *runtime.Scheme) {
+	s := scheme.Scheme
+	for _, v := range cr {
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
+	}
+	for _, v := range ro {
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
+	}
+
+	testClient := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(ro...).WithObjects(cr...).Build()
+	return &customClient{testClient, errorOn, errorType, errorTarget}, s
+}
+
+// A custom k8s client, which can fail on demand, on get, create, update or delete operations
+type customClient struct {
+	client.Client
+	errorOn     string
+	errorType   string
+	errorTarget string // when specified, will only error if the action errorOn is done this target.
+}
+
+func (c *customClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if c.errorOn == "Update" {
+		return getK8sError(c.errorType, fmt.Sprintf("%T", obj))
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func (c *customClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if c.errorOn == "Delete" {
+		return getK8sError(c.errorType, fmt.Sprintf("%T", obj))
+	}
+	return c.Client.Delete(ctx, obj, opts...)
+}
+
+func (c *customClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if c.errorOn == "Create" {
+		return getK8sError(c.errorType, fmt.Sprintf("%T", obj))
+	}
+
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func (c *customClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if c.errorOn == "Patch" {
+		return getK8sError(c.errorType, fmt.Sprintf("%T", obj))
+	}
+
+	return c.Client.Patch(ctx, obj, patch, opts...)
+}
+
+func (c *customClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+	if c.errorOn == "Get" {
+		t := fmt.Sprintf("%T", obj)
+		if c.errorTarget == "" || c.errorTarget == t {
+			return getK8sError(c.errorType, fmt.Sprintf("%T", obj))
+		}
+	}
+
+	return c.Client.Get(ctx, key, obj)
+}
+
+func (c *customClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if c.errorOn == "List" {
+		return getK8sError(c.errorType, fmt.Sprintf("%T", list))
+	}
+
+	return c.Client.List(ctx, list, opts...)
+}
+
+func getK8sError(errorType string, objType string) error {
+	errorMap := map[string]error{
+		"IsNotFound": k8serr.NewNotFound(schema.GroupResource{Group: "ingresscontrollers.cloudingress.managed.openshift.io",
+			Resource: "varies"}, objType),
+	}
+	if err, found := errorMap[errorType]; found {
+		return err
+	} else {
+		// by default we return internal error, when the error type specified doesn't match something we preconfigured
+		return k8serr.NewInternalError(fmt.Errorf("%v was raised", errorType))
+
 	}
 }
