@@ -31,8 +31,11 @@ import (
 
 const (
 	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	testFinalizer         = "testing.finalizer"
+	testAnnotation        = "testing.Annotation"
 	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	elbAnnotationValue    = "1800"
+	testAnnotationval     = "911"
 )
 
 var (
@@ -132,10 +135,31 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
 	}
-
 	serviceNamespacedName := types.NamespacedName{
 		Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
 		Namespace: "openshift-kube-apiserver",
+	}
+	//Add the testFinalizer
+	if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+		controllerutil.AddFinalizer(instance, testFinalizer)
+		if err = r.client.Update(context.TODO(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+	//Add the testAnnotationval
+	reqLogger.Info("Checking for an Annotation")
+	if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) ||
+		instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
+		reqLogger.Info("No Annotation Found. Adding one")
+		instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
+		reqLogger.Info("Added Annotation")
+		if err = r.client.Update(context.TODO(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	} else {
+		reqLogger.Info("Annotation already exists")
 	}
 
 	// Check for a deletion timestamp.
@@ -149,6 +173,15 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	} else {
 		// Request object is being deleted.
+		if metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) {
+			if controllerutil.ContainsFinalizer(instance, testFinalizer) {
+				controllerutil.RemoveFinalizer(instance, testFinalizer)
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			found := &corev1.Service{}
 			if err = r.client.Get(context.TODO(), serviceNamespacedName, found); err != nil {

@@ -29,7 +29,7 @@ spec:
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/linnguye_openshift/cloud-ingress-operator:1
           command:
           - cloud-ingress-operator
           imagePullPolicy: Always

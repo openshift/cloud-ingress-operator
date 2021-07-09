@@ -11,6 +11,7 @@ import (
 	// For host key generation
 	"crypto/rand"
 	"crypto/rsa"
+
 	"crypto/x509"
 	"encoding/pem"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +111,9 @@ const (
 	hostKeysMountPath         = "/var/run/ssh"
 	nodeMasterLabel           = "node-role.kubernetes.io/master"
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	testFinalizer             = "testing.finalizer"
+	testAnnotation            = "testing.annotation"
+	testAnnotationval         = "0704"
 	ELBAnnotationKey          = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	ELBAnnotationValue        = "600"
 )
@@ -148,8 +151,43 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 
 		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
 	}
+	//add the testFinalizer
+	if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+		controllerutil.AddFinalizer(instance, testFinalizer)
+		if err = r.client.Update(context.TODO(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+	//remove annotation to test delete
 
-	// Check for a deletion timestamp.
+	if metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) {
+		reqLogger.Info("Found Annotaion. removing it for testing purpose")
+		instance.ObjectMeta.Annotations = nil
+		reqLogger.Info("Deleted Annotation")
+		if err = r.client.Update(context.TODO(), instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
+	//Add the testAnnotationval
+	/*
+		reqLogger.Info("Checking for an Annotation")
+		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) ||
+			instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
+			reqLogger.Info("No Annotation Found. Adding one")
+			instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
+			reqLogger.Info("Added Annotation")
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
+		} else {
+			reqLogger.Info("Annotation exists")
+		}
+	*/
+	// Check for a deletion tneimestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
@@ -159,36 +197,63 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 			}
 		}
 	} else {
+		reqLogger.Info("A deletion has been called!!!!!")
 		// Request object is being deleted.
-		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
-			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
-
-			// fetch the sshd service
-			svc := &corev1.Service{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
-			switch err := err.(type) {
-			case nil:
-				// all good
-			case *cioerrors.LoadBalancerNotReadyError:
-				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
-				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-			default:
-				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
-				return reconcile.Result{}, err
-			}
-
-			// Remove the DNS finalizer and update the request object.
-			controllerutil.RemoveFinalizer(instance, reconcileSSHDFinalizerDNS)
+		//check to see if there's annotation, if annotation exist -> delete...
+		reqLogger.Info("Before deletion, Check for Annotation")
+		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
+			reqLogger.Info("No Annotation Found. Will add one now to be able to delete finalizer")
+			instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
+			reqLogger.Info("Added Annotation. Will be able to remove finalizer and delete the object")
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-		}
+			return reconcile.Result{}, nil
 
+		} else {
+			//controllerutil.RemoveFinalizer(instance, testFinalizer)
+			//reqLogger.Info("Just removed Finalizer")
+			//if err = r.client.Update(context.TODO(), instance); err != nil {
+			//	return reconcile.Result{}, err
+			//}
+			reqLogger.Info("Annotation exists. Allowed to remove finalizer")
+			if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
+				r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
+
+				// fetch the sshd service
+				svc := &corev1.Service{}
+				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+
+				err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
+				switch err := err.(type) {
+				case nil:
+					// all good
+				case *cioerrors.LoadBalancerNotReadyError:
+					r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
+					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				default:
+					r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
+					return reconcile.Result{}, err
+				}
+
+				// Remove the DNS finalizer and update the request object.
+				controllerutil.RemoveFinalizer(instance, reconcileSSHDFinalizerDNS)
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+			if controllerutil.ContainsFinalizer(instance, testFinalizer) {
+				reqLogger.Info("Gonna remove testFinalizer now")
+				controllerutil.RemoveFinalizer(instance, testFinalizer)
+				reqLogger.Info("Just removed Finalizer")
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		// Halt the reconciliation.
 		return reconcile.Result{}, nil
 	}
@@ -570,6 +635,7 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			Name:      cr.Name,
 			Namespace: cr.Namespace,
 			Annotations: map[string]string{
+				testAnnotation:   testAnnotationval,
 				ELBAnnotationKey: ELBAnnotationValue,
 			},
 		},
