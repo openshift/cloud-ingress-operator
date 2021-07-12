@@ -1,0 +1,156 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: APIScheme
+metadata:
+  annotations:
+    allowedCIDRBlocks: '["54.227.5.10/32", "52.70.201.140/32", "52.6.0.240/32", "18.216.250.44/32", "52.14.88.51/32", "18.130.14.59/32", "35.178.149.126/32", "52.196.174.210/32", "54.168.53.242/32"]'
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","kind":"APIScheme","metadata":{"annotations":{"allowedCIDRBlocks":"[\"54.227.5.10/32\", \"52.70.201.140/32\", \"52.6.0.240/32\", \"18.216.250.44/32\", \"52.14.88.51/32\", \"18.130.14.59/32\", \"35.178.149.126/32\", \"52.196.174.210/32\", \"54.168.53.242/32\"]"},"labels":{"hive.openshift.io/managed":"true"},"name":"rh-api","namespace":"openshift-cloud-ingress-operator"},"spec":{"managementAPIServerIngress":{"allowedCIDRBlocks":["54.227.5.10/32","52.70.201.140/32","52.6.0.240/32","18.216.250.44/32","52.14.88.51/32","18.130.14.59/32","35.178.149.126/32","52.196.174.210/32","54.168.53.242/32"],"dnsName":"rh-api","enabled":true}}}
+  creationTimestamp: "2021-07-12T17:51:53Z"
+  finalizers:
+  - dns.cloudingress.managed.openshift.io
+  generation: 1
+  labels:
+    hive.openshift.io/managed: "true"
+  managedFields:
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:allowedCIDRBlocks: {}
+          f:kubectl.kubernetes.io/last-applied-configuration: {}
+        f:labels:
+          .: {}
+          f:hive.openshift.io/managed: {}
+      f:spec:
+        .: {}
+        f:managementAPIServerIngress:
+          .: {}
+          f:allowedCIDRBlocks: {}
+          f:dnsName: {}
+          f:enabled: {}
+    manager: manager
+    operation: Update
+    time: "2021-07-12T17:51:53Z"
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:finalizers:
+          .: {}
+          v:"dns.cloudingress.managed.openshift.io": {}
+      f:status:
+        .: {}
+        f:conditions: {}
+        f:state: {}
+    manager: cloud-ingress-operator
+    operation: Update
+    time: "2021-07-12T17:51:54Z"
+  name: rh-api
+  namespace: openshift-cloud-ingress-operator
+  resourceVersion: "97381"
+  selfLink: /apis/cloudingress.managed.openshift.io/v1alpha1/namespaces/openshift-cloud-ingress-operator/apischemes/rh-api
+  uid: 824ae450-a077-41da-b866-53d07b8e91bb
+spec:
+  managementAPIServerIngress:
+    allowedCIDRBlocks:
+    - 54.227.5.10/32
+    - 52.70.201.140/32
+    - 52.6.0.240/32
+    - 18.216.250.44/32
+    - 52.14.88.51/32
+    - 18.130.14.59/32
+    - 35.178.149.126/32
+    - 52.196.174.210/32
+    - 54.168.53.242/32
+    dnsName: rh-api
+    enabled: true
+status:
+  conditions:
+  - lastProbeTime: "2021-07-12T17:51:54Z"
+    lastTransitionTime: "2021-07-12T17:51:54Z"
+    message: Admin API Endpoint created
+    reason: Success
+    status: "True"
+    type: Ready
+  state: Ready
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: APIScheme
+metadata:
+  annotations:
+    allowedCIDRBlocks: '["54.227.5.10/32", "52.70.201.140/32", "52.6.0.240/32", "18.216.250.44/32", "52.14.88.51/32", "18.130.14.59/32", "35.178.149.126/32", "52.196.174.210/32", "54.168.53.242/32"]'
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","kind":"APIScheme","metadata":{"annotations":{"allowedCIDRBlocks":"[\"54.227.5.10/32\", \"52.70.201.140/32\", \"52.6.0.240/32\", \"18.216.250.44/32\", \"52.14.88.51/32\", \"18.130.14.59/32\", \"35.178.149.126/32\", \"52.196.174.210/32\", \"54.168.53.242/32\"]"},"labels":{"hive.openshift.io/managed":"true"},"name":"rh-api","namespace":"openshift-cloud-ingress-operator"},"spec":{"managementAPIServerIngress":{"allowedCIDRBlocks":["54.227.5.10/32","52.70.201.140/32","52.6.0.240/32","18.216.250.44/32","52.14.88.51/32","18.130.14.59/32","35.178.149.126/32","52.196.174.210/32","54.168.53.242/32"],"dnsName":"rh-api","enabled":true}}}
+  creationTimestamp: "2021-07-12T17:51:53Z"
+  finalizers:
+  - dns.cloudingress.managed.openshift.io
+  - testing.finalizer
+  generation: 1
+  labels:
+    hive.openshift.io/managed: "true"
+  managedFields:
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:allowedCIDRBlocks: {}
+          f:kubectl.kubernetes.io/last-applied-configuration: {}
+        f:labels:
+          .: {}
+          f:hive.openshift.io/managed: {}
+      f:spec:
+        .: {}
+        f:managementAPIServerIngress:
+          .: {}
+          f:allowedCIDRBlocks: {}
+          f:dnsName: {}
+          f:enabled: {}
+    manager: manager
+    operation: Update
+    time: "2021-07-12T17:51:53Z"
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:finalizers:
+          .: {}
+          v:"dns.cloudingress.managed.openshift.io": {}
+          v:"testing.finalizer": {}
+      f:status:
+        .: {}
+        f:conditions: {}
+        f:state: {}
+    manager: cloud-ingress-operator
+    operation: Update
+    time: "2021-07-12T18:32:30Z"
+  name: rh-api
+  namespace: openshift-cloud-ingress-operator
+  resourceVersion: "111793"
+  selfLink: /apis/cloudingress.managed.openshift.io/v1alpha1/namespaces/openshift-cloud-ingress-operator/apischemes/rh-api
+  uid: 824ae450-a077-41da-b866-53d07b8e91bb
+spec:
+  managementAPIServerIngress:
+    allowedCIDRBlocks:
+    - 54.227.5.10/32
+    - 52.70.201.140/32
+    - 52.6.0.240/32
+    - 18.216.250.44/32
+    - 52.14.88.51/32
+    - 18.130.14.59/32
+    - 35.178.149.126/32
+    - 52.196.174.210/32
+    - 54.168.53.242/32
+    dnsName: rh-api
+    enabled: true
+status:
+  conditions:
+  - lastProbeTime: "2021-07-12T17:51:54Z"
+    lastTransitionTime: "2021-07-12T17:51:54Z"
+    message: Admin API Endpoint created
+    reason: Success
+    status: "True"
+    type: Ready
+  state: Ready

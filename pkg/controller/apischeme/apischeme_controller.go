@@ -138,35 +138,17 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
 		Namespace: "openshift-kube-apiserver",
 	}
-	//Add the testFinalizer
-	if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
-		controllerutil.AddFinalizer(instance, testFinalizer)
-		if err = r.client.Update(context.TODO(), instance); err != nil {
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-	/*
-		//Add the testAnnotationval
-		reqLogger.Info("Checking for an Annotation")
-		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) ||
-			instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
-			reqLogger.Info("No Annotation Found. Adding one")
-			instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
-			reqLogger.Info("Added Annotation")
-			if err = r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, nil
-		} else {
-			reqLogger.Info("Annotation already exists")
-		}
-	*/
 	// Check for a deletion timestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			controllerutil.AddFinalizer(instance, reconcileFinalizerDNS)
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+			controllerutil.AddFinalizer(instance, testFinalizer)
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -178,14 +160,6 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		//if there's no annotation, add one and reconcile
 		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
 			reqLogger.Info("No Annotation Found. Will add one now to be able to delete finalizer")
-			//instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
-			metav1.SetMetaDataAnnotation(&instance.ObjectMeta, testAnnotation, testAnnotationval)
-
-			reqLogger.Info("Added Annotation. Will be able to remove finalizer and delete the object")
-			if err = r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, nil
 		} else {
 			reqLogger.Info("Annotation Found. Will delete finalizer now")
 			if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
@@ -244,7 +218,6 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 				}
 			}
 		}
-
 		// Halt the reconciliation.
 		return reconcile.Result{}, nil
 	}

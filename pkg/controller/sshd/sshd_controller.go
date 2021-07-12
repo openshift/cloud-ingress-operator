@@ -151,42 +151,6 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 
 		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
 	}
-	//add the testFinalizer
-	if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
-		controllerutil.AddFinalizer(instance, testFinalizer)
-		if err = r.client.Update(context.TODO(), instance); err != nil {
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-	//remove annotation to test delete
-	/*
-		if metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) {
-			reqLogger.Info("Found Annotaion. removing it for testing purpose")
-			instance.ObjectMeta.Annotations = nil
-			reqLogger.Info("Deleted Annotation")
-			if err = r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, nil
-		}
-	*/
-	//Add the testAnnotationval
-	/*
-		reqLogger.Info("Checking for an Annotation")
-		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) ||
-			instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
-			reqLogger.Info("No Annotation Found. Adding one")
-			instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
-			reqLogger.Info("Added Annotation")
-			if err = r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, nil
-		} else {
-			reqLogger.Info("Annotation exists")
-		}
-	*/
 	// Check for a deletion tneimestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
@@ -196,28 +160,22 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 				return reconcile.Result{}, err
 			}
 		}
+		//add the test finalizer
+		if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+			controllerutil.AddFinalizer(instance, testFinalizer)
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
+		}
 	} else {
 		reqLogger.Info("A deletion has been called!!!!!")
 		// Request object is being deleted.
 		//check to see if there's annotation, if annotation exist -> delete...
 		reqLogger.Info("Before deletion, Check for Annotation")
 		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
-			reqLogger.Info("No Annotation Found. Will add one now to be able to delete finalizer")
-			//instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
-			metav1.SetMetaDataAnnotation(&instance.ObjectMeta, testAnnotation, testAnnotationval)
-
-			reqLogger.Info("Added Annotation. Will be able to remove finalizer and delete the object")
-			if err = r.client.Update(context.TODO(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, nil
-
+			reqLogger.Info("No Annotation Found. Not able to delete")
 		} else {
-			//controllerutil.RemoveFinalizer(instance, testFinalizer)
-			//reqLogger.Info("Just removed Finalizer")
-			//if err = r.client.Update(context.TODO(), instance); err != nil {
-			//	return reconcile.Result{}, err
-			//}
 			reqLogger.Info("Annotation exists. Allowed to remove finalizer")
 			if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
 				r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
@@ -270,6 +228,7 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 	// The Deployment object will be configured to mount each available ConfigMap in
 	// the SSHD pod as a volume under a common directory.  The SSH server within the
 	// pod will use an "AuthorizedKeysCommand" to combine all the mounted authorized
+
 	// keys files under that common directory.
 	//
 	// Updates to ConfigMaps for new or departing members, as well as new ConfigMaps
