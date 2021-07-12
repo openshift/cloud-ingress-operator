@@ -160,17 +160,17 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 		return reconcile.Result{}, nil
 	}
 	//remove annotation to test delete
-
-	if metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) {
-		reqLogger.Info("Found Annotaion. removing it for testing purpose")
-		instance.ObjectMeta.Annotations = nil
-		reqLogger.Info("Deleted Annotation")
-		if err = r.client.Update(context.TODO(), instance); err != nil {
-			return reconcile.Result{}, err
+	/*
+		if metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) {
+			reqLogger.Info("Found Annotaion. removing it for testing purpose")
+			instance.ObjectMeta.Annotations = nil
+			reqLogger.Info("Deleted Annotation")
+			if err = r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
 		}
-		return reconcile.Result{}, nil
-	}
-
+	*/
 	//Add the testAnnotationval
 	/*
 		reqLogger.Info("Checking for an Annotation")
@@ -203,7 +203,9 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 		reqLogger.Info("Before deletion, Check for Annotation")
 		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
 			reqLogger.Info("No Annotation Found. Will add one now to be able to delete finalizer")
-			instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
+			//instance.ObjectMeta.Annotations[testAnnotation] = testAnnotationval
+			metav1.SetMetaDataAnnotation(&instance.ObjectMeta, testAnnotation, testAnnotationval)
+
 			reqLogger.Info("Added Annotation. Will be able to remove finalizer and delete the object")
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
