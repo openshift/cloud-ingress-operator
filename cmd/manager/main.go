@@ -10,16 +10,15 @@ import (
 	"runtime"
 	"strings"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
-	"github.com/openshift/cloud-ingress-operator/version"
-
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	configv1 "github.com/openshift/api/config/v1"
-	operatorv1 "github.com/openshift/api/operator/v1"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
+	"github.com/openshift/cloud-ingress-operator/version"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -54,6 +53,12 @@ func printVersion() {
 }
 
 func main() {
+	//Run the webhook
+	//	decoder := createDecoder()
+	//	admissionCmd.RunAdmissionServer(
+	//		ciowebhooks.NewApischemeDeleteAdmissionHook(decoder),
+	//		ciowebhooks.NewsshdDeleteAdmissionHook(decoder),
+	//	)
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
 	pflag.CommandLine.AddFlagSet(zap.FlagSet())
@@ -177,6 +182,16 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+//func createDecoder() *admission.Decoder {
+//	scheme := runtime.NewScheme()
+//	cio.AddToScheme(scheme)
+//	decoder, err := admission.NewDecoder(scheme)
+//	if err != nil {
+//		log.WithError(err).Fatal("could not create a decoder")
+//	}
+//	return decoder
+//}
 
 // addMetrics will create the Services and Service Monitors to allow the operator export the metrics by using
 // the Prometheus operator

@@ -1,0 +1,27 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: sshd-delete-protection.cloudingress.managed.openshift.io
+webhooks:
+- name: sshd-delete-protection.cloudingress.managed.openshift.io
+  admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      # reach the webhook via the registered aggregated API
+      namespace: default 
+      name: kubernetes
+  rules:
+  - operations:
+    - CREATE
+    - DELETE
+    apiGroups:
+    - cloudingress.managed.openshift.io
+    apiVersions:
+    - v1
+    resources:
+    - sshd.managed.openshift.io
+  failurePolicy: Fail
+  sideEffects: None
+
