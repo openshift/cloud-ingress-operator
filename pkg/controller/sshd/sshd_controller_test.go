@@ -1,24 +1,20 @@
 package sshd
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"testing"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	mockcc "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mock_cloudclient"
 
 	"github.com/golang/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -230,6 +226,7 @@ func TestNewSSHService(t *testing.T) {
 	}
 }
 
+/*
 func TestReconcile(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -259,7 +256,7 @@ func TestReconcile(t *testing.T) {
 		t.Errorf("got requeue on %v", result)
 	}
 }
-
+*/
 // utils
 var cr = &cloudingressv1alpha1.SSHD{
 	TypeMeta: metav1.TypeMeta{

@@ -1,0 +1,153 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: SSHD
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","kind":"SSHD","metadata":{"annotations":{},"labels":{"hive.openshift.io/managed":"true","managed.openshift.io/version":"v49-1fde8e5"},"name":"rh-ssh","namespace":"openshift-sre-sshd"},"spec":{"allowedCIDRBlocks":["54.227.5.10/32","52.70.201.140/32","52.6.0.240/32","18.216.250.44/32","52.14.88.51/32","18.130.14.59/32","35.178.149.126/32","52.196.174.210/32","54.168.53.242/32"],"configMapSelector":{"matchExpressions":[{"key":"api.openshift.com/authorized-keys","operator":"Exists"}]},"dnsName":"rh-ssh","image":"quay.io/app-sre/sre-ssh-proxy@sha256:67ecbf78aa15cc991d92643675d0c947fe4efea1e7a30d743d34e21f84cc2ed8"}}
+  creationTimestamp: "2021-07-12T17:14:16Z"
+  finalizers:
+  - testing.finalizer
+  - dns.cloudingress.managed.openshift.io
+  generation: 1
+  labels:
+    hive.openshift.io/managed: "true"
+    managed.openshift.io/version: v49-1fde8e5
+  managedFields:
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:finalizers:
+          .: {}
+          v:"dns.cloudingress.managed.openshift.io": {}
+          v:"testing.finalizer": {}
+      f:status:
+        .: {}
+        f:message: {}
+        f:state: {}
+    manager: cloud-ingress-operator
+    operation: Update
+    time: "2021-07-12T17:14:16Z"
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:kubectl.kubernetes.io/last-applied-configuration: {}
+        f:labels:
+          .: {}
+          f:hive.openshift.io/managed: {}
+          f:managed.openshift.io/version: {}
+      f:spec:
+        .: {}
+        f:allowedCIDRBlocks: {}
+        f:configMapSelector:
+          .: {}
+          f:matchExpressions: {}
+        f:dnsName: {}
+        f:image: {}
+    manager: manager
+    operation: Update
+    time: "2021-07-12T17:14:16Z"
+  name: rh-ssh
+  namespace: openshift-sre-sshd
+  resourceVersion: "84109"
+  selfLink: /apis/cloudingress.managed.openshift.io/v1alpha1/namespaces/openshift-sre-sshd/sshds/rh-ssh
+  uid: 110403d2-226d-4e9a-b2b9-8fc620ff42d8
+spec:
+  allowedCIDRBlocks:
+  - 54.227.5.10/32
+  - 52.70.201.140/32
+  - 52.6.0.240/32
+  - 18.216.250.44/32
+  - 52.14.88.51/32
+  - 18.130.14.59/32
+  - 35.178.149.126/32
+  - 52.196.174.210/32
+  - 54.168.53.242/32
+  configMapSelector:
+    matchExpressions:
+    - key: api.openshift.com/authorized-keys
+      operator: Exists
+  dnsName: rh-ssh
+  image: quay.io/app-sre/sre-ssh-proxy@sha256:67ecbf78aa15cc991d92643675d0c947fe4efea1e7a30d743d34e21f84cc2ed8
+status:
+  message: SSHD is ready
+  state: Ready
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: SSHD
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","kind":"SSHD","metadata":{"annotations":{},"creationTimestamp":"2021-07-12T17:14:16Z","finalizers":["testing.finalizer","dns.cloudingress.managed.openshift.io"],"generation":1,"labels":{"hive.openshift.io/managed":"true","managed.openshift.io/version":"v49-1fde8e5"},"managedFields":[{"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","fieldsType":"FieldsV1","fieldsV1":{"f:metadata":{"f:finalizers":{".":{},"v:\"dns.cloudingress.managed.openshift.io\"":{},"v:\"testing.finalizer\"":{}}},"f:status":{".":{},"f:message":{},"f:state":{}}},"manager":"cloud-ingress-operator","operation":"Update","time":"2021-07-12T17:14:16Z"},{"apiVersion":"cloudingress.managed.openshift.io/v1alpha1","fieldsType":"FieldsV1","fieldsV1":{"f:metadata":{"f:annotations":{".":{},"f:kubectl.kubernetes.io/last-applied-configuration":{}},"f:labels":{".":{},"f:hive.openshift.io/managed":{},"f:managed.openshift.io/version":{}}},"f:spec":{".":{},"f:allowedCIDRBlocks":{},"f:configMapSelector":{".":{},"f:matchExpressions":{}},"f:dnsName":{},"f:image":{}}},"manager":"manager","operation":"Update","time":"2021-07-12T17:14:16Z"}],"name":"rh-ssh","namespace":"openshift-sre-sshd","resourceVersion":"84109","selfLink":"/apis/cloudingress.managed.openshift.io/v1alpha1/namespaces/openshift-sre-sshd/sshds/rh-ssh","uid":"110403d2-226d-4e9a-b2b9-8fc620ff42d8"},"spec":{"allowedCIDRBlocks":["54.227.5.10/32","52.70.201.140/32","52.6.0.240/32","18.216.250.44/32","52.14.88.51/32","18.130.14.59/32","35.178.149.126/32","52.196.174.210/32","54.168.53.242/32"],"configMapSelector":{"matchExpressions":[{"key":"api.openshift.com/authorized-keys","operator":"Exists"}]},"dnsName":"rh-ssh","image":"quay.io/app-sre/sre-ssh-proxy@sha256:67ecbf78aa15cc991d92643675d0c947fe4efea1e7a30d743d34e21f84cc2ed8"},"status":{"message":"SSHD is ready","state":"Ready"}}
+  creationTimestamp: "2021-07-12T17:28:06Z"
+  finalizers:
+  - testing.finalizer
+  - dns.cloudingress.managed.openshift.io
+  generation: 1
+  labels:
+    hive.openshift.io/managed: "true"
+    managed.openshift.io/version: v49-1fde8e5
+  managedFields:
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:status:
+        .: {}
+        f:message: {}
+        f:state: {}
+    manager: cloud-ingress-operator
+    operation: Update
+    time: "2021-07-12T17:28:06Z"
+  - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:kubectl.kubernetes.io/last-applied-configuration: {}
+        f:finalizers:
+          .: {}
+          v:"dns.cloudingress.managed.openshift.io": {}
+          v:"testing.finalizer": {}
+        f:labels:
+          .: {}
+          f:hive.openshift.io/managed: {}
+          f:managed.openshift.io/version: {}
+      f:spec:
+        .: {}
+        f:allowedCIDRBlocks: {}
+        f:configMapSelector:
+          .: {}
+          f:matchExpressions: {}
+        f:dnsName: {}
+        f:image: {}
+    manager: kubectl-client-side-apply
+    operation: Update
+    time: "2021-07-12T17:28:06Z"
+  name: rh-ssh
+  namespace: openshift-sre-sshd
+  resourceVersion: "89136"
+  selfLink: /apis/cloudingress.managed.openshift.io/v1alpha1/namespaces/openshift-sre-sshd/sshds/rh-ssh
+  uid: ccc10a92-b0d0-4c0a-9609-cd9c9a9a3097
+spec:
+  allowedCIDRBlocks:
+  - 54.227.5.10/32
+  - 52.70.201.140/32
+  - 52.6.0.240/32
+  - 18.216.250.44/32
+  - 52.14.88.51/32
+  - 18.130.14.59/32
+  - 35.178.149.126/32
+  - 52.196.174.210/32
+  - 54.168.53.242/32
+  configMapSelector:
+    matchExpressions:
+    - key: api.openshift.com/authorized-keys
+      operator: Exists
+  dnsName: rh-ssh
+  image: quay.io/app-sre/sre-ssh-proxy@sha256:67ecbf78aa15cc991d92643675d0c947fe4efea1e7a30d743d34e21f84cc2ed8
+status:
+  message: SSHD is ready
+  state: Ready

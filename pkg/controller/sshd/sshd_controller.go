@@ -11,6 +11,7 @@ import (
 	// For host key generation
 	"crypto/rand"
 	"crypto/rsa"
+
 	"crypto/x509"
 	"encoding/pem"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +111,9 @@ const (
 	hostKeysMountPath         = "/var/run/ssh"
 	nodeMasterLabel           = "node-role.kubernetes.io/master"
 	reconcileSSHDFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	testFinalizer             = "testing.finalizer"
+	testAnnotation            = "testing.annotation"
+	testAnnotationval         = "0704"
 	ELBAnnotationKey          = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	ELBAnnotationValue        = "600"
 )
@@ -148,8 +151,7 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 
 		r.cloudClient = cloudclient.GetClientFor(r.client, *platform)
 	}
-
-	// Check for a deletion timestamp.
+	// Check for a deletion tneimestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
@@ -158,37 +160,60 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 				return reconcile.Result{}, err
 			}
 		}
-	} else {
-		// Request object is being deleted.
-		if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
-			r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
-
-			// fetch the sshd service
-			svc := &corev1.Service{}
-			err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
-			switch err := err.(type) {
-			case nil:
-				// all good
-			case *cioerrors.LoadBalancerNotReadyError:
-				r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
-				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-			default:
-				r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
-				return reconcile.Result{}, err
-			}
-
-			// Remove the DNS finalizer and update the request object.
-			controllerutil.RemoveFinalizer(instance, reconcileSSHDFinalizerDNS)
+		//add the test finalizer
+		if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+			controllerutil.AddFinalizer(instance, testFinalizer)
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
+			return reconcile.Result{}, nil
 		}
+	} else {
+		reqLogger.Info("A deletion has been called!!!!!")
+		// Request object is being deleted.
+		//check to see if there's annotation, if annotation exist -> delete...
+		reqLogger.Info("Before deletion, Check for Annotation")
+		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
+			reqLogger.Info("No Annotation Found. Not able to delete")
+		} else {
+			reqLogger.Info("Annotation exists. Allowed to remove finalizer")
+			if controllerutil.ContainsFinalizer(instance, reconcileSSHDFinalizerDNS) {
+				r.SetSSHDStatus(instance, "Deleting DNS aliases", cloudingressv1alpha1.SSHDStateFinalizing)
 
+				// fetch the sshd service
+				svc := &corev1.Service{}
+				err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: instance.Namespace, Name: instance.Name}, svc)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+
+				err = r.cloudClient.DeleteSSHDNS(context.TODO(), r.client, instance, svc)
+				switch err := err.(type) {
+				case nil:
+					// all good
+				case *cioerrors.LoadBalancerNotReadyError:
+					r.SetSSHDStatus(instance, "Couldn't reconcile", "Load balancer isn't ready.")
+					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+				default:
+					r.SetSSHDStatusError(instance, "Failed to delete the DNS record", err)
+					return reconcile.Result{}, err
+				}
+
+				// Remove the DNS finalizer and update the request object.
+				controllerutil.RemoveFinalizer(instance, reconcileSSHDFinalizerDNS)
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+			if controllerutil.ContainsFinalizer(instance, testFinalizer) {
+				reqLogger.Info("Gonna remove testFinalizer now")
+				controllerutil.RemoveFinalizer(instance, testFinalizer)
+				reqLogger.Info("Just removed Finalizer")
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		// Halt the reconciliation.
 		return reconcile.Result{}, nil
 	}
@@ -203,6 +228,7 @@ func (r *ReconcileSSHD) Reconcile(ctx context.Context, request reconcile.Request
 	// The Deployment object will be configured to mount each available ConfigMap in
 	// the SSHD pod as a volume under a common directory.  The SSH server within the
 	// pod will use an "AuthorizedKeysCommand" to combine all the mounted authorized
+
 	// keys files under that common directory.
 	//
 	// Updates to ConfigMaps for new or departing members, as well as new ConfigMaps
@@ -570,6 +596,7 @@ func newSSHDService(cr *cloudingressv1alpha1.SSHD) *corev1.Service {
 			Name:      cr.Name,
 			Namespace: cr.Namespace,
 			Annotations: map[string]string{
+				testAnnotation:   testAnnotationval,
 				ELBAnnotationKey: ELBAnnotationValue,
 			},
 		},

@@ -31,8 +31,11 @@ import (
 
 const (
 	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
+	testFinalizer         = "testing.finalizer"
+	testAnnotation        = "testing.Annotation"
 	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	elbAnnotationValue    = "1800"
+	testAnnotationval     = "911"
 )
 
 var (
@@ -131,12 +134,10 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
 	}
-
 	serviceNamespacedName := types.NamespacedName{
 		Name:      instance.Spec.ManagementAPIServerIngress.DNSName,
 		Namespace: "openshift-kube-apiserver",
 	}
-
 	// Check for a deletion timestamp.
 	if instance.DeletionTimestamp.IsZero() {
 		// Request object is alive, so ensure it has the DNS finalizer.
@@ -146,56 +147,77 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
-	} else {
-		// Request object is being deleted.
-		if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
-			found := &corev1.Service{}
-			if err = r.client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
-				if errors.IsNotFound(err) {
-					// Service was not found!
-					//
-					// Skip the DeleteAdminAPIDNS call and remove the
-					// finalizer anyway so the CR deletion can proceed.
-					// This could leave DNS entries behind!
-					//
-					// TODO As a future enhancement, the CloudClient
-					//      provider should handle this scenario and
-					//      look up the necessary information itself
-					//      to proceed with the DNS deletion.
-					found = nil
-				} else {
-					reqLogger.Error(err, "Couldn't get the Service")
-					return reconcile.Result{}, err
-				}
-			}
-
-			if found != nil {
-				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
-				switch err := err.(type) {
-				case nil:
-					// all good
-				case *cioerrors.LoadBalancerNotReadyError:
-					// couldn't find the load balancer - it's likely still queued for creation
-					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
-					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
-				default:
-					reqLogger.Error(err, "Failed to delete the DNS record")
-					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
-					return reconcile.Result{}, err
-				}
-			}
-
-			// Remove the DNS finalizer and update the request object.
-			controllerutil.RemoveFinalizer(instance, reconcileFinalizerDNS)
+		if !controllerutil.ContainsFinalizer(instance, testFinalizer) {
+			controllerutil.AddFinalizer(instance, testFinalizer)
 			if err = r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
-
-			// Requeue once more after updating.  Without a finalizer,
-			// the next pass should delete the request object.
-			return reconcile.Result{Requeue: true}, nil
 		}
+	} else {
+		// Request object is being deleted.
+		reqLogger.Info("A deletion has been called!!!!!")
+		reqLogger.Info("Before deletion, Check for Annotation")
+		//if there's no annotation, add one and reconcile
+		if !metav1.HasAnnotation(instance.ObjectMeta, testAnnotation) || instance.ObjectMeta.Annotations[testAnnotation] != testAnnotationval {
+			reqLogger.Info("No Annotation Found. Will add one now to be able to delete finalizer")
+		} else {
+			reqLogger.Info("Annotation Found. Will delete finalizer now")
+			if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
+				found := &corev1.Service{}
+				if err = r.client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
+					if errors.IsNotFound(err) {
+						// Service was not found!
+						//
+						// Skip the DeleteAdminAPIDNS call and remove the
+						// finalizer anyway so the CR deletion can proceed.
+						// This could leave DNS entries behind!
+						//
+						// TODO As a future enhancement, the CloudClient
+						//      provider should handle this scenario and
+						//      look up the necessary information itself
+						//      to proceed with the DNS deletion.
+						found = nil
+					} else {
+						reqLogger.Error(err, "Couldn't get the Service")
+						return reconcile.Result{}, err
+					}
+				}
 
+				if found != nil {
+					err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
+					switch err := err.(type) {
+					case nil:
+						// all good
+					case *cioerrors.LoadBalancerNotReadyError:
+						// couldn't find the load balancer - it's likely still queued for creation
+						r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+						return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+					default:
+						reqLogger.Error(err, "Failed to delete the DNS record")
+						r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
+						return reconcile.Result{}, err
+					}
+				}
+
+				// Remove the DNS finalizer and update the request object.
+				controllerutil.RemoveFinalizer(instance, reconcileFinalizerDNS)
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+
+				// Requeue once more after updating.  Without a finalizer,
+				// the next pass should delete the request object.
+				return reconcile.Result{Requeue: true}, nil
+			}
+			if controllerutil.ContainsFinalizer(instance, testFinalizer) {
+				reqLogger.Info("Gonna remove testFinalizer now")
+				controllerutil.RemoveFinalizer(instance, testFinalizer)
+				reqLogger.Info("Just removed Finalizer")
+				if err = r.client.Update(context.TODO(), instance); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		// Halt the reconciliation.
 		return reconcile.Result{}, nil
 	}
