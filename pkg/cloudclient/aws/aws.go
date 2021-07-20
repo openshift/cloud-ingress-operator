@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -19,10 +18,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53/route53iface"
 
 	configv1 "github.com/openshift/api/config/v1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -73,14 +72,47 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
-func newClient(accessID, accessSecret, token, region string) (*Client, error) {
-	awsConfig := &aws.Config{Region: aws.String(region)}
-	if token == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
-		os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
-	} else {
-		awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
+// NewClient creates a new CloudClient for use with AWS.
+func NewClient(kclient client.Client) (*Client, error) {
+	secret, err := baseutils.GetCliSecret(kclient, config.AWSSecretName, config.OperatorNamespace)
+	if err != nil {
+		return nil, err
 	}
+
+	region, err := getClusterRegion(kclient)
+	if err != nil {
+		return nil, err
+	}
+
+	return build(secret, region)
+}
+
+func build(secret *corev1.Secret, region string) (*Client, error) {
+	accessKeyID, ok := secret.Data["aws_access_key_id"]
+	if !ok {
+		return nil, fmt.Errorf("access credentials missing key")
+	}
+	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
+	if !ok {
+		return nil, fmt.Errorf("access credentials missing secret key")
+	}
+
+	c, err := configure(
+		string(accessKeyID),
+		string(secretAccessKey),
+		region)
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create AWS client %w", err)
+	}
+
+	return c, nil
+}
+
+func configure(accessID, accessSecret, region string) (*Client, error) {
+	awsConfig := &aws.Config{Region: aws.String(region)}
+	os.Setenv("AWS_ACCESS_KEY_ID", accessID)
+	os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
 	s, err := session.NewSession(awsConfig)
 	if err != nil {
 		return nil, err
@@ -91,43 +123,4 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 		elbv2Client:   elbv2.New(s),
 		route53Client: route53.New(s),
 	}, nil
-}
-
-// NewClient creates a new CloudClient for use with AWS.
-func NewClient(kclient client.Client) *Client {
-	region, err := getClusterRegion(kclient)
-	if err != nil {
-		panic(fmt.Sprintf("Couldn't get cluster region %s", err.Error()))
-	}
-	secret := &corev1.Secret{}
-	err = kclient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      config.AWSSecretName,
-			Namespace: config.OperatorNamespace,
-		},
-		secret)
-	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
-	}
-	accessKeyID, ok := secret.Data["aws_access_key_id"]
-	if !ok {
-		panic("Access credentials missing key")
-	}
-	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
-	if !ok {
-		panic("Access credentials missing secret key")
-	}
-
-	c, err := newClient(
-		string(accessKeyID),
-		string(secretAccessKey),
-		"",
-		region)
-
-	if err != nil {
-		panic(fmt.Sprintf("Couldn't create AWS client %s", err.Error()))
-	}
-
-	return c
 }

@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -72,4 +73,20 @@ func GetPlatformType(kclient client.Client) (*configv1.PlatformType, error) {
 		return nil, err
 	}
 	return &infra.Status.PlatformStatus.Type, nil
+}
+
+func GetCliSecret(kclient client.Client, name, ns string) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	err := kclient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: ns,
+		},
+		secret)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
+	}
+
+	return secret, nil
 }

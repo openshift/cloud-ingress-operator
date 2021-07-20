@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -58,5 +60,27 @@ func TestNoInfraObj(t *testing.T) {
 	_, err = GetPlatformType(mocks.FakeKubeClient)
 	if err == nil {
 		t.Fatalf("Expected to get an error from not having an Infrastructure object")
+	}
+}
+
+func TestGetCliSecret(t *testing.T) {
+	fakeSecret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "fake-name",
+			Namespace: "sut-ns",
+		},
+		Data: make(map[string][]byte),
+	}
+	fakeSecret.Data["fake"] = []byte("dummy")
+	objs := []runtime.Object{fakeSecret}
+	mocks := testutils.NewTestMock(t, objs)
+
+	s, e := GetCliSecret(mocks.FakeKubeClient, "fake-name", "sut-ns")
+	if e != nil {
+		t.Errorf("secret should have been retrieved: %w", e)
+	}
+	value := string(s.Data["fake"])
+	if value != "dummy" {
+		t.Errorf("secret doesn't have the data")
 	}
 }

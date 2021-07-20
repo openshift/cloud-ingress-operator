@@ -10,10 +10,10 @@ import (
 	"google.golang.org/api/option"
 
 	configv1 "github.com/openshift/api/config/v1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -92,16 +92,9 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 // NewClient creates a new CloudClient for use with GCP.
 func NewClient(kclient client.Client) *Client {
 	ctx := context.Background()
-	secret := &corev1.Secret{}
-	err := kclient.Get(
-		ctx,
-		types.NamespacedName{
-			Name:      config.GCPSecretName,
-			Namespace: config.OperatorNamespace,
-		},
-		secret)
+	secret, err := baseutils.GetCliSecret(kclient, config.GCPSecretName, config.OperatorNamespace)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+		panic(err)
 	}
 	serviceAccountJSON, ok := secret.Data["service_account.json"]
 	if !ok {
