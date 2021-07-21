@@ -222,7 +222,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 	// Reconcile the access list in the Service
-	if !sliceEquals(found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks) {
+	if !utils.SliceEquals(found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks) {
 		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
 		reqLogger.Info(fmt.Sprintf("Mismatch between %s/service/%s LoadBalancerSourceRanges and AllowedCIDRBlocks. Updating...", found.GetNamespace(), found.GetName()))
 		found.Spec.LoadBalancerSourceRanges = instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
@@ -321,17 +321,4 @@ func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.A
 	if err != nil {
 		log.Error(err, "Error updating cr status")
 	}
-}
-
-func sliceEquals(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := 0; i < len(left); i++ {
-		if left[i] != right[i] {
-			fmt.Printf("Mismatch %s != %s\n", left[i], right[i])
-			return false
-		}
-	}
-	return true
 }
