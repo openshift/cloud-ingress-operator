@@ -50,7 +50,7 @@ spec:
               memory: "4G"
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthz
               scheme: HTTP
               port: 8181
             initialDelaySeconds: 25
