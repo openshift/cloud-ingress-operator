@@ -9,8 +9,8 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
+	localmetrics "github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -127,6 +127,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		cloudPlatform, err := baseutils.GetPlatformType(r.client)
 		if err != nil {
 			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
+			r.SetAPISchemeStatusMetric(instance)
 			return reconcile.Result{}, err
 		}
 		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
@@ -177,10 +178,12 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 				case *cioerrors.LoadBalancerNotReadyError:
 					// couldn't find the load balancer - it's likely still queued for creation
 					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+					r.SetAPISchemeStatusMetric(instance)
 					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 				default:
 					reqLogger.Error(err, "Failed to delete the DNS record")
 					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
+					r.SetAPISchemeStatusMetric(instance)
 					return reconcile.Result{}, err
 				}
 			}
@@ -253,13 +256,16 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 	case nil:
 		// no problems
 		r.SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
+		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 	case *cioerrors.DnsUpdateError:
 		// couldn't update DNS
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
+		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{}, err
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	default:
 		// not one of ours
@@ -315,12 +321,20 @@ func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.A
 		message,
 		utils.UpdateConditionNever)
 	crObject.Status.State = ctype
-
 	err := r.client.Status().Update(context.TODO(), crObject)
 	// TODO: Should we return an error here if this update fails?
 	if err != nil {
 		log.Error(err, "Error updating cr status")
 	}
+}
+
+// SetAPISchemeStatusMetric updates a gauge in localmetrics
+func (r *ReconcileAPIScheme) SetAPISchemeStatusMetric(crObject *cloudingressv1alpha1.APIScheme) {
+	if crObject.Status.State == "Ready" {
+		localmetrics.MetricAPISchemeConditionStatus.Set(float64(1))
+		return
+	}
+	localmetrics.MetricAPISchemeConditionStatus.Set(float64(0))
 }
 
 func sliceEquals(left, right []string) bool {

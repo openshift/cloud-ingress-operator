@@ -1,0 +1,25 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloud-ingress-operator
+  namespace: openshift-cloud-ingress-operator
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: openshift-cloud-ingress.rules
+      rules:
+      - alert: APISchemeStatusFailing
+        expr: cloud_ingress_operator_apischeme_status == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          message: APIScheme Conditional Status is degraded.
+      - alert: APISchemeStatusUnavailable
+        expr: cloud_ingress_operator_apischeme_status != 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          message: APIScheme Conditional Status is unavailable.
