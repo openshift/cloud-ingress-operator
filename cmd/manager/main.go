@@ -100,7 +100,7 @@ func main() {
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
 	// Note that this is not intended to be used for excluding namespaces, this is better done via a Predicate
 	// Also note that you may face performance issues when using this with a high number of namespaces.
-	// More Info: https://godoc.org/github.com/kubernetes-sigs/controller-runtime/pkg/cache#MultiNamespacedCacheBuilder
+	// More Info: https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/cache#MultiNamespacedCacheBuilder
 	if strings.Contains(namespace, ",") {
 		options.Namespace = ""
 		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(namespace, ","))
