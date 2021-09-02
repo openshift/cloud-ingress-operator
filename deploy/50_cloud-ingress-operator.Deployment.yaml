@@ -52,6 +52,6 @@ spec:
             httpGet:
               path: /healthz
               scheme: HTTP
-              port: 8181
+              port: 8000
             initialDelaySeconds: 25
             periodSeconds: 15

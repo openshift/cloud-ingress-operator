@@ -39,8 +39,9 @@ import (
 
 // Change below variables to serve metrics on different host or port.
 var (
-	osdMetricsPort = "8181"
-	osdMetricsPath = "/metrics"
+	osdMetricsPort    = "8181"
+	osdMetricsPath    = "/metrics"
+	livenessProbePort = "8000"
 )
 var log = logf.Log.WithName("cmd")
 
@@ -95,7 +96,7 @@ func main() {
 	}
 
 	options := manager.Options{
-		HealthProbeBindAddress: ":" + osdMetricsPort,
+		HealthProbeBindAddress: ":" + livenessProbePort,
 		Namespace:              namespace,
 	}
 
