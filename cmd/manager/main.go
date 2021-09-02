@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -94,7 +95,8 @@ func main() {
 	}
 
 	options := manager.Options{
-		Namespace: namespace,
+		HealthProbeBindAddress: ":" + osdMetricsPort,
+		Namespace:              namespace,
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
@@ -114,6 +116,12 @@ func main() {
 	}
 
 	log.Info("Registering Components.")
+
+	// Setup Healthcheck
+	if err := mgr.AddHealthzCheck("healthz", healthCheck); err != nil {
+		log.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
@@ -181,4 +189,8 @@ func addMetrics(ctx context.Context) {
 	if err := osdmetrics.ConfigureMetrics(ctx, *metricsServer); err != nil {
 		log.Error(err, "Failed to configure OSD metrics")
 	}
+}
+
+func healthCheck(req *http.Request) error {
+	return nil
 }
