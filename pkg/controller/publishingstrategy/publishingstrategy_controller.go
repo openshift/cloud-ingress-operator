@@ -226,6 +226,29 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		if err != nil || result.Requeue {
 			return result, err
 		}
+
+		// Get the list of infra nodes
+		listOptions = []client.ListOption{
+			client.MatchingLabels{"node-role.kubernetes.io": "infra"},
+		}
+
+		nodeList := &corev1.NodeList{}
+		err = r.client.List(context.TODO(), nodeList, listOptions...)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// List call above is returning 18 infra nodes, with 6 copies of each in the Items[]
+		// This function requires the count of distinct nodes
+		infraCount := int32(distinctNodes(nodeList))
+
+		// Update the default IngressController to ensure .spec.replicas == number of infra nodes
+		ingressController.Spec.Replicas = &infraCount
+		err = r.client.Update(context.TODO(), ingressController)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
 	}
 
 	result, err := r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
@@ -627,4 +650,14 @@ func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Log
 	// If the CR was created, requeue PublishingStrategy
 	return reconcile.Result{Requeue: true}, nil
 
+}
+
+func distinctNodes(nodeList *corev1.NodeList) int {
+
+	counter := make(map[string]int)
+	for _, node := range nodeList.Items {
+		counter[node.Name]++
+	}
+
+	return len(counter)
 }
