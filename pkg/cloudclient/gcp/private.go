@@ -29,6 +29,10 @@ import (
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 )
 
+func (c *Client) Healthcheck(ctx context.Context) error {
+	return c.healthcheck()
+}
+
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
 func (c *Client) ensureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
@@ -552,4 +556,14 @@ func getClusterDNS(kclient client.Client) (*configv1.DNS, error) {
 	}
 
 	return dns, nil
+}
+
+func (c *Client) healthcheck() error {
+	healthCheckCall := c.computeService.ForwardingRules.List(c.projectID, "us-west-1") // check a random region to check cloud client availability.
+	_, err := healthCheckCall.Do()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

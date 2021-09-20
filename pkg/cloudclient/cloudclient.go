@@ -12,6 +12,7 @@ import (
 )
 
 // CloudClient defines the interface for a cloud agnostic implementation
+// For mocking: mockgen -source=pkg/cloudclient/cloudclient.go -destination=pkg/cloudclient/mock_cloudclient/mock_cloudclient.go
 type CloudClient interface {
 
 	/* APIScheme */
@@ -35,6 +36,9 @@ type CloudClient interface {
 
 	// SetDefaultAPIPublic ensures that the default API is public, per user configure
 	SetDefaultAPIPublic(context.Context, client.Client, *cloudingressv1alpha1.PublishingStrategy) error
+
+	// Perform healthcheck
+	Healthcheck(context.Context) error
 }
 
 var controllerMapping = map[configv1.PlatformType]Factory{}

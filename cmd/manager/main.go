@@ -12,14 +12,15 @@ import (
 
 	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	"github.com/openshift/cloud-ingress-operator/version"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
-
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
@@ -119,7 +120,16 @@ func main() {
 	log.Info("Registering Components.")
 
 	// Setup Healthcheck
-	if err := mgr.AddHealthzCheck("healthz", healthCheck); err != nil {
+	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {
+		cli := mgr.GetClient()
+		cloudPlatform, err := baseutils.GetPlatformType(cli)
+		if err != nil {
+			return err
+		}
+		cloudClient := cloudclient.GetClientFor(cli, *cloudPlatform)
+		err = cloudClient.Healthcheck(context.TODO())
+		return err
+	}); err != nil {
 		log.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
@@ -190,8 +200,4 @@ func addMetrics(ctx context.Context) {
 	if err := osdmetrics.ConfigureMetrics(ctx, *metricsServer); err != nil {
 		log.Error(err, "Failed to configure OSD metrics")
 	}
-}
-
-func healthCheck(req *http.Request) error {
-	return nil
 }

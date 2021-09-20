@@ -141,6 +141,10 @@ func updateAWSLBList(kclient client.Client, oldLBList []awsproviderapi.LoadBalan
 	return nil
 }
 
+func (c *Client) Healthcheck(ctx context.Context) error {
+	return c.healthcheck()
+}
+
 // ensureAdminAPIDNS ensure the DNS record for the rh-api "admin API" for
 // APIScheme is present and mapped to the corresponding Service's AWS
 // LoadBalancer
@@ -1067,4 +1071,13 @@ func (c *Client) getTargetGroupArn(targetGroupName string) (string, error) {
 		return "", err
 	}
 	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
+}
+
+func (c *Client) healthcheck() error {
+	_, err := c.elbClient.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
