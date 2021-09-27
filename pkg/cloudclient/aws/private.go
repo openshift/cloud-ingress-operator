@@ -1075,9 +1075,5 @@ func (c *Client) getTargetGroupArn(targetGroupName string) (string, error) {
 
 func (c *Client) healthcheck() error {
 	_, err := c.elbClient.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
