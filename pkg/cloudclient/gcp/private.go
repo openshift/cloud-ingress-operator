@@ -559,7 +559,6 @@ func getClusterDNS(kclient client.Client) (*configv1.DNS, error) {
 }
 
 func (c *Client) healthcheck() error {
-	healthCheckCall := c.computeService.ForwardingRules.List(c.projectID, "us-west-1") // check a random region to check cloud client availability.
-	_, err := healthCheckCall.Do()
+	_, err := c.computeService.BackendServices.List(c.projectID).Do() // checking backend services to ensure cloud client availability.
 	return err
 }
