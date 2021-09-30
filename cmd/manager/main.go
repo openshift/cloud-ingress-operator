@@ -127,10 +127,10 @@ func main() {
 			return err
 		}
 		cloudClient := cloudclient.GetClientFor(cli, *cloudPlatform)
-		err = cloudClient.Healthcheck(context.TODO())
+		err = cloudClient.Healthcheck(context.TODO(), cli)
 		return err
 	}); err != nil {
-		log.Error(err, "unable to set up health check")
+		log.Error(err, "failed to add healthcheck function to mgr")
 		os.Exit(1)
 	}
 

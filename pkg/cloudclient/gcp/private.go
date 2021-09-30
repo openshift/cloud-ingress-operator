@@ -26,12 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 )
-
-func (c *Client) Healthcheck(ctx context.Context) error {
-	return c.healthcheck()
-}
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
@@ -64,11 +59,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 	if err != nil {
 		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
 	}
-	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
-	if err != nil {
-		return err
-	}
-	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
+	apiDNSName := fmt.Sprintf("api.%s.", c.baseDomain)
 	oldIP, err := c.updateAPIARecord(kclient, apiDNSName, intIPAddress)
 	if err != nil {
 		return err
@@ -77,16 +68,8 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 	if oldIP == intIPAddress {
 		return nil
 	}
-	region, err := getClusterRegion(kclient)
-	if err != nil {
-		return err
-	}
-	infrastructureName, err := baseutils.GetClusterName(kclient)
-	if err != nil {
-		return err
-	}
-	staticIPName := infrastructureName + "-cluster-public-ip"
-	err = c.releaseExternalIP(region, staticIPName)
+	staticIPName := c.clusterName + "-cluster-public-ip"
+	err = c.releaseExternalIP(staticIPName)
 	if err != nil {
 		return err
 	}
@@ -97,23 +80,15 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
 func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	region, err := getClusterRegion(kclient)
-	if err != nil {
-		return err
-	}
-	listCall := c.computeService.ForwardingRules.List(c.projectID, region)
+	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
 		return err
 	}
 	// Create a new external LB
-	infrastructureName, err := baseutils.GetClusterName(kclient)
-	if err != nil {
-		return err
-	}
 	//GCP ForwardingRule and TargetPool share the same name
-	extNLBName := infrastructureName + "-api"
-	staticIPName := infrastructureName + "-cluster-public-ip"
+	extNLBName := c.clusterName + "-api"
+	staticIPName := c.clusterName + "-cluster-public-ip"
 	for _, lb := range response.Items {
 		// This list of forwardingrules (LBs) includes any service LBs
 		// for application routers so check the port range to identify
@@ -123,19 +98,15 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 			return nil
 		}
 	}
-	staticIPAddress, err := c.createExternalIP(staticIPName, "EXTERNAL", region)
+	staticIPAddress, err := c.createExternalIP(staticIPName, "EXTERNAL")
 	if err != nil {
 		return err
 	}
-	err = c.createNetworkLoadBalancer(extNLBName, "EXTERNAL", extNLBName, region, staticIPAddress)
+	err = c.createNetworkLoadBalancer(extNLBName, "EXTERNAL", extNLBName, staticIPAddress)
 	if err != nil {
 		return err
 	}
-	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
-	if err != nil {
-		return err
-	}
-	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
+	apiDNSName := fmt.Sprintf("api.%s.", c.baseDomain)
 	_, err = c.updateAPIARecord(kclient, apiDNSName, staticIPAddress)
 	if err != nil {
 		return err
@@ -153,11 +124,7 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 		return err
 	}
 
-	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
-	if err != nil {
-		return err
-	}
-	FQDN := dnsName + "." + baseDomain + "."
+	FQDN := dnsName + "." + c.baseDomain + "."
 
 	// The resource record set to add.
 	// Kind and SignatureRrdatas are set as
@@ -223,12 +190,7 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
-
-	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
-	if err != nil {
-		return err
-	}
-	FQDN := dnsName + "." + baseDomain + "."
+	FQDN := dnsName + "." + c.baseDomain + "."
 
 	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
@@ -286,27 +248,14 @@ func getIPAddressesFromService(svc *corev1.Service) ([]string, error) {
 }
 
 func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, error) {
-	region, err := getClusterRegion(kclient)
-	if err != nil {
-		return "", err
-	}
-
-	listCall := c.computeService.ForwardingRules.List(c.projectID, region)
+	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
 		return "", err
 	}
 
-	masterList, err := baseutils.GetMasterMachines(kclient)
-	if err != nil {
-		return "", err
-	}
-	infrastructureName, err := baseutils.GetClusterName(kclient)
-	if err != nil {
-		return "", err
-	}
-	extNLBName := infrastructureName + "-api"
-	intLBName := infrastructureName + "-api-internal"
+	extNLBName := c.clusterName + "-api"
+	intLBName := c.clusterName + "-api-internal"
 	var intIPAddress, lbName string
 	for _, lb := range response.Items {
 		// This list of forwardingrules (LBs) includes any service LBs
@@ -315,11 +264,11 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 		if lb.LoadBalancingScheme == "EXTERNAL" && lb.PortRange == "6443-6443" && lb.Name == extNLBName {
 			//delete the LB and remove it from the masters
 			lbName = lb.Name
-			_, err := c.computeService.ForwardingRules.Delete(c.projectID, region, lbName).Do()
+			_, err := c.computeService.ForwardingRules.Delete(c.projectID, c.region, lbName).Do()
 			if err != nil {
 				return "", fmt.Errorf("Failed to delete ForwardingRule for external load balancer %v: %v", lb.Name, err)
 			}
-			err = removeGCPLBFromMasterMachines(kclient, lbName, masterList)
+			err = removeGCPLBFromMasterMachines(kclient, lbName, c.masterList)
 			if err != nil {
 				return "", err
 			}
@@ -332,14 +281,6 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 		}
 	}
 	return intIPAddress, nil
-}
-
-func getClusterRegion(kclient client.Client) (string, error) {
-	infra, err := baseutils.GetInfrastructureObject(kclient)
-	if err != nil {
-		return "", err
-	}
-	return infra.Status.PlatformStatus.GCP.Region, nil
 }
 
 func removeGCPLBFromMasterMachines(kclient client.Client, lbName string, masterNodes *machineapi.MachineList) error {
@@ -423,9 +364,9 @@ func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []stri
 	return nil
 }
 
-func (c *Client) createExternalIP(name string, scheme string, region string) (ipAddress string, err error) {
+func (c *Client) createExternalIP(name string, scheme string) (ipAddress string, err error) {
 	// Check if an external IP with the correct name already exists
-	addyList, err := c.computeService.Addresses.List(c.projectID, region).Do()
+	addyList, err := c.computeService.Addresses.List(c.projectID, c.region).Do()
 	if err != nil {
 		return "", fmt.Errorf("Failed to retrieve list of GCP project's IP addresses: %v", err)
 	}
@@ -440,20 +381,20 @@ func (c *Client) createExternalIP(name string, scheme string, region string) (ip
 		Name:        name,
 		AddressType: scheme,
 	}
-	insertCall := c.computeService.Addresses.Insert(c.projectID, region, eip)
+	insertCall := c.computeService.Addresses.Insert(c.projectID, c.region, eip)
 	eipResp, err := insertCall.Do()
 	if err != nil {
 		return "", fmt.Errorf("Request to reserve a new static IP failed: %v", err)
 	}
 
-	waitResp, err := c.computeService.RegionOperations.Wait(c.projectID, region, eipResp.Name).Do()
+	waitResp, err := c.computeService.RegionOperations.Wait(c.projectID, c.region, eipResp.Name).Do()
 
 	// Fail if we couldn't reserve a static IP within 2 minutes.
 	if waitResp.Status != "DONE" {
 		return "", fmt.Errorf("Failed to reserve a static IP after waiting 120s: %v", err)
 	}
 
-	getCall := c.computeService.Addresses.Get(c.projectID, region, name)
+	getCall := c.computeService.Addresses.Get(c.projectID, c.region, name)
 	address, err := getCall.Do()
 	if err != nil {
 		return "", err
@@ -462,17 +403,17 @@ func (c *Client) createExternalIP(name string, scheme string, region string) (ip
 	return address.Address, nil
 }
 
-func (c *Client) releaseExternalIP(region string, addressName string) error {
-	_, err := c.computeService.Addresses.Delete(c.projectID, region, addressName).Do()
+func (c *Client) releaseExternalIP(addressName string) error {
+	_, err := c.computeService.Addresses.Delete(c.projectID, c.region, addressName).Do()
 	if err != nil {
 		return fmt.Errorf("Failed to release External IP %v: %v", addressName, err)
 	}
 	return nil
 }
 
-func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, region string, ip string) error {
+func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, ip string) error {
 	//Confirm the target pool is present and get its selflink URL
-	tpResp, err := c.computeService.TargetPools.Get(c.projectID, region, targetPool).Do()
+	tpResp, err := c.computeService.TargetPools.Get(c.projectID, c.region, targetPool).Do()
 	if err != nil {
 		return fmt.Errorf("Unable to find expected targetPool %v: %v", targetPool, err)
 	}
@@ -486,7 +427,7 @@ func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPoo
 		PortRange:           "6443-6443",
 		IPProtocol:          "TCP",
 	}
-	_, err = c.computeService.ForwardingRules.Insert(c.projectID, region, i).Do()
+	_, err = c.computeService.ForwardingRules.Insert(c.projectID, c.region, i).Do()
 	if err != nil {
 		return fmt.Errorf("Failed to create new ForwardingRule for %v: %v", name, err)
 	}
@@ -556,9 +497,4 @@ func getClusterDNS(kclient client.Client) (*configv1.DNS, error) {
 	}
 
 	return dns, nil
-}
-
-func (c *Client) healthcheck() error {
-	_, err := c.computeService.BackendServices.List(c.projectID).Do() // checking backend services to ensure cloud client availability.
-	return err
 }

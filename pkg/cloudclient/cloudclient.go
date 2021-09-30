@@ -38,7 +38,7 @@ type CloudClient interface {
 	SetDefaultAPIPublic(context.Context, client.Client, *cloudingressv1alpha1.PublishingStrategy) error
 
 	// Perform healthcheck
-	Healthcheck(context.Context) error
+	Healthcheck(context.Context, client.Client) error
 }
 
 var controllerMapping = map[configv1.PlatformType]Factory{}

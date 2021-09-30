@@ -94,17 +94,17 @@ func (mr *MockCloudClientMockRecorder) EnsureSSHDNS(arg0, arg1, arg2, arg3 inter
 }
 
 // Healthcheck mocks base method.
-func (m *MockCloudClient) Healthcheck(arg0 context.Context) error {
+func (m *MockCloudClient) Healthcheck(arg0 context.Context, arg1 client.Client) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Healthcheck", arg0)
+	ret := m.ctrl.Call(m, "Healthcheck", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Healthcheck indicates an expected call of Healthcheck.
-func (mr *MockCloudClientMockRecorder) Healthcheck(arg0 interface{}) *gomock.Call {
+func (mr *MockCloudClientMockRecorder) Healthcheck(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthcheck", reflect.TypeOf((*MockCloudClient)(nil).Healthcheck), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthcheck", reflect.TypeOf((*MockCloudClient)(nil).Healthcheck), arg0, arg1)
 }
 
 // SetDefaultAPIPrivate mocks base method.

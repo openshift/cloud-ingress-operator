@@ -19,8 +19,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53/route53iface"
 
 	configv1 "github.com/openshift/api/config/v1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,6 +71,31 @@ func (c *Client) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client
 // SetDefaultAPIPublic implements cloudclient.CloudClient
 func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
+}
+
+// Healthcheck performs basic calls to make sure client is healthy
+func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
+	lbs, err := c.elbClient.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{})
+	if err != nil {
+		return err // potential client deformation
+	}
+	names := []*string{}
+	for _, lb := range lbs.LoadBalancerDescriptions {
+		names = append(names, lb.LoadBalancerName)
+	}
+
+	out, err := c.elbClient.DescribeTags(&elb.DescribeTagsInput{LoadBalancerNames: names})
+	if err != nil {
+		return err // potential client deformation
+	}
+	for _, tag := range out.TagDescriptions {
+		for _, t := range tag.Tags {
+			if *t.Value == "openshift-kube-apiserver/rh-api" {
+				return nil // success
+			}
+		}
+	}
+	return fmt.Errorf("no lb found that has 'openshift-kube-apiserver/rh-api' tag")
 }
 
 func newClient(accessID, accessSecret, token, region string) (*Client, error) {
