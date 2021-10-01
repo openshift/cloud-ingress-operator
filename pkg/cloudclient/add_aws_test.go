@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func TestProducePanics(t *testing.T) {
+func TestProduceAWSPanics(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("testing panic: should have been failed")
@@ -19,10 +19,10 @@ func TestProducePanics(t *testing.T) {
 	}()
 	objs := []runtime.Object{}
 	mocks := testutils.NewTestMock(t, objs)
-	_ = produce(mocks.FakeKubeClient)
+	_ = produceAWS(mocks.FakeKubeClient)
 }
 
-func TestProduceSuccess(t *testing.T) {
+func TestProduceAWSSuccess(t *testing.T) {
 	infra := &configv1.Infrastructure{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "cluster",
@@ -48,7 +48,7 @@ func TestProduceSuccess(t *testing.T) {
 
 	objs := []runtime.Object{infra, fakeSecret}
 	mocks := testutils.NewTestMock(t, objs)
-	cli := produce(mocks.FakeKubeClient)
+	cli := produceAWS(mocks.FakeKubeClient)
 	if cli == nil {
 		t.Error("cli couldn't initialize with given params")
 	}

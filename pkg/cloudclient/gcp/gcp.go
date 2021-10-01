@@ -114,7 +114,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 }
 
 // NewClient creates a new CloudClient for use with GCP.
-func NewClient(kclient client.Client) *Client {
+func NewClient(kclient client.Client) (*Client, error) {
 	ctx := context.Background()
 	secret := &corev1.Secret{}
 	err := kclient.Get(
@@ -125,43 +125,43 @@ func NewClient(kclient client.Client) *Client {
 		},
 		secret)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
 	}
 	serviceAccountJSON, ok := secret.Data["service_account.json"]
 	if !ok {
-		panic("Access credentials missing service account")
+		return nil, fmt.Errorf("access credentials missing service account")
 	}
 
 	// initialize actual client
 	c, err := newClient(ctx, serviceAccountJSON)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't create GCP client %s", err.Error()))
+		return nil, fmt.Errorf("couldn't create GCP client %s", err)
 	}
 
 	// enchant the client with params required
 	region, err := getClusterRegion(kclient)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c.region = region
 
 	masterList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c.masterList = masterList
 	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c.clusterName = infrastructureName
 	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c.baseDomain = baseDomain
 
-	return c
+	return c, nil
 }
 
 func getClusterRegion(kclient client.Client) (string, error) {

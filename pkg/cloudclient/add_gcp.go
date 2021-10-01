@@ -8,6 +8,15 @@ import (
 func init() {
 	Register(
 		gcp.ClientIdentifier,
-		func(kclient client.Client) CloudClient { return gcp.NewClient(kclient) },
+		produceGCP,
 	)
+}
+
+func produceGCP(kclient client.Client) CloudClient {
+	cli, err := gcp.NewClient(kclient)
+	if err != nil {
+		panic(err)
+	}
+
+	return cli
 }
