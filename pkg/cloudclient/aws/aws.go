@@ -119,10 +119,10 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 }
 
 // NewClient creates a new CloudClient for use with AWS.
-func NewClient(kclient client.Client) *Client {
+func NewClient(kclient client.Client) (*Client, error) {
 	region, err := getClusterRegion(kclient)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get cluster region %s", err.Error()))
+		return nil, fmt.Errorf("couldn't get cluster region %w", err)
 	}
 	secret := &corev1.Secret{}
 	err = kclient.Get(
@@ -133,15 +133,15 @@ func NewClient(kclient client.Client) *Client {
 		},
 		secret)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
 	}
 	accessKeyID, ok := secret.Data["aws_access_key_id"]
 	if !ok {
-		panic("Access credentials missing key")
+		return nil, fmt.Errorf("access credentials missing key")
 	}
 	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
 	if !ok {
-		panic("Access credentials missing secret key")
+		return nil, fmt.Errorf("access credentials missing secret key")
 	}
 
 	c, err := newClient(
@@ -151,8 +151,8 @@ func NewClient(kclient client.Client) *Client {
 		region)
 
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't create AWS client %s", err.Error()))
+		return nil, fmt.Errorf("couldn't create AWS client %w", err)
 	}
 
-	return c
+	return c, nil
 }
