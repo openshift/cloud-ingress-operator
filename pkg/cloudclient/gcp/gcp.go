@@ -76,9 +76,13 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 		return err // possible client deformation
 	}
 
-	// checking rh-api to ensure it's there and available to use by cloud-client
-	intLBName := c.clusterName + "-api-internal"
-	for _, lb := range out.Items {
+	return performHealthCheck(out, c.clusterName)
+}
+
+func performHealthCheck(l *computev1.BackendServiceList, clusterName string) error {
+	// checking internal lb to ensure it's there and available to use by cloud-client
+	intLBName := clusterName + "-api-internal"
+	for _, lb := range l.Items {
 		if lb.Name == intLBName {
 			return nil
 		}

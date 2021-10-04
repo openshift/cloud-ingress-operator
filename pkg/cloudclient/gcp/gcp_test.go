@@ -6,6 +6,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
+	computev1 "google.golang.org/api/compute/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +35,8 @@ func TestNewClient(t *testing.T) {
 					Region: "eu-west-1",
 				},
 			},
-		}}
+		},
+	}
 
 	fakeSecret := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
@@ -50,10 +52,26 @@ func TestNewClient(t *testing.T) {
 	cli, err := NewClient(mocks.FakeKubeClient)
 
 	if err != nil {
-		t.Error("err occured while creating cli: %w", err)
+		t.Error("err occured while creating cli:", err)
 	}
 
 	if cli == nil {
-		t.Errorf("cli should have been initialized")
+		t.Error("cli should have been initialized")
+	}
+}
+
+// testing only performHealthCheck
+// mocking c.computeService.RegionBackendServices.List(c.projectID, c.region).Do() is hard coz they're not bound to an interface
+func TestPerformHealthCheck(t *testing.T) {
+	l := &computev1.BackendServiceList{
+		Items: []*computev1.BackendService{
+			{
+				Name: "test-api-internal",
+			},
+		}}
+
+	err := performHealthCheck(l, "test")
+	if err != nil {
+		t.Error("tests shouldn't have failed:", err)
 	}
 }

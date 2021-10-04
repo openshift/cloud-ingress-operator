@@ -26,7 +26,8 @@ func TestNewClient(t *testing.T) {
 					Region: "eu-west-1",
 				},
 			},
-		}}
+		},
+	}
 
 	fakeSecret := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
@@ -43,7 +44,7 @@ func TestNewClient(t *testing.T) {
 	cli, err := NewClient(mocks.FakeKubeClient)
 
 	if err != nil {
-		t.Error("err occured while creating cli: %w", err)
+		t.Error("err occured while creating cli:", err)
 	}
 
 	if cli == nil {
@@ -90,7 +91,7 @@ func TestHealthcheck(t *testing.T) {
 	cli := Client{elbClient: &mockELBClient{}}
 	err := cli.Healthcheck(context.TODO(), mocks.FakeKubeClient)
 	if err != nil {
-		t.Errorf("err occured while performing healthcheck: %s", err)
+		t.Error("err occured while performing healthcheck:", err)
 	}
 
 }
