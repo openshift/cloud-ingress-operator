@@ -8,6 +8,15 @@ import (
 func init() {
 	Register(
 		aws.ClientIdentifier,
-		func(kclient client.Client) CloudClient { return aws.NewClient(kclient) },
+		produceAWS,
 	)
+}
+
+func produceAWS(kclient client.Client) CloudClient {
+	cli, err := aws.NewClient(kclient)
+	if err != nil {
+		panic(err)
+	}
+
+	return cli
 }

@@ -6,51 +6,38 @@ package mock_cloudclient
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	v1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	v1 "k8s.io/api/core/v1"
-	reflect "reflect"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// MockCloudClient is a mock of CloudClient interface
+// MockCloudClient is a mock of CloudClient interface.
 type MockCloudClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockCloudClientMockRecorder
 }
 
-// MockCloudClientMockRecorder is the mock recorder for MockCloudClient
+// MockCloudClientMockRecorder is the mock recorder for MockCloudClient.
 type MockCloudClientMockRecorder struct {
 	mock *MockCloudClient
 }
 
-// NewMockCloudClient creates a new mock instance
+// NewMockCloudClient creates a new mock instance.
 func NewMockCloudClient(ctrl *gomock.Controller) *MockCloudClient {
 	mock := &MockCloudClient{ctrl: ctrl}
 	mock.recorder = &MockCloudClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCloudClient) EXPECT() *MockCloudClientMockRecorder {
 	return m.recorder
 }
 
-// EnsureAdminAPIDNS mocks base method
-func (m *MockCloudClient) EnsureAdminAPIDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.APIScheme, arg3 *v1.Service) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnsureAdminAPIDNS", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EnsureAdminAPIDNS indicates an expected call of EnsureAdminAPIDNS
-func (mr *MockCloudClientMockRecorder) EnsureAdminAPIDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureAdminAPIDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureAdminAPIDNS), arg0, arg1, arg2, arg3)
-}
-
-// DeleteAdminAPIDNS mocks base method
+// DeleteAdminAPIDNS mocks base method.
 func (m *MockCloudClient) DeleteAdminAPIDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.APIScheme, arg3 *v1.Service) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteAdminAPIDNS", arg0, arg1, arg2, arg3)
@@ -58,27 +45,13 @@ func (m *MockCloudClient) DeleteAdminAPIDNS(arg0 context.Context, arg1 client.Cl
 	return ret0
 }
 
-// DeleteAdminAPIDNS indicates an expected call of DeleteAdminAPIDNS
+// DeleteAdminAPIDNS indicates an expected call of DeleteAdminAPIDNS.
 func (mr *MockCloudClientMockRecorder) DeleteAdminAPIDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAdminAPIDNS", reflect.TypeOf((*MockCloudClient)(nil).DeleteAdminAPIDNS), arg0, arg1, arg2, arg3)
 }
 
-// EnsureSSHDNS mocks base method
-func (m *MockCloudClient) EnsureSSHDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.SSHD, arg3 *v1.Service) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnsureSSHDNS", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EnsureSSHDNS indicates an expected call of EnsureSSHDNS
-func (mr *MockCloudClientMockRecorder) EnsureSSHDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureSSHDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureSSHDNS), arg0, arg1, arg2, arg3)
-}
-
-// DeleteSSHDNS mocks base method
+// DeleteSSHDNS mocks base method.
 func (m *MockCloudClient) DeleteSSHDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.SSHD, arg3 *v1.Service) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteSSHDNS", arg0, arg1, arg2, arg3)
@@ -86,13 +59,55 @@ func (m *MockCloudClient) DeleteSSHDNS(arg0 context.Context, arg1 client.Client,
 	return ret0
 }
 
-// DeleteSSHDNS indicates an expected call of DeleteSSHDNS
+// DeleteSSHDNS indicates an expected call of DeleteSSHDNS.
 func (mr *MockCloudClientMockRecorder) DeleteSSHDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSSHDNS", reflect.TypeOf((*MockCloudClient)(nil).DeleteSSHDNS), arg0, arg1, arg2, arg3)
 }
 
-// SetDefaultAPIPrivate mocks base method
+// EnsureAdminAPIDNS mocks base method.
+func (m *MockCloudClient) EnsureAdminAPIDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.APIScheme, arg3 *v1.Service) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureAdminAPIDNS", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureAdminAPIDNS indicates an expected call of EnsureAdminAPIDNS.
+func (mr *MockCloudClientMockRecorder) EnsureAdminAPIDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureAdminAPIDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureAdminAPIDNS), arg0, arg1, arg2, arg3)
+}
+
+// EnsureSSHDNS mocks base method.
+func (m *MockCloudClient) EnsureSSHDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.SSHD, arg3 *v1.Service) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureSSHDNS", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureSSHDNS indicates an expected call of EnsureSSHDNS.
+func (mr *MockCloudClientMockRecorder) EnsureSSHDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureSSHDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureSSHDNS), arg0, arg1, arg2, arg3)
+}
+
+// Healthcheck mocks base method.
+func (m *MockCloudClient) Healthcheck(arg0 context.Context, arg1 client.Client) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Healthcheck", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Healthcheck indicates an expected call of Healthcheck.
+func (mr *MockCloudClientMockRecorder) Healthcheck(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthcheck", reflect.TypeOf((*MockCloudClient)(nil).Healthcheck), arg0, arg1)
+}
+
+// SetDefaultAPIPrivate mocks base method.
 func (m *MockCloudClient) SetDefaultAPIPrivate(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.PublishingStrategy) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetDefaultAPIPrivate", arg0, arg1, arg2)
@@ -100,13 +115,13 @@ func (m *MockCloudClient) SetDefaultAPIPrivate(arg0 context.Context, arg1 client
 	return ret0
 }
 
-// SetDefaultAPIPrivate indicates an expected call of SetDefaultAPIPrivate
+// SetDefaultAPIPrivate indicates an expected call of SetDefaultAPIPrivate.
 func (mr *MockCloudClientMockRecorder) SetDefaultAPIPrivate(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDefaultAPIPrivate", reflect.TypeOf((*MockCloudClient)(nil).SetDefaultAPIPrivate), arg0, arg1, arg2)
 }
 
-// SetDefaultAPIPublic mocks base method
+// SetDefaultAPIPublic mocks base method.
 func (m *MockCloudClient) SetDefaultAPIPublic(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.PublishingStrategy) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetDefaultAPIPublic", arg0, arg1, arg2)
@@ -114,7 +129,7 @@ func (m *MockCloudClient) SetDefaultAPIPublic(arg0 context.Context, arg1 client.
 	return ret0
 }
 
-// SetDefaultAPIPublic indicates an expected call of SetDefaultAPIPublic
+// SetDefaultAPIPublic indicates an expected call of SetDefaultAPIPublic.
 func (mr *MockCloudClientMockRecorder) SetDefaultAPIPublic(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDefaultAPIPublic", reflect.TypeOf((*MockCloudClient)(nil).SetDefaultAPIPublic), arg0, arg1, arg2)
