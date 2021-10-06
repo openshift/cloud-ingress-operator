@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -99,13 +98,7 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 }
 
 func newClient(accessID, accessSecret, token, region string) (*Client, error) {
-	awsConfig := &aws.Config{Region: aws.String(region)}
-	if token == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
-		os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
-	} else {
-		awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
-	}
+	awsConfig := &aws.Config{Region: aws.String(region), Credentials: credentials.NewStaticCredentials(accessID, accessSecret, token)}
 	s, err := session.NewSession(awsConfig)
 	if err != nil {
 		return nil, err
