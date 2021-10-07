@@ -10,8 +10,10 @@ import (
 	"google.golang.org/api/option"
 
 	configv1 "github.com/openshift/api/config/v1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,6 +31,10 @@ var (
 // Client represents a GCP Client
 type Client struct {
 	projectID      string
+	region         string
+	clusterName    string
+	baseDomain     string
+	masterList     *machineapi.MachineList
 	dnsService     *dnsv1.Service
 	computeService *computev1.Service
 }
@@ -63,6 +69,28 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
+// Healthcheck performs basic calls to make sure client is healthy
+func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
+	out, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
+	if err != nil {
+		return err // possible client deformation
+	}
+
+	return performHealthCheck(out, c.clusterName)
+}
+
+func performHealthCheck(l *computev1.BackendServiceList, clusterName string) error {
+	// checking internal lb to ensure it's there and available to use by cloud-client
+	intLBName := clusterName + "-api-internal"
+	for _, lb := range l.Items {
+		if lb.Name == intLBName {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("internal lb not found: exiting to refresh")
+}
+
 func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
 	credentials, err := google.CredentialsFromJSON(
 		ctx, serviceAccountJSON,
@@ -90,7 +118,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 }
 
 // NewClient creates a new CloudClient for use with GCP.
-func NewClient(kclient client.Client) *Client {
+func NewClient(kclient client.Client) (*Client, error) {
 	ctx := context.Background()
 	secret := &corev1.Secret{}
 	err := kclient.Get(
@@ -101,18 +129,49 @@ func NewClient(kclient client.Client) *Client {
 		},
 		secret)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't get Secret with credentials %s", err.Error()))
+		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
 	}
 	serviceAccountJSON, ok := secret.Data["service_account.json"]
 	if !ok {
-		panic("Access credentials missing service account")
+		return nil, fmt.Errorf("access credentials missing service account")
 	}
 
+	// initialize actual client
 	c, err := newClient(ctx, serviceAccountJSON)
-
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't create GCP client %s", err.Error()))
+		return nil, fmt.Errorf("couldn't create GCP client %s", err)
 	}
 
-	return c
+	// enchant the client with params required
+	region, err := getClusterRegion(kclient)
+	if err != nil {
+		return nil, err
+	}
+	c.region = region
+
+	masterList, err := baseutils.GetMasterMachines(kclient)
+	if err != nil {
+		return nil, err
+	}
+	c.masterList = masterList
+	infrastructureName, err := baseutils.GetClusterName(kclient)
+	if err != nil {
+		return nil, err
+	}
+	c.clusterName = infrastructureName
+	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
+	if err != nil {
+		return nil, err
+	}
+	c.baseDomain = baseDomain
+
+	return c, nil
+}
+
+func getClusterRegion(kclient client.Client) (string, error) {
+	infra, err := baseutils.GetInfrastructureObject(kclient)
+	if err != nil {
+		return "", err
+	}
+	return infra.Status.PlatformStatus.GCP.Region, nil
 }

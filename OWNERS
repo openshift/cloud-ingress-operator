@@ -1,12 +1,15 @@
 reviewers:
 - lisa
-- mwoodson
 - sam-nguyen7
 - fahlmant
+- lnguyen1401
+- boranx
+- bng0y
+- robotmaxtron
+- ritmun
+- bdematte
 approvers:
 - cblecker
-- lisa
-- mwoodson
 - sam-nguyen7
 - fahlmant
 maintainers:
