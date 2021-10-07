@@ -8,7 +8,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 
-	awsclient "github.com/openshift/cloud-ingress-operator/pkg/awsclient/mock"
 	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +34,6 @@ const ClusterTokenId string = "12345"
 type Mocks struct {
 	FakeKubeClient client.Client
 	MockCtrl       *gomock.Controller
-	MockAws        *awsclient.MockClient
 	Scheme         *runtime.Scheme
 }
 
@@ -108,7 +106,6 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	ret := &Mocks{
 		FakeKubeClient: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(localObjs...).Build(),
 		MockCtrl:       mockctrl,
-		MockAws:        awsclient.NewMockClient(mockctrl),
 		Scheme:         s,
 	}
 
