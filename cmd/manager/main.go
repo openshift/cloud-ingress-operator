@@ -120,15 +120,23 @@ func main() {
 	log.Info("Registering Components.")
 
 	// Setup Healthcheck
+	// There are currently 2 steps:
+	// 1- checking cloud-client via basic ping:
+	// 	- on gcp, the resource being checked is a lb named "-api-internal"
+	// 	- on aws it's the lb that has been tagged as rh-api
+	// 2- checking k8s client and SA via a "get" to ingresscontroller
 	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {
-		cli := mgr.GetClient()
-		cloudPlatform, err := baseutils.GetPlatformType(cli)
+		kubeCli := mgr.GetClient()
+		cloudPlatform, err := baseutils.GetPlatformType(kubeCli)
 		if err != nil {
 			return err
 		}
-		cloudClient := cloudclient.GetClientFor(cli, *cloudPlatform)
-		err = cloudClient.Healthcheck(context.TODO(), cli)
-		return err
+		cloudClient := cloudclient.GetClientFor(kubeCli, *cloudPlatform)
+		if err := cloudClient.Healthcheck(context.TODO(), kubeCli); err != nil {
+			return err
+		}
+
+		return baseutils.SAhealthcheck(kubeCli)
 	}); err != nil {
 		log.Error(err, "failed to add healthcheck function to mgr")
 		os.Exit(1)
