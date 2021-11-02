@@ -16,6 +16,12 @@ const (
 	ConditionReady APISchemeConditionType = "Ready"
 )
 
+type DeleteProtectionType string
+
+const (
+	DeleteProtectionEnabled DeleteProtectionType = "enabled"
+)
+
 // APISchemeSpec defines the desired state of APIScheme
 // +k8s:openapi-gen=true
 type APISchemeSpec struct {
@@ -23,6 +29,7 @@ type APISchemeSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 	ManagementAPIServerIngress ManagementAPIServerIngress `json:"managementAPIServerIngress"`
+	DeleteProtection           DeleteProtectionType       `json:"deleteProtection,omitempty"`
 }
 
 // ManagementAPIServerIngress defines the Management API ingress

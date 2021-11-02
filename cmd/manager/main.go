@@ -53,12 +53,6 @@ func printVersion() {
 }
 
 func main() {
-	//Run the webhook
-	//	decoder := createDecoder()
-	//	admissionCmd.RunAdmissionServer(
-	//		ciowebhooks.NewApischemeDeleteAdmissionHook(decoder),
-	//		ciowebhooks.NewsshdDeleteAdmissionHook(decoder),
-	//	)
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
 	pflag.CommandLine.AddFlagSet(zap.FlagSet())
@@ -182,16 +176,6 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-//func createDecoder() *admission.Decoder {
-//	scheme := runtime.NewScheme()
-//	cio.AddToScheme(scheme)
-//	decoder, err := admission.NewDecoder(scheme)
-//	if err != nil {
-//		log.WithError(err).Fatal("could not create a decoder")
-//	}
-//	return decoder
-//}
 
 // addMetrics will create the Services and Service Monitors to allow the operator export the metrics by using
 // the Prometheus operator
