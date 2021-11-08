@@ -36,7 +36,7 @@ spec:
           env:
             # "" so that the cache can read objects outside its namespace
             - name: WATCH_NAMESPACE
-              value: "openshift-cloud-ingress-operator,openshift-ingress,openshift-ingress-operator,openshift-kube-apiserver,openshift-machine-api"
+              value: "openshift-sre-sshd,openshift-cloud-ingress-operator,openshift-ingress,openshift-ingress-operator,openshift-kube-apiserver,openshift-machine-api"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
