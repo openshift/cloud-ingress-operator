@@ -356,6 +356,48 @@ objects:
         apiGroup: rbac.authorization.k8s.io
         kind: Role
         name: cluster-config-v1-reader-cio
+    # Openshift-sre-sshd role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        - services/finalizers
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+        apiGroup: rbac.authorization.k8s.io
     # Openshift-machine-api role and binding
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
