@@ -1,7 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  creationTimestamp: null
   name: cloud-ingress-operator
+  namespace: openshift-cloud-ingress-operator
 rules:
 - apiGroups:
   - config.openshift.io
