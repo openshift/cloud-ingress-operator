@@ -9,16 +9,18 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
+
+	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
+	"github.com/openshift/cloud-ingress-operator/pkg/apis"
+	"github.com/openshift/cloud-ingress-operator/pkg/controller"
+	"github.com/openshift/cloud-ingress-operator/version"
+	run "k8s.io/apimachinery/pkg/runtime"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
-	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
-	"github.com/openshift/cloud-ingress-operator/pkg/apis"
-	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
-	"github.com/openshift/cloud-ingress-operator/version"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -31,10 +33,15 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	// OSD metrics
+	ciov1 "github.com/openshift/cloud-ingress-operator/pkg/apis"
+	ciowebhook "github.com/openshift/cloud-ingress-operator/pkg/cio-webhook"
 	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
+	"github.com/openshift/generic-admission-server/pkg/cmd"
 	osdmetrics "github.com/openshift/operator-custom-metrics/pkg/metrics"
+	logrus "github.com/sirupsen/logrus"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -50,6 +57,22 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+}
+func createWebhook() {
+	decoder := createDecoder()
+	cmd.RunAdmissionServer(
+		ciowebhook.NewApischemeDeleteAdmissionHook(decoder),
+	)
+	time.Sleep(1 * time.Second)
+}
+func createDecoder() *admission.Decoder {
+	scheme := run.NewScheme()
+	ciov1.AddToScheme(scheme)
+	decoder, err := admission.NewDecoder(scheme)
+	if err != nil {
+		logrus.WithError(err).Fatal("could not create a decoder")
+	}
+	return decoder
 }
 
 func main() {
@@ -119,15 +142,15 @@ func main() {
 	log.Info("Registering Components.")
 
 	// Setup Healthcheck
+	// There are currently 2 steps:
+	// 1- checking cloud-client via basic ping:
+	// 	- on gcp, the resource being checked is a lb named "-api-internal"
+	// 	- on aws it's the lb that has been tagged as rh-api
+	// 2- checking k8s client and SA via a "get" to ingresscontroller
 	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {
-		cli := mgr.GetClient()
-		cloudPlatform, err := baseutils.GetPlatformType(cli)
-		if err != nil {
-			return err
-		}
-		cloudClient := cloudclient.GetClientFor(cli, *cloudPlatform)
-		err = cloudClient.Healthcheck(context.TODO(), cli)
-		return err
+		kubeCli := mgr.GetClient()
+
+		return baseutils.SAhealthcheck(kubeCli)
 	}); err != nil {
 		log.Error(err, "failed to add healthcheck function to mgr")
 		os.Exit(1)
@@ -167,7 +190,7 @@ func main() {
 	}
 
 	addMetrics(ctx)
-
+	go createWebhook()
 	log.Info("Starting the Cmd.")
 
 	// Start the Cmd
