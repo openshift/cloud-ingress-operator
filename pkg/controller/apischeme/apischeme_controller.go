@@ -264,9 +264,24 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{}, err
 	case *cioerrors.LoadBalancerNotReadyError:
-		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 		r.SetAPISchemeStatusMetric(instance)
-		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
+			// The APIscheme was never ready. The Load Balancer is likely still creating
+			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
+			reqLogger.Info("LoadBalancer isn't ready yet")
+		} else {
+			// The APIScheme had been ready previously. The Load Balancer has likely been deleted
+			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer was deleted", cloudingressv1alpha1.ConditionError)
+
+			// To recover from this case we will need to delete the service. It will be recreated  at the next reconcile
+			reqLogger.Info(fmt.Sprintf("LoadBalancer was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
+			err := r.client.Delete(context.TODO(), found)
+			if err != nil {
+				reqLogger.Info(fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it is already deleted", found.GetNamespace(), found.GetName()))
+			}
+		}
+
+		return reconcile.Result{Requeue: true, RequeueAfter: 60 * time.Second}, nil
 	default:
 		// not one of ours
 		log.Error(err, "Error ensuring Admin API", "instance", instance, "Service", found)
@@ -319,7 +334,7 @@ func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.A
 		corev1.ConditionTrue,
 		reason,
 		message,
-		utils.UpdateConditionNever)
+		utils.UpdateConditionIfReasonOrMessageChange)
 	crObject.Status.State = ctype
 	err := r.client.Status().Update(context.TODO(), crObject)
 	// TODO: Should we return an error here if this update fails?

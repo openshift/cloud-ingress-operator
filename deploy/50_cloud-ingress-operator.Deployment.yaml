@@ -54,4 +54,4 @@ spec:
               scheme: HTTP
               port: 8000
             initialDelaySeconds: 25
-            periodSeconds: 15
+            periodSeconds: 60

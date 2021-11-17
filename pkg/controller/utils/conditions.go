@@ -39,37 +39,37 @@ func SetAPISchemeCondition(
 	updateConditionCheck UpdateConditionCheck,
 ) []cloudingressv1alpha1.APISchemeCondition {
 	now := metav1.Now()
-	existingCondition := FindAPISchemeCondition(conditions, conditionType)
-	if existingCondition == nil {
-		if status == corev1.ConditionTrue {
-			conditions = append(
-				conditions,
-				cloudingressv1alpha1.APISchemeCondition{
-					Type:               conditionType,
-					Status:             status,
-					Reason:             reason,
-					Message:            message,
-					LastTransitionTime: now,
-					LastProbeTime:      now,
-				},
-			)
-		}
-	} else {
-		if shouldUpdateCondition(
-			existingCondition.Status, existingCondition.Reason, existingCondition.Message,
-			status, reason, message,
-			updateConditionCheck,
-		) {
-			if existingCondition.Status != status {
-				existingCondition.LastTransitionTime = now
-			}
-			existingCondition.Status = status
-			existingCondition.Reason = reason
-			existingCondition.Message = message
-			existingCondition.LastProbeTime = now
-		}
+	existingCondition := GetLastAPISchemeCondition(conditions)
+	if existingCondition == nil && status == corev1.ConditionFalse {
+		return conditions
 	}
+
+	if shouldUpdateCondition(
+		existingCondition.Status, existingCondition.Reason, existingCondition.Message,
+		status, reason, message,
+		updateConditionCheck,
+	) {
+		conditions = append(
+			conditions,
+			cloudingressv1alpha1.APISchemeCondition{
+				Type:               conditionType,
+				Status:             status,
+				Reason:             reason,
+				Message:            message,
+				LastTransitionTime: now,
+				LastProbeTime:      now,
+			},
+		)
+	}
+
 	return conditions
+}
+
+func GetLastAPISchemeCondition(conditions []cloudingressv1alpha1.APISchemeCondition) *cloudingressv1alpha1.APISchemeCondition {
+	if len(conditions) == 0 {
+		return nil
+	}
+	return &conditions[len(conditions)-1]
 }
 
 // FindAPISchemeCondition finds in the condition that has the matching condition type
