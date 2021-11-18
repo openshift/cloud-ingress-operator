@@ -41,10 +41,11 @@ func SetAPISchemeCondition(
 	now := metav1.Now()
 	existingCondition := GetLastAPISchemeCondition(conditions)
 	if existingCondition == nil && status == corev1.ConditionFalse {
+		// while the LB is being recreate the first time, we don't update the status to avoid clogging it
 		return conditions
 	}
 
-	if shouldUpdateCondition(
+	if existingCondition == nil || shouldUpdateCondition(
 		existingCondition.Status, existingCondition.Reason, existingCondition.Message,
 		status, reason, message,
 		updateConditionCheck,
