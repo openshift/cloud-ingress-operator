@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elb/elbiface"
 	configv1 "github.com/openshift/api/config/v1"
@@ -56,28 +57,48 @@ type mockELBClient struct {
 	elbiface.ELBAPI
 }
 
-func (m *mockELBClient) DescribeLoadBalancers(i *elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error) {
+func (m *mockELBClient) DescribeLoadBalancersPages(params *elb.DescribeLoadBalancersInput, fn func(*elb.DescribeLoadBalancersOutput, bool) bool) error {
 	// mock response/functionality
-	testLB := "test"
-	return &elb.DescribeLoadBalancersOutput{
+
+	// simulate multiple pages
+	out := &elb.DescribeLoadBalancersOutput{
 		LoadBalancerDescriptions: []*elb.LoadBalancerDescription{
 			{
-				LoadBalancerName: &testLB,
+				LoadBalancerName: aws.String("lb-1"),
+			},
+			{
+				LoadBalancerName: aws.String("lb-2"),
 			},
 		},
-	}, nil
+		NextMarker: aws.String("marker"),
+	}
+	fn(out, false)
+
+	out = &elb.DescribeLoadBalancersOutput{
+		LoadBalancerDescriptions: []*elb.LoadBalancerDescription{
+			{
+				LoadBalancerName: aws.String("lb-3"),
+			},
+		},
+		NextMarker: aws.String(""),
+	}
+	fn(out, true)
+
+	return nil
 }
 
 func (m *mockELBClient) DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {
-	k := "sut"
-	v := "openshift-kube-apiserver/rh-api"
 	return &elb.DescribeTagsOutput{
 		TagDescriptions: []*elb.TagDescription{
 			{
 				Tags: []*elb.Tag{
 					{
-						Key:   &k,
-						Value: &v,
+						Key:   aws.String("kubernetes.io/service-name"),
+						Value: aws.String("openshift-kube-apiserver/rh-api"),
+					},
+					{
+						Key:   aws.String("kubernetes.io/cluster/dummy-cluster"),
+						Value: aws.String("owned"),
 					},
 				},
 			},
@@ -86,7 +107,22 @@ func (m *mockELBClient) DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsO
 }
 
 func TestHealthcheck(t *testing.T) {
-	objs := []runtime.Object{}
+	infra := &configv1.Infrastructure{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "",
+		},
+		Status: configv1.InfrastructureStatus{
+			InfrastructureName: "dummy-cluster",
+			PlatformStatus: &configv1.PlatformStatus{
+				AWS: &configv1.AWSPlatformStatus{
+					Region: "us-east-1",
+				},
+			},
+		},
+	}
+
+	objs := []runtime.Object{infra}
 	mocks := testutils.NewTestMock(t, objs)
 	cli := Client{elbClient: &mockELBClient{}}
 	err := cli.Healthcheck(context.TODO(), mocks.FakeKubeClient)

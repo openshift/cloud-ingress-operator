@@ -21,6 +21,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,27 +76,83 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 
 // Healthcheck performs basic calls to make sure client is healthy
 func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
-	lbs, err := c.elbClient.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{})
+	// Build the load balancer tag to look for.
+	clusterName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
-		return err // potential client deformation
+		return err
 	}
+	var shouldOwned []*elb.Tag
+	shouldOwned = append(shouldOwned, &elb.Tag{
+		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+		Value: aws.String("owned"),
+	})
+	shouldOwned = append(shouldOwned, &elb.Tag{
+		Key:   aws.String("kubernetes.io/service-name"),
+		Value: aws.String("openshift-kube-apiserver/rh-api"),
+	})
+
+	elbList := make([]*elb.LoadBalancerDescription, 0)
+	input := &elb.DescribeLoadBalancersInput{}
+	err = c.elbClient.DescribeLoadBalancersPages(input, func(page *elb.DescribeLoadBalancersOutput, lastPage bool) bool {
+		elbList = append(elbList, page.LoadBalancerDescriptions...)
+		return lastPage
+	})
+	if err != nil {
+		return err
+	}
+
 	names := []*string{}
-	for _, lb := range lbs.LoadBalancerDescriptions {
+	for _, lb := range elbList {
 		names = append(names, lb.LoadBalancerName)
 	}
 
-	out, err := c.elbClient.DescribeTags(&elb.DescribeTagsInput{LoadBalancerNames: names})
-	if err != nil {
-		return err // potential client deformation
-	}
-	for _, tag := range out.TagDescriptions {
-		for _, t := range tag.Tags {
-			if *t.Value == "openshift-kube-apiserver/rh-api" {
-				return nil // success
+	// Request tags for up to 20 load balancers at a time.
+	for i := 0; i < len(names); i += 20 {
+		end := i + 20
+		if end > len(names) {
+			end = len(names)
+		}
+		tagsOutput, err := c.elbClient.DescribeTags(
+			&elb.DescribeTagsInput{
+				LoadBalancerNames: names[i:end],
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, tag := range tagsOutput.TagDescriptions {
+			if equals(tag.Tags, shouldOwned) {
+				return nil
 			}
 		}
 	}
+
 	return fmt.Errorf("no lb found that has 'openshift-kube-apiserver/rh-api' tag")
+}
+
+type LoadBalancer struct {
+	Name         string
+	HostedZoneID string
+}
+
+func equals(given, shouldOwned []*elb.Tag) bool {
+	for _, g := range given {
+		if !contains(shouldOwned, g) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func contains(s []*elb.Tag, t *elb.Tag) bool {
+	for _, a := range s {
+		if *a.Key == *t.Key && *a.Value == *t.Value {
+			return true
+		}
+	}
+	return false
 }
 
 func newClient(accessID, accessSecret, token, region string) (*Client, error) {
