@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -81,12 +82,12 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 	if err != nil {
 		return err
 	}
-	var shouldOwned []*elb.Tag
-	shouldOwned = append(shouldOwned, &elb.Tag{
+	var rhApiTags []*elb.Tag
+	rhApiTags = append(rhApiTags, &elb.Tag{
 		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
 		Value: aws.String("owned"),
 	})
-	shouldOwned = append(shouldOwned, &elb.Tag{
+	rhApiTags = append(rhApiTags, &elb.Tag{
 		Key:   aws.String("kubernetes.io/service-name"),
 		Value: aws.String("openshift-kube-apiserver/rh-api"),
 	})
@@ -122,7 +123,7 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 		}
 
 		for _, tag := range tagsOutput.TagDescriptions {
-			if equals(tag.Tags, shouldOwned) {
+			if includes(tag.Tags, rhApiTags) {
 				return nil
 			}
 		}
@@ -131,28 +132,20 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 	return fmt.Errorf("no lb found that has 'openshift-kube-apiserver/rh-api' tag")
 }
 
-type LoadBalancer struct {
-	Name         string
-	HostedZoneID string
-}
-
-func equals(given, shouldOwned []*elb.Tag) bool {
-	for _, g := range given {
-		if !contains(shouldOwned, g) {
-			return false
+func includes(lbTags, checkList []*elb.Tag) bool {
+	if len(lbTags) != len(checkList) {
+		return false
+	}
+	count := 0
+	for _, v := range lbTags {
+		for _, a := range checkList {
+			if reflect.DeepEqual(a, v) {
+				count++
+			}
 		}
 	}
 
-	return true
-}
-
-func contains(s []*elb.Tag, t *elb.Tag) bool {
-	for _, a := range s {
-		if *a.Key == *t.Key && *a.Value == *t.Value {
-			return true
-		}
-	}
-	return false
+	return count == len(checkList)
 }
 
 func newClient(accessID, accessSecret, token, region string) (*Client, error) {
