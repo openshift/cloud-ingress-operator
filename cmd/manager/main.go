@@ -12,6 +12,7 @@ import (
 
 	operatorconfig "github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
 	"github.com/openshift/cloud-ingress-operator/version"
 
@@ -126,7 +127,14 @@ func main() {
 	// 2- checking k8s client and SA via a "get" to ingresscontroller
 	if err := mgr.AddHealthzCheck("healthz", func(req *http.Request) error {
 		kubeCli := mgr.GetClient()
-
+		cloudPlatform, err := baseutils.GetPlatformType(kubeCli)
+		if err != nil {
+			return err
+		}
+		cloudClient := cloudclient.GetClientFor(kubeCli, *cloudPlatform)
+		if err := cloudClient.Healthcheck(context.TODO(), kubeCli); err != nil {
+			return err
+		}
 		return baseutils.SAhealthcheck(kubeCli)
 	}); err != nil {
 		log.Error(err, "failed to add healthcheck function to mgr")

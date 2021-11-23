@@ -53,5 +53,5 @@ spec:
               path: /healthz
               scheme: HTTP
               port: 8000
-            initialDelaySeconds: 25
-            periodSeconds: 60
+            initialDelaySeconds: 45
+            periodSeconds: 75
