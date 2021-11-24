@@ -26,6 +26,14 @@ spec:
       - operator: Exists
         key: node-role.kubernetes.io/infra
         effect: NoSchedule
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+            - key: ca-bundle.crt
+              path: tls-ca-bundle.pem
+          name: trusted-ca-bundle
+        name: trusted-ca-bundle
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
@@ -55,3 +63,8 @@ spec:
               port: 8000
             initialDelaySeconds: 45
             periodSeconds: 75
+          volumeMounts:
+          - mountPath: /etc/pki/ca-trust/extracted/pem
+            name: trusted-ca-bundle
+            readOnly: true
+            
