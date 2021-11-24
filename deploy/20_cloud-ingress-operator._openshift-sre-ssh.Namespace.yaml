@@ -1,0 +1,3 @@
+kind: Namespace
+metadata:
+  name: openshift-sre-sshd
