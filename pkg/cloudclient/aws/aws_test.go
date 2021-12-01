@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elb/elbiface"
-	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	corev1 "k8s.io/api/core/v1"
@@ -16,19 +15,7 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	infra := &configv1.Infrastructure{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "",
-		},
-		Status: configv1.InfrastructureStatus{
-			PlatformStatus: &configv1.PlatformStatus{
-				AWS: &configv1.AWSPlatformStatus{
-					Region: "eu-west-1",
-				},
-			},
-		},
-	}
+	infra := testutils.CreateInfraObject("test-cluster", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
 
 	fakeSecret := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
@@ -111,20 +98,7 @@ func (m *mockELBClient) DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsO
 }
 
 func TestHealthcheck(t *testing.T) {
-	infra := &configv1.Infrastructure{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "",
-		},
-		Status: configv1.InfrastructureStatus{
-			InfrastructureName: "dummy-cluster",
-			PlatformStatus: &configv1.PlatformStatus{
-				AWS: &configv1.AWSPlatformStatus{
-					Region: "us-east-1",
-				},
-			},
-		},
-	}
+	infra := testutils.CreateInfraObject("dummy-cluster", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
 
 	objs := []runtime.Object{infra}
 	mocks := testutils.NewTestMock(t, objs)

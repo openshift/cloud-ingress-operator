@@ -3,7 +3,6 @@ package gcp
 import (
 	"testing"
 
-	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	computev1 "google.golang.org/api/compute/v1"
@@ -23,20 +22,7 @@ func TestNewClient(t *testing.T) {
 		"token_uri": "http://localhost:8080/token"
 	  }`
 
-	infra := &configv1.Infrastructure{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "cluster",
-			Namespace: "",
-		},
-		Status: configv1.InfrastructureStatus{
-			APIServerURL: "https://api.dummy.fsrl.s1.testing.org:6443",
-			PlatformStatus: &configv1.PlatformStatus{
-				GCP: &configv1.GCPPlatformStatus{
-					Region: "eu-west-1",
-				},
-			},
-		},
-	}
+	infra := testutils.CreateGCPInfraObject("sut", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
 
 	fakeSecret := &corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
