@@ -115,215 +115,6 @@ objects:
           - roles/dns.admin
           - roles/compute.networkAdmin
           skipServiceCheck: true
-    - apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        creationTimestamp: null
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      rules:
-      - apiGroups:
-        - machine.openshift.io
-        resources:
-        - machines
-        - machinesets
-        verbs:
-        - get
-        - list
-        - watch
-        - patch
-        - update
-      - apiGroups:
-        - operator.openshift.io
-        resources:
-        - ingresscontrollers
-        verbs:
-        - get
-        - list
-        - watch
-        - patch
-        - delete
-        - create
-        - update
-      - apiGroups:
-        - config.openshift.io
-        resources:
-        - infrastructures
-        - apiservers
-        - dnses
-        verbs:
-        - list
-        - get
-        - watch
-      - apiGroups:
-        - config.openshift.io
-        resources:
-        - apiservers
-        verbs:
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - cloudingress.managed.openshift.io
-        resources:
-        - '*'
-        - apischemes
-        - publishingstrategies
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - ''
-        resources:
-        - pods
-        - services
-        - services/finalizers
-        - endpoints
-        - persistentvolumeclaims
-        - events
-        - configmaps
-        - secrets
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - apps
-        resources:
-        - deployments
-        - daemonsets
-        - replicasets
-        - statefulsets
-        verbs:
-        - create
-        - delete
-        - get
-        - list
-        - patch
-        - update
-        - watch
-      - apiGroups:
-        - monitoring.coreos.com
-        resources:
-        - servicemonitors
-        verbs:
-        - get
-        - create
-      - apiGroups:
-        - apps
-        resourceNames:
-        - cloud-ingress-operator
-        resources:
-        - deployments/finalizers
-        verbs:
-        - update
-      - apiGroups:
-        - ''
-        resources:
-        - pods
-        verbs:
-        - get
-      - apiGroups:
-        - apps
-        resources:
-        - replicasets
-        - deployments
-        verbs:
-        - get
-    - apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        creationTimestamp: null
-        name: cluster-config-v1-reader-cio
-        namespace: kube-system
-      rules:
-      - apiGroups:
-        - ''
-        resourceNames:
-        - cluster-config-v1
-        resources:
-        - configmaps
-        verbs:
-        - get
-    - kind: RoleBinding
-      apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: cloud-ingress-operator-cluster-config-v1-reader
-        namespace: kube-system
-        labels:
-          owner: cloud-ingress-operator
-          owner.namespace: openshift-cloud-ingress-operator
-      subjects:
-      - kind: ServiceAccount
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: Role
-        name: cluster-config-v1-reader-cio
-    - kind: ClusterRoleBinding
-      apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: cloud-ingress-operator
-      subjects:
-      - kind: ServiceAccount
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-        name: cloud-ingress-operator
-    - kind: RoleBinding
-      apiVersion: rbac.authorization.k8s.io/v1
-      metadata:
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      subjects:
-      - kind: ServiceAccount
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        kind: Role
-        name: cloud-ingress-operator
-        namespace: openshift-cloud-ingress-operator
-        apiGroup: rbac.authorization.k8s.io
-    - apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        name: prometheus-k8s
-        namespace: openshift-cloud-ingress-operator
-      rules:
-      - apiGroups:
-        - ''
-        resources:
-        - services
-        - endpoints
-        - pods
-        verbs:
-        - get
-        - list
-        - watch
-    - apiVersion: rbac.authorization.k8s.io/v1
-      kind: RoleBinding
-      metadata:
-        name: prometheus-k8s
-        namespace: openshift-cloud-ingress-operator
-      roleRef:
-        kind: Role
-        name: prometheus-k8s
-      subjects:
-      - kind: ServiceAccount
-        name: prometheus-k8s
-        namespace: openshift-monitoring
     - apiVersion: operators.coreos.com/v1alpha1
       kind: CatalogSource
       metadata:
@@ -370,3 +161,413 @@ objects:
         name: ${REPO_NAME}
         source: ${REPO_NAME}-registry
         sourceNamespace: openshift-${REPO_NAME}
+      # cloud-ingress-operator clusterrole and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: cloud-ingress-operator
+      rules:
+      - apiGroups:
+        - config.openshift.io
+        resources:
+          - infrastructures
+          - apiservers
+          - dnses
+        verbs:
+          - list
+          - get
+          - watch
+      - apiGroups:
+        - config.openshift.io
+        resources:
+        - apiservers
+        verbs:
+        - patch
+        - update
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: cloud-ingress-operator
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cloud-ingress-operator
+    # Openshift-monitoring role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: prometheus-k8s
+        namespace: openshift-cloud-ingress-operator
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        - endpoints
+        - pods
+        verbs:
+        - get
+        - list
+        - watch        
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: prometheus-k8s
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: prometheus-k8s
+      subjects:
+      - kind: ServiceAccount
+        name: prometheus-k8s
+        namespace: openshift-monitoring
+    # Openshift-cloud-ingress-operator role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      rules:
+      - apiGroups:
+        - cloudingress.managed.openshift.io
+        resources:
+        - '*'
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - ""
+        resources:
+        - pods
+        - services
+        - services/finalizers
+        - endpoints
+        - persistentvolumeclaims
+        - events
+        - configmaps
+        - secrets
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        - daemonsets
+        - replicasets
+        - statefulsets
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - monitoring.coreos.com
+        resources:
+        - servicemonitors
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - apps
+        resourceNames:
+        - cloud-ingress-operator
+        resources:
+        - deployments/finalizers
+        verbs:
+        - update
+      - apiGroups:
+        - ""
+        resources:
+        - pods
+        verbs:
+        - get
+      - apiGroups:
+        - apps
+        resources:
+        - replicasets
+        verbs:
+        - get
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+        apiGroup: rbac.authorization.k8s.io
+    # Kube-system role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cluster-config-v1-reader-cio
+        namespace: kube-system
+      rules:
+      - apiGroups:
+        - ""
+        resourceNames:
+        - cluster-config-v1
+        resources:
+        - configmaps
+        verbs:
+        - get
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator-cluster-config-v1-reader
+        namespace: kube-system
+        labels:
+          owner: cloud-ingress-operator
+          owner.namespace: openshift-cloud-ingress-operator
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: cluster-config-v1-reader-cio
+    # Openshift-sre-sshd namespace, role and rolebinding
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: openshift-sre-sshd
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        - services/finalizers
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-sre-sshd
+        apiGroup: rbac.authorization.k8s.io
+    # Openshift-machine-api role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-machine-api
+      rules:
+      - apiGroups:
+        - machine.openshift.io
+        resources:
+        - machines
+        - machinesets
+        verbs:
+        - get
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-machine-api
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-machine-api
+        apiGroup: rbac.authorization.k8s.io
+      # Openshift-kube-apiserver role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-kube-apiserver
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        - services/finalizers
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch        
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-kube-apiserver
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-kube-apiserver
+        apiGroup: rbac.authorization.k8s.io
+    # Openshift-ingress role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-ingress
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        - services/finalizers
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-ingress
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-ingress
+        apiGroup: rbac.authorization.k8s.io
+    # Openshift-ingress-operator role and binding
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-ingress-operator
+      rules:
+      - apiGroups:
+        - operator.openshift.io
+        resources:
+        - ingresscontrollers
+        verbs:
+        - get
+        - list
+        - watch
+        - patch
+        - delete
+        - create
+        - update
+      - apiGroups:
+        - ""
+        resources:
+        - services
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: cloud-ingress-operator
+        namespace: openshift-ingress-operator
+      subjects:
+      - kind: ServiceAccount
+        name: cloud-ingress-operator
+        namespace: openshift-cloud-ingress-operator
+      roleRef:
+        kind: Role
+        name: cloud-ingress-operator
+        namespace: openshift-ingress-operator
+        apiGroup: rbac.authorization.k8s.io
