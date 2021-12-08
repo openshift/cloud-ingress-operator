@@ -880,13 +880,61 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 				return "", "", err
 			}
 		}
-		// we need this to update DNS
-		if networkLoadBalancer.scheme == "internal" {
-			intDNSName = networkLoadBalancer.dnsName
-			intHostedZoneID = networkLoadBalancer.canonicalHostedZoneNameID
+
+	}
+
+	internalAPINLB, err := c.getInteralAPINLB(kclient)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Only use the NLB specifically created for internal traffic
+	// This is to avoid other internal NLBs that may come from Service objects
+	intDNSName = internalAPINLB.dnsName
+	intHostedZoneID = internalAPINLB.canonicalHostedZoneNameID
+
+	return intDNSName, intHostedZoneID, nil
+}
+
+func (c *Client) getInteralAPINLB(kclient client.Client) (loadBalancerV2, error) {
+
+	// Build the load balancer tag to look for.
+	clusterName, err := baseutils.GetClusterName(kclient)
+	if err != nil {
+		return loadBalancerV2{}, err
+	}
+
+	nlbs, err := c.listOwnedNLBs(kclient)
+	if err != nil {
+		return loadBalancerV2{}, err
+	}
+
+	nameTag := &elbv2.Tag{
+		Key:   aws.String("Name"),
+		Value: aws.String(clusterName + "-int"),
+	}
+
+	for _, nlb := range nlbs {
+		if nlb.scheme == "internal" {
+			tagsOutput, err := c.elbv2Client.DescribeTags(
+				&elbv2.DescribeTagsInput{
+					ResourceArns: []*string{aws.String(nlb.loadBalancerArn)},
+				},
+			)
+			if err != nil {
+				return loadBalancerV2{}, err
+			}
+			for _, tagDescription := range tagsOutput.TagDescriptions {
+				for _, tag := range tagDescription.Tags {
+					if reflect.DeepEqual(tag, nameTag) {
+						return nlb, nil
+					}
+				}
+			}
 		}
 	}
-	return intDNSName, intHostedZoneID, nil
+
+	return loadBalancerV2{}, fmt.Errorf("could not find internal API NLB")
 }
 
 // listOwnedNLBs uses the DescribeLoadBalancersV2 to get back a list of all
