@@ -256,6 +256,286 @@ func (m mockDescribeELBv2LoadBalancers) DescribeTags(input *elbv2.DescribeTagsIn
 	return &m.TagsResp, e
 }
 
+func TestGetInternalAPINLB(t *testing.T) {
+	clusterName := "get-internal-api-nlb-test"
+	infraObj := testutils.CreateInfraObject(clusterName, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+	objs := []runtime.Object{infraObj}
+	mocks := testutils.NewTestMock(t, objs)
+
+	ownedTag := &elbv2.Tag{
+		Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+		Value: aws.String("owned"),
+	}
+	nameTag := &elbv2.Tag{
+		Key:   aws.String("Name"),
+		Value: aws.String(clusterName + "-int"),
+	}
+
+	tests := []struct {
+		// Resp is the mocked DescribeLoadBalancers response
+		Resp elbv2.DescribeLoadBalancersOutput
+		// TagsResp is the mocked DescribeTags response
+		TagsResp elbv2.DescribeTagsOutput
+		// Expected is what the test wants to see given the input
+		Expected      loadBalancerV2
+		ErrorExpected bool
+	}{
+		{ // Nothing back from Amazon
+			ErrorExpected: true,
+			Resp:          elbv2.DescribeLoadBalancersOutput{LoadBalancers: []*elbv2.LoadBalancer{}},
+			TagsResp:      elbv2.DescribeTagsOutput{},
+			Expected:      loadBalancerV2{},
+		},
+		// One Internal LB with nametag
+		{
+			ErrorExpected: false,
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb-int"),
+						Scheme:                aws.String("internal"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{nameTag, ownedTag},
+					},
+				},
+			},
+			Expected: loadBalancerV2{
+				canonicalHostedZoneNameID: "/test/ABC123",
+				dnsName:                   "test.example.com",
+				loadBalancerArn:           "arn:123456",
+				loadBalancerName:          "testlb-int",
+				scheme:                    "internal",
+				vpcID:                     "vpc-123456",
+			},
+		},
+		// One Internal LB with incorrect name
+		{
+			ErrorExpected: true,
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb-int"),
+						Scheme:                aws.String("internal"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
+					},
+				},
+			},
+			Expected: loadBalancerV2{},
+		},
+		// Two Internal LBs, owned by cluster, one with correct name, one with incorrect
+		{
+			ErrorExpected: false,
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb-int"),
+						Scheme:                aws.String("internal"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+					{
+						CanonicalHostedZoneId: aws.String("/test/DEF456"),
+						DNSName:               aws.String("test2.example.com"),
+						LoadBalancerArn:       aws.String("arn:654321"),
+						LoadBalancerName:      aws.String("testlb-int-2"),
+						Scheme:                aws.String("internal"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("bar"),
+										IpAddress:    aws.String("10.0.0.10"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{nameTag, ownedTag},
+					},
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
+					},
+				},
+			},
+			Expected: loadBalancerV2{
+				canonicalHostedZoneNameID: "/test/ABC123",
+				dnsName:                   "test.example.com",
+				loadBalancerArn:           "arn:123456",
+				loadBalancerName:          "testlb-int",
+				scheme:                    "internal",
+				vpcID:                     "vpc-123456",
+			},
+		},
+		// Two LBs, one internal, one external, owned by cluster. Internal has correct name
+		{
+			ErrorExpected: false,
+			Resp: elbv2.DescribeLoadBalancersOutput{
+				LoadBalancers: []*elbv2.LoadBalancer{
+					{
+						CanonicalHostedZoneId: aws.String("/test/ABC123"),
+						DNSName:               aws.String("test.example.com"),
+						LoadBalancerArn:       aws.String("arn:123456"),
+						LoadBalancerName:      aws.String("testlb-int"),
+						Scheme:                aws.String("internal"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("foo"),
+										IpAddress:    aws.String("10.10.10.10"),
+									},
+								},
+							},
+						},
+					},
+					{
+						CanonicalHostedZoneId: aws.String("/test/DEF456"),
+						DNSName:               aws.String("test2.example.com"),
+						LoadBalancerArn:       aws.String("arn:654321"),
+						LoadBalancerName:      aws.String("testlb-ext"),
+						Scheme:                aws.String("internet-facing"),
+						VpcId:                 aws.String("vpc-123456"),
+						IpAddressType:         aws.String("ipv4"),
+						State:                 &elbv2.LoadBalancerState{Code: aws.String("active")},
+						Type:                  aws.String("network"),
+
+						AvailabilityZones: []*elbv2.AvailabilityZone{
+							{
+								LoadBalancerAddresses: []*elbv2.LoadBalancerAddress{
+									{
+										AllocationId: aws.String("bar"),
+										IpAddress:    aws.String("10.0.0.10"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TagsResp: elbv2.DescribeTagsOutput{
+				TagDescriptions: []*elbv2.TagDescription{
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{nameTag, ownedTag},
+					},
+					{
+						ResourceArn: aws.String("arn:123"),
+						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
+					},
+				},
+			},
+			Expected: loadBalancerV2{
+				canonicalHostedZoneNameID: "/test/ABC123",
+				dnsName:                   "test.example.com",
+				loadBalancerArn:           "arn:123456",
+				loadBalancerName:          "testlb-int",
+				scheme:                    "internal",
+				vpcID:                     "vpc-123456",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		client := &Client{
+			elbv2Client: mockDescribeELBv2LoadBalancers{
+				Resp:        test.Resp,
+				TagsResp:    test.TagsResp,
+				TagsErrResp: "",
+			},
+		}
+		resp, err := client.getInteralAPINLB(mocks.FakeKubeClient)
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test return mismatch. Expect error? %t: Return %+v", test.ErrorExpected, err)
+		}
+		if !reflect.DeepEqual(resp, test.Expected) {
+			t.Fatalf("Return from listAllNLBs does not match expectation. Expected %+v. Got %+v", test.Expected, resp)
+		}
+	}
+
+}
+
 func TestListOwnedNLBs(t *testing.T) {
 	clusterName := "list-owned-nlbs-test"
 	infraObj := testutils.CreateInfraObject(clusterName, testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
