@@ -21,3 +21,11 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - configmaps
+  - secrets
+  verbs:
+  - "*"

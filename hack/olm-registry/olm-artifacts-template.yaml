@@ -185,6 +185,14 @@ objects:
         - patch
         - update
         - watch
+      - apiGroups:
+        - ""
+        resources:
+          - pods
+          - configmaps
+          - secrets
+        verbs:
+          - "*"
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
@@ -388,6 +396,18 @@ objects:
         - get
         - list
         - watch
+      - apiGroups:
+        - cloudingress.managed.openshift.io
+        resources:
+        - '*'
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
       metadata:
@@ -416,6 +436,8 @@ objects:
         - machinesets
         verbs:
         - get
+        - list
+        - watch
       - apiGroups:
         - ""
         resources:
@@ -474,6 +496,8 @@ objects:
         - get
         - list
         - watch
+        - create
+        - update
       - apiGroups:
         - apps
         resources:
@@ -524,6 +548,8 @@ objects:
         - get
         - list
         - watch
+        - create
+        - update
       - apiGroups:
         - apps
         resources:

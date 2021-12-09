@@ -33,3 +33,15 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - cloudingress.managed.openshift.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
