@@ -100,6 +100,10 @@ func (m *mockELBClient) DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsO
 						Key:   aws.String("kubernetes.io/cluster/dummy-cluster"),
 						Value: aws.String("owned"),
 					},
+					{
+						Key:   aws.String("ccs-tag"),
+						Value: aws.String("project"),
+					},
 				},
 			},
 		},

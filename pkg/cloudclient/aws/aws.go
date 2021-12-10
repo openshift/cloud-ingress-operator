@@ -133,9 +133,6 @@ func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 }
 
 func includes(lbTags, checkList []*elb.Tag) bool {
-	if len(lbTags) != len(checkList) {
-		return false
-	}
 	count := 0
 	for _, v := range lbTags {
 		for _, a := range checkList {
