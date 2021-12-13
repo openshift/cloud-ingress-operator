@@ -43,8 +43,7 @@ objects:
         operator: NotIn
         values:
         - "true"
-    # TODO: Switch back to Sync after rbac is fixed in prod
-    resourceApplyMode: Upsert
+    resourceApplyMode: Sync
     resources:
     - kind: Namespace
       apiVersion: v1
