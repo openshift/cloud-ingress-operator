@@ -277,7 +277,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 			reqLogger.Info(fmt.Sprintf("LoadBalancer was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
 			err := r.client.Delete(context.TODO(), found)
 			if err != nil {
-				reqLogger.Info(fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it is already deleted", found.GetNamespace(), found.GetName()))
+				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it could already be deleted", found.GetNamespace(), found.GetName()))
 			}
 		}
 
