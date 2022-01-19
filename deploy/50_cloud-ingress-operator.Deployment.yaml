@@ -67,4 +67,28 @@ spec:
           - mountPath: /etc/pki/ca-trust/extracted/pem
             name: trusted-ca-bundle
             readOnly: true
-            
+        - name: cio-admission
+          # Replace this with the built image name
+          image: REPLACE_IMAGE
+          command:
+          - cioadmission
+          imagePullPolicy: Always
+          ports:
+          # TODO make sure this port is either used by default or configurable
+          # TODO make sure a service is created for this port
+          - containerPort: 9443
+            protocol: TCP
+          volumeMounts:
+          - mountPath: /var/serving-cert
+            name: serving-cert
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9443
+              scheme: HTTPS
+        # TODO create this volume and use the cert
+        volumes:
+        - name: serving-cert
+          secret:
+            defaultMode: 420
+            secretName: cioadmission-serving-cert
