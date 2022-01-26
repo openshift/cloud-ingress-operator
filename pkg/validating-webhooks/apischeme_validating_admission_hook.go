@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -39,6 +40,10 @@ func NewAPISchemeValidatingAdmissionHook(decoder *admission.Decoder) *APISchemeV
 	return &APISchemeValidatingAdmissionHook{
 		decoder: decoder,
 	}
+}
+
+func (a *APISchemeValidatingAdmissionHook) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+	return nil
 }
 
 func (a *APISchemeValidatingAdmissionHook) ValidatingResource() (plural schema.GroupVersionResource, singular string) {

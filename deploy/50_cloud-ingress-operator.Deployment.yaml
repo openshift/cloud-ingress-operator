@@ -37,7 +37,7 @@ spec:
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/twilliams725/cloud-ingress-operator:latest
           command:
           - cloud-ingress-operator
           imagePullPolicy: Always
@@ -86,9 +86,9 @@ spec:
               path: /healthz
               port: 9443
               scheme: HTTPS
-        # TODO create this volume and use the cert
-        volumes:
-        - name: serving-cert
-          secret:
-            defaultMode: 420
-            secretName: cioadmission-serving-cert
+      # TODO create this volume and use the cert
+      volumes:
+      - name: serving-cert
+        secret:
+          defaultMode: 420
+          secretName: cioadmission-serving-cert

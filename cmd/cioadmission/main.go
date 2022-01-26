@@ -60,7 +60,11 @@ func main() {
 
 func createDecoder() *admission.Decoder {
 	scheme := runtime.NewScheme()
-	apis.AddToScheme(scheme)
+	err := apis.AddToScheme(scheme)
+	if err != nil {
+		// TODO logging
+		os.Exit(1)
+	}
 	decoder, err := admission.NewDecoder(scheme)
 	if err != nil {
 		// TODO logging

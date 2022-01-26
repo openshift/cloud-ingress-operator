@@ -7,8 +7,8 @@
 package v1alpha1
 
 import (
-	spec "github.com/go-openapi/spec"
 	common "k8s.io/kube-openapi/pkg/common"
+	spec "k8s.io/kube-openapi/pkg/validation/spec"
 )
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
@@ -44,17 +44,20 @@ func schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref common.ReferenceCallbac
 					},
 					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
 						},
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec"),
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus"),
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus"),
 						},
 					},
 				},
@@ -76,6 +79,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref common.ReferenceCal
 					"managementAPIServerIngress": {
 						SchemaProps: spec.SchemaProps{
 							Description: "INSERT ADDITIONAL SPEC FIELDS - desired state of cluster Important: Run \"operator-sdk generate k8s\" to regenerate code after modifying this file Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html",
+							Default:     map[string]interface{}{},
 							Ref:         ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.ManagementAPIServerIngress"),
 						},
 					},
@@ -108,7 +112,8 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceC
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeCondition"),
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeCondition"),
 									},
 								},
 							},
@@ -138,6 +143,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback
 					"dnsName": {
 						SchemaProps: spec.SchemaProps{
 							Description: "DNSName is the DNS name that should point to the SSHD service load balancers, e.g. rh-ssh",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -149,8 +155,9 @@ func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Type:   []string{"string"},
-										Format: "",
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
 									},
 								},
 							},
@@ -159,6 +166,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback
 					"image": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Image is the URL of the SSHD container image",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -166,6 +174,7 @@ func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback
 					"configMapSelector": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ConfigMapSelector is a label selector to isolate config maps containing SSH authorized keys to be mounted into the SSHD container",
+							Default:     map[string]interface{}{},
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
 						},
 					},
