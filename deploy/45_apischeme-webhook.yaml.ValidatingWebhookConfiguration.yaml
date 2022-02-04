@@ -1,0 +1,32 @@
+---
+# More examples https://github.com/openshift/managed-cluster-validating-webhooks/blob/master/build/selectorsyncset.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: apischemevalidators.admission.managed.openshfit.io
+  annotations:
+    service.alpha.openshift.io/inject-cabundle: "true"
+webhooks:
+- name: apischemevalidators.admission.managed.openshift.io
+  admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      # reach the webhook via the registered aggregated API
+      namespace: openshift-cloud-ingress-operator
+      name: cloud-ingress-operator-webhook
+      # TODO I'm not sure if this is right
+      path: /apis/admission.managed.openshift.io/v1/apischemevalidators
+  rules:
+  - operations:
+    - DELETE
+    # NOTE some existing validatiors use "" as apigroup and * for versions, meaning it would affect all
+    #      we might consider doing that here to ensure new versions are covered?
+    apiGroups:
+    - cloudingress.managed.openshift.io
+    apiVersions:
+    - v1alpha1
+    resources:
+    - apischemes
+  failurePolicy: Fail
+  sideEffects: None

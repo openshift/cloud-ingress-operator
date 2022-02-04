@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         name: cloud-ingress-operator
+        app: cloud-ingress-operator
     spec:
       serviceAccountName: cloud-ingress-operator
       affinity:
@@ -34,6 +35,9 @@ spec:
               path: tls-ca-bundle.pem
           name: trusted-ca-bundle
         name: trusted-ca-bundle
+      - name: webhook-certs
+        secret:
+          secretName: webhook-certs
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
@@ -69,26 +73,22 @@ spec:
             readOnly: true
         - name: cio-admission
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/twilliams725/cloud-ingress-operator:latest
           command:
           - cioadmission
+          - "--secure-port=5000"
+          - "--tls-cert-file=/var/webhook-certs/tls.crt"
+          - "--tls-private-key-file=/var/webhook-certs/tls.key"
           imagePullPolicy: Always
           ports:
-          # TODO make sure this port is either used by default or configurable
-          # TODO make sure a service is created for this port
-          - containerPort: 9443
+          - containerPort: 5000
             protocol: TCP
           volumeMounts:
-          - mountPath: /var/serving-cert
-            name: serving-cert
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: 9443
-              scheme: HTTPS
-      # TODO create this volume and use the cert
-      volumes:
-      - name: serving-cert
-        secret:
-          defaultMode: 420
-          secretName: cioadmission-serving-cert
+          - mountPath: /var/webhook-certs
+            name: webhook-certs
+            readOnly: true
+          resources:
+            requests:
+              cpu: "200m"
+            limits:
+              memory: "1G"

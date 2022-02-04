@@ -194,6 +194,7 @@ go-build: ## Build binary
 	# Force GOOS=linux as we may want to build containers in other *nix-like systems (ie darwin).
 	# This is temporary until a better container build method is developed
 	${GOENV} GOOS=linux go build ${GOBUILDFLAGS} -o ${BINFILE} ${MAINPACKAGE}
+	${GOENV} GOOS=linux go build ${GOBUILDFLAGS} -o build/_output/bin/cioadmission ./cmd/cioadmission
 
 .PHONY: go-test
 go-test:

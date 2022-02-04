@@ -1,0 +1,28 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: sshdvalidators.admission.hive.openshift.io
+webhooks:
+- name: sshdvalidators.admission.hive.openshift.io
+  admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      # reach the webhook via the registered aggregated API
+      namespace: openshift-cloud-ingress-operator
+      name: cloud-ingress-operator-validating-webhooks
+      path: TODO
+  rules:
+  - operations:
+    - DELETE
+    # NOTE some existing validatiors use "" as apigroup and * for versions, meaning it would affect all
+    #      we might consider doing that here to ensure new versions are covered?
+    apiGroups:
+    - managed.openshift.io
+    apiVersions:
+    - v1
+    resources:
+    - sshds
+  failurePolicy: Fail
+  sideEffects: None

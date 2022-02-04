@@ -32,15 +32,6 @@ func main() {
 	// controller-runtime)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
-	/*
-		// Service cert flags
-		pflag.StringVar("tslKey", "", tlsKey, "TLS key for TLS")
-		pflag.StringVar("tlsCert", "", tlsCert, "TLS Certificate")
-		pflag.StringVar("caCert", "", caCert, "CA Cert File")
-	*/
-
-	pflag.Parse()
-
 	// Use a zap logr.Logger implementation. If none of the zap
 	// flags are configured (or if the zap flag set is not being
 	// used), this defaults to a production zap logger.
@@ -56,6 +47,10 @@ func main() {
 		ciovalidatingwebhooks.NewAPISchemeValidatingAdmissionHook(decoder),
 		ciovalidatingwebhooks.NewSSHDValidatingAdmissionHook(decoder),
 	)
+
+	// Flags must be parsed after the RunAdmissionServer call as that function adds
+	// admission-server specific flags that to the flag set that need to be exposed
+	pflag.Parse()
 }
 
 func createDecoder() *admission.Decoder {
