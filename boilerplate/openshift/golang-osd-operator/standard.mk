@@ -25,7 +25,7 @@ CONTAINER_ENGINE_CONFIG_DIR = .docker
 # ==> Podman uses --authfile=PATH *after* the `login` subcommand; but
 # also accepts REGISTRY_AUTH_FILE from the env. See
 # https://www.mankier.com/1/podman-login#Options---authfile=path
-export REGISTRY_AUTH_FILE = ${CONTAINER_ENGINE_CONFIG_DIR}
+export REGISTRY_AUTH_FILE = ${CONTAINER_ENGINE_CONFIG_DIR}/config.json
 # ==> Docker uses --config=PATH *before* (any) subcommand; so we'll glue
 # that to the CONTAINER_ENGINE variable itself. (NOTE: I tried half a
 # dozen other ways to do this. This was the least ugly one that actually
@@ -115,13 +115,13 @@ isclean:
 docker-build-push-one: isclean docker-login
 	@(if [[ -z "${IMAGE_URI}" ]]; then echo "Must specify IMAGE_URI"; exit 1; fi)
 	@(if [[ -z "${DOCKERFILE_PATH}" ]]; then echo "Must specify DOCKERFILE_PATH"; exit 1; fi)
-	${CONTAINER_ENGINE} build . -f $(DOCKERFILE_PATH) -t $(IMAGE_URI)
+	${CONTAINER_ENGINE} build --pull -f $(DOCKERFILE_PATH) -t $(IMAGE_URI) .
 	${CONTAINER_ENGINE} push ${IMAGE_URI}
 
 # TODO: Get rid of docker-build. It's only used by opm-build-push
 .PHONY: docker-build
 docker-build: isclean
-	${CONTAINER_ENGINE} build . -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI)
+	${CONTAINER_ENGINE} build --pull -f $(OPERATOR_DOCKERFILE) -t $(OPERATOR_IMAGE_URI) .
 	${CONTAINER_ENGINE} tag $(OPERATOR_IMAGE_URI) $(OPERATOR_IMAGE_URI_LATEST)
 
 # TODO: Get rid of docker-push. It's only used by opm-build-push

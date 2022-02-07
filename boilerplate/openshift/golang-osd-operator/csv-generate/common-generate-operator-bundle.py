@@ -318,6 +318,17 @@ if 'Role' in by_kind:
 deploy = by_kind['Deployment'][0]
 # Use the operator image pull spec we were passed
 deploy['spec']['template']['spec']['containers'][0]['image'] = operator_image
+# Add or replace OPERATOR_IMAGE env var
+env = deploy['spec']['template']['spec']['containers'][0]['env']
+# Does OPERATOR_IMAGE key already exist in spec? If so, update value
+for entry in env:
+    if entry['name'] == 'OPERATOR_IMAGE':
+        entry['value'] = operator_image
+        break
+# If not, add it
+else:
+    env.append(dict(name='OPERATOR_IMAGE', value=operator_image))
+
 csv['spec']['install']['spec']['deployments'] = [
     {
         'name': deploy['metadata']['name'],
