@@ -267,7 +267,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{}, err
 	case *cioerrors.ForwardingRuleNotFoundError:
-		// This error handles the missing/deleted forwarding rule of LB in GCP
+		// This error handles the missing/deleted forwarding rule/LB in GCP
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Forwarding rule was deleted on cloud provider", cloudingressv1alpha1.ConditionError)
 
 		// To recover from this case we will need to delete the lb service.
