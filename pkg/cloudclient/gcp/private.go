@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"reflect"
 
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 	gdnsv1 "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 
