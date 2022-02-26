@@ -95,7 +95,8 @@ type LoadBalancer struct {
 // Reconcile will ensure that the rh-api management api endpoint is created and ready.
 // Rough Steps:
 // 1. Create Service
-// 2. Add DNS CNAME from rh-api to the ELB created by cloud provider
+// 2. Add DNS CNAME from rh-api to the ELB created by AWS provider
+// 3. Add Forwarding rule to the LB created by GCP
 // 3. Ready for work (Ready)
 func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
@@ -250,6 +251,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationValue))
 	}
 
+	// Is service healthy?
 	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.client, instance, found)
 	// Check for error types that this operator knows about
 	switch err := err.(type) {
