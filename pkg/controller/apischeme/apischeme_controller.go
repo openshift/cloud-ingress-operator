@@ -276,6 +276,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		if err1 != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it could already be deleted", found.GetNamespace(), found.GetName()))
 		}
+		return reconcile.Result{Requeue: true, RequeueAfter: 60 * time.Second}, nil
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatusMetric(instance)
 		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
@@ -300,7 +301,6 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		log.Error(err, "Error ensuring Admin API", "instance", instance, "Service", found)
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
