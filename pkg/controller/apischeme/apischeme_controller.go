@@ -33,6 +33,8 @@ const (
 	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
 	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
 	elbAnnotationValue    = "1800"
+	longwait              = 60
+	shortwait             = 10
 )
 
 var (
@@ -180,7 +182,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 					// couldn't find the load balancer - it's likely still queued for creation
 					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 					r.SetAPISchemeStatusMetric(instance)
-					return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+					return reconcile.Result{Requeue: true, RequeueAfter: shortwait * time.Second}, nil
 				default:
 					reqLogger.Error(err, "Failed to delete the DNS record")
 					r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Failed to delete the DNS record", cloudingressv1alpha1.ConditionError)
@@ -217,9 +219,9 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 				reqLogger.Error(err, "Failure to create new Service")
 				return reconcile.Result{}, err
 			}
-			// Reconcile again to get the new Service and give AWS time to create the ELB
+			// Reconcile again to get the new Service and give cloud provider time to create the LB
 			reqLogger.Info("Service was just created, so let's try to requeue to set it up")
-			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: longwait * time.Second}, nil
 		} else if err != nil {
 			reqLogger.Error(err, "Couldn't get the Service")
 			return reconcile.Result{}, err
@@ -237,7 +239,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		// let's re-queue just in case
 		reqLogger.Info("Requeuing after svc update")
-		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: shortwait * time.Second}, nil
 	}
 
 	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
@@ -259,24 +261,29 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		// no problems
 		r.SetAPISchemeStatus(instance, "Success", "Admin API Endpoint created", cloudingressv1alpha1.ConditionReady)
 		r.SetAPISchemeStatusMetric(instance)
-		return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: longwait * time.Second}, nil
 	case *cioerrors.DnsUpdateError:
 		// couldn't update DNS
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{}, err
 	case *cioerrors.ForwardingRuleNotFoundError:
-		// This error handles the missing components (forwarding rule) of LB in GCP
-		// The forwarding rule has likely been deleted
-		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Forwarding rule was deleted", cloudingressv1alpha1.ConditionError)
+		// This error handles the missing/deleted forwarding rule of LB in GCP
+		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Forwarding rule was deleted on cloud provider", cloudingressv1alpha1.ConditionError)
 
-		// To recover from this case we will need to delete the service. It will be recreated  at the next reconcile
-		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
+		// To recover from this case we will need to delete the lb service.
+		// It will be recreated  at the next reconcile.
+		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted on cloud provider, deleting service %s/service/%s to force recreation", found.GetNamespace(), found.GetName()))
 		err1 := r.client.Delete(context.TODO(), found)
 		if err1 != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it could already be deleted", found.GetNamespace(), found.GetName()))
+			if instance.DeletionTimestamp.IsZero() {
+				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service. It could already be deleted. Waiting %d seconds to complete possible deletion.", found.GetNamespace(), found.GetName(), longwait))
+			} else {
+				reqLogger.Error(err, fmt.Sprintf("Service %s/service/%s already deleted. Waiting %d seconds to complete deletion.", found.GetNamespace(), found.GetName(), longwait))
+			}
 		}
-		return reconcile.Result{Requeue: true, RequeueAfter: 60 * time.Second}, nil
+		// Need to wait till deletion is completely finished to avoid race condition.
+		return reconcile.Result{Requeue: true, RequeueAfter: longwait * time.Second}, nil
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatusMetric(instance)
 		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
@@ -291,11 +298,11 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 			reqLogger.Info(fmt.Sprintf("LoadBalancer was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
 			err := r.client.Delete(context.TODO(), found)
 			if err != nil {
-				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it could already be deleted", found.GetNamespace(), found.GetName()))
+				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service, it could already be deleted. Waiting to complete possible deletion.", found.GetNamespace(), found.GetName()))
 			}
 		}
 
-		return reconcile.Result{Requeue: true, RequeueAfter: 60 * time.Second}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: longwait * time.Second}, nil
 	default:
 		// not one of ours
 		log.Error(err, "Error ensuring Admin API", "instance", instance, "Service", found)

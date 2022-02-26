@@ -119,32 +119,22 @@ func (c *GCPClient) ensureDNSForService(kclient client.Client, svc *corev1.Servi
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
-	//Check forwarding rule exists first
-	if svc.Spec.Type != "LoadBalancer" {
-		return fmt.Errorf("service type is not LoadBalancer")
-	}
-
-	ingressList := svc.Status.LoadBalancer.Ingress
-	if len(ingressList) == 0 {
-		// the LB doesn't exist
-		return cioerrors.NewLoadBalancerNotReadyError()
-	}
-
-	rhLBip := ingressList[0].IP
-	//find FR in GCP for IP
-	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
-	response, err := listCall.Do()
-	if err != nil {
-		return cioerrors.ForwardingRuleNotFound(err.Error())
-	}
-	var fr *compute.ForwardingRule
-	for _, lb := range response.Items {
-		if lb.IPAddress == rhLBip {
-			fr = lb
+	// Forwarding rule is necessary for rh-api lb setup
+	// Check forwarding rule exists first
+	if svc.Spec.Type == "LoadBalancer" {
+		ingressList := svc.Status.LoadBalancer.Ingress
+		if len(ingressList) == 0 {
+			// the LB doesn't exist
+			return cioerrors.NewLoadBalancerNotReadyError()
 		}
-	}
-	if fr == nil {
-		return cioerrors.ForwardingRuleNotFound("")
+		rhapiLbIP := ingressList[0].IP
+		// ensure forwarding rule exists in GCP for service
+		_, err := findGCPForwardingRuleForExtIP(c, rhapiLbIP)
+		if err != nil {
+			return cioerrors.ForwardingRuleNotFound(err.Error())
+		}
+	} else {
+		log.Info("service type is not LoadBalancer; will not ensure forwarding rule in GCP.")
 	}
 
 	svcIPs, err := getIPAddressesFromService(svc)
@@ -213,6 +203,25 @@ func (c *GCPClient) ensureDNSForService(kclient client.Client, svc *corev1.Servi
 	}
 
 	return nil
+}
+
+// Returns GCP forwarding rule for given IP
+func findGCPForwardingRuleForExtIP(c *GCPClient, rhapiLbIP string) (*compute.ForwardingRule, error) {
+	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
+	response, err := listCall.Do()
+	if err != nil {
+		return nil, cioerrors.ForwardingRuleNotFound(err.Error())
+	}
+	var fr *compute.ForwardingRule
+	for _, lb := range response.Items {
+		if lb.IPAddress == rhapiLbIP {
+			fr = lb
+		}
+	}
+	if fr == nil {
+		return nil, fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
+	}
+	return fr, nil
 }
 
 func (c *GCPClient) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
