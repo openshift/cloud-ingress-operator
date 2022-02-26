@@ -263,6 +263,17 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't ensure the admin API endpoint: "+err.Error(), cloudingressv1alpha1.ConditionError)
 		r.SetAPISchemeStatusMetric(instance)
 		return reconcile.Result{}, err
+	case *cioerrors.ForwardingRuleNotFoundError:
+		// This error handles the missing components (forwarding rule) of LB in GCP
+		// The forwarding rule has likely been deleted
+		r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Forwarding rule was deleted", cloudingressv1alpha1.ConditionError)
+
+		// To recover from this case we will need to delete the service. It will be recreated  at the next reconcile
+		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
+		err1 := r.client.Delete(context.TODO(), found)
+		if err1 != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s LoadBalancer, it could already be deleted", found.GetNamespace(), found.GetName()))
+		}
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatusMetric(instance)
 		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
@@ -287,6 +298,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		log.Error(err, "Error ensuring Admin API", "instance", instance, "Service", found)
 		return reconcile.Result{}, err
 	}
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
