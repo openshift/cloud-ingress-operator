@@ -3,15 +3,17 @@ package gcp
 import (
 	"context"
 	"fmt"
+
+	"golang.org/x/oauth2/google"
+	computev1 "google.golang.org/api/compute/v1"
+	dnsv1 "google.golang.org/api/dns/v1"
+	"google.golang.org/api/option"
+
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
-	"golang.org/x/oauth2/google"
-	computev1 "google.golang.org/api/compute/v1"
-	dnsv1 "google.golang.org/api/dns/v1"
-	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -3,15 +3,13 @@ package gcp
 // "Private" or non-interface conforming methods
 
 import (
-	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-
 	"bytes"
 	"context"
 	"fmt"
-	compute "google.golang.org/api/compute/v1"
 	"net/http"
 	"reflect"
 
+	compute "google.golang.org/api/compute/v1"
 	gdnsv1 "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 
@@ -26,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 )
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service

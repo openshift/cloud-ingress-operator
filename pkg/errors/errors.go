@@ -24,7 +24,7 @@ func (e *ForwardingRuleNotFoundError) Error() string { return e.e }
 
 func ForwardingRuleNotFound(reason string) error {
 	return &ForwardingRuleNotFoundError{
-		e: "forwarding rule for svc not found in GCP: " + reason,
+		e: "forwarding rule for svc not found in cloud provider. " + reason,
 	}
 }
 
