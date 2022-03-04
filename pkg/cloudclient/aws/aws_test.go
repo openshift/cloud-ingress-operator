@@ -57,24 +57,9 @@ type mockELBClient struct {
 	elbiface.ELBAPI
 }
 
-func (m *mockELBClient) DescribeLoadBalancersPages(params *elb.DescribeLoadBalancersInput, fn func(*elb.DescribeLoadBalancersOutput, bool) bool) error {
+func (m *mockELBClient) DescribeLoadBalancers(params *elb.DescribeLoadBalancersInput) (*elb.DescribeLoadBalancersOutput, error) {
 	// mock response/functionality
-
-	// simulate multiple pages
 	out := &elb.DescribeLoadBalancersOutput{
-		LoadBalancerDescriptions: []*elb.LoadBalancerDescription{
-			{
-				LoadBalancerName: aws.String("lb-1"),
-			},
-			{
-				LoadBalancerName: aws.String("lb-2"),
-			},
-		},
-		NextMarker: aws.String("marker"),
-	}
-	fn(out, false)
-
-	out = &elb.DescribeLoadBalancersOutput{
 		LoadBalancerDescriptions: []*elb.LoadBalancerDescription{
 			{
 				LoadBalancerName: aws.String("lb-3"),
@@ -82,9 +67,8 @@ func (m *mockELBClient) DescribeLoadBalancersPages(params *elb.DescribeLoadBalan
 		},
 		NextMarker: aws.String(""),
 	}
-	fn(out, true)
 
-	return nil
+	return out, nil
 }
 
 func (m *mockELBClient) DescribeTags(*elb.DescribeTagsInput) (*elb.DescribeTagsOutput, error) {

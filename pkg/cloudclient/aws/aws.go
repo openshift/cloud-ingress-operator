@@ -75,13 +75,9 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 
 // Healthcheck performs basic calls to make sure client is healthy
 func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
-	elbList := make([]*elb.LoadBalancerDescription, 0)
 	input := &elb.DescribeLoadBalancersInput{}
-	err := c.elbClient.DescribeLoadBalancersPages(input, func(page *elb.DescribeLoadBalancersOutput, lastPage bool) bool {
-		elbList = append(elbList, page.LoadBalancerDescriptions...)
-		return lastPage
-	})
-	
+	_, err := c.elbClient.DescribeLoadBalancers(input)
+
 	return err
 }
 
