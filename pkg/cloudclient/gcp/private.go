@@ -129,8 +129,8 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	}
 	rhapiLbIP := ingressList[0].IP
 	// ensure forwarding rule exists in GCP for service
-	_, err := findGCPForwardingRuleForExtIP(c, rhapiLbIP)
-	if err != nil {
+	fr, err := findGCPForwardingRuleForExtIP(c, rhapiLbIP)
+	if err != nil || fr == nil {
 		return cioerrors.ForwardingRuleNotFound(err.Error())
 	}
 
