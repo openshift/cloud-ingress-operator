@@ -273,8 +273,8 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		// To recover from this case we will need to delete the lb service.
 		// It will be recreated  at the next reconcile.
 		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted on cloud provider, deleting service %s/service/%s to force recreation", found.GetNamespace(), found.GetName()))
-		err1 := r.client.Delete(context.TODO(), found)
-		if err1 != nil {
+		deleteSvcErr := r.client.Delete(context.TODO(), found)
+		if deleteSvcErr != nil {
 			if instance.DeletionTimestamp.IsZero() {
 				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service. It could already be deleted. Waiting %d seconds to complete possible deletion.", found.GetNamespace(), found.GetName(), longwait))
 			} else {
