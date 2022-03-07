@@ -30,31 +30,31 @@ import (
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
-func (c *Client) ensureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *GCPClient) ensureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.ensureDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // deleteAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is deleted
-func (c *Client) deleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *GCPClient) deleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.removeDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is accurately set
-func (c *Client) ensureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *GCPClient) ensureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.ensureDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // deleteSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is deleted
-func (c *Client) deleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *GCPClient) deleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.removeDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
-func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *GCPClient) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	intIPAddress, err := c.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
 		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
@@ -79,7 +79,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
-func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *GCPClient) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -115,7 +115,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return nil
 }
 
-func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
+func (c *GCPClient) ensureDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
@@ -187,7 +187,7 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	return nil
 }
 
-func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
+func (c *GCPClient) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 	FQDN := dnsName + "." + c.baseDomain + "."
@@ -247,7 +247,7 @@ func getIPAddressesFromService(svc *corev1.Service) ([]string, error) {
 	return ips, nil
 }
 
-func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, error) {
+func (c *GCPClient) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, error) {
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -364,7 +364,7 @@ func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []stri
 	return nil
 }
 
-func (c *Client) createExternalIP(name string, scheme string) (ipAddress string, err error) {
+func (c *GCPClient) createExternalIP(name string, scheme string) (ipAddress string, err error) {
 	// Check if an external IP with the correct name already exists
 	addyList, err := c.computeService.Addresses.List(c.projectID, c.region).Do()
 	if err != nil {
@@ -403,7 +403,7 @@ func (c *Client) createExternalIP(name string, scheme string) (ipAddress string,
 	return address.Address, nil
 }
 
-func (c *Client) releaseExternalIP(addressName string) error {
+func (c *GCPClient) releaseExternalIP(addressName string) error {
 	_, err := c.computeService.Addresses.Delete(c.projectID, c.region, addressName).Do()
 	if err != nil {
 		return fmt.Errorf("Failed to release External IP %v: %v", addressName, err)
@@ -411,7 +411,7 @@ func (c *Client) releaseExternalIP(addressName string) error {
 	return nil
 }
 
-func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, ip string) error {
+func (c *GCPClient) createNetworkLoadBalancer(name string, scheme string, targetPool string, ip string) error {
 	//Confirm the target pool is present and get its selflink URL
 	tpResp, err := c.computeService.TargetPools.Get(c.projectID, c.region, targetPool).Do()
 	if err != nil {
@@ -435,7 +435,7 @@ func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPoo
 	return nil
 }
 
-func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newIP string) (oldIP string, err error) {
+func (c *GCPClient) updateAPIARecord(kclient client.Client, recordName string, newIP string) (oldIP string, err error) {
 	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return "", err

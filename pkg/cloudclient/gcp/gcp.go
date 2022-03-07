@@ -28,8 +28,8 @@ var (
 	log = logf.Log.WithName("gcp_cloudclient")
 )
 
-// Client represents a GCP Client
-type Client struct {
+// GCPClient represents a GCP Cloud Client
+type GCPClient struct {
 	projectID      string
 	region         string
 	clusterName    string
@@ -40,37 +40,37 @@ type Client struct {
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) EnsureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *GCPClient) EnsureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.ensureAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) DeleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *GCPClient) DeleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.deleteAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // EnsureSSHDNS implements cloudclient.CloudClient
-func (c *Client) EnsureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *GCPClient) EnsureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.ensureSSHDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteSSHDNS implements cloudclient.CloudClient
-func (c *Client) DeleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *GCPClient) DeleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.deleteSSHDNS(ctx, kclient, instance, svc)
 }
 
 // SetDefaultAPIPrivate implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *GCPClient) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	return c.setDefaultAPIPrivate(ctx, kclient, instance)
 }
 
 // SetDefaultAPIPublic implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *GCPClient) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	return c.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
 // Healthcheck performs basic calls to make sure client is healthy
-func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
+func (c *GCPClient) Healthcheck(ctx context.Context, kclient client.Client) error {
 	out, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
 	if err != nil {
 		return err // possible client deformation
@@ -91,7 +91,7 @@ func performHealthCheck(l *computev1.BackendServiceList, clusterName string) err
 	return fmt.Errorf("internal lb not found: exiting to refresh")
 }
 
-func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
+func newClient(ctx context.Context, serviceAccountJSON []byte) (*GCPClient, error) {
 	credentials, err := google.CredentialsFromJSON(
 		ctx, serviceAccountJSON,
 		dnsv1.NdevClouddnsReadwriteScope,
@@ -110,7 +110,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 		return nil, err
 	}
 
-	return &Client{
+	return &GCPClient{
 		projectID:      credentials.ProjectID,
 		dnsService:     dnsService,
 		computeService: computeService,
@@ -118,7 +118,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 }
 
 // NewClient creates a new CloudClient for use with GCP.
-func NewClient(kclient client.Client) (*Client, error) {
+func NewClient(kclient client.Client) (*GCPClient, error) {
 	ctx := context.Background()
 	secret := &corev1.Secret{}
 	err := kclient.Get(
