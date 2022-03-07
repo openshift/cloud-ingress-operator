@@ -121,20 +121,16 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 
 	// Forwarding rule is necessary for rh-api lb setup
 	// Check forwarding rule exists first
-	if svc.Spec.Type == "LoadBalancer" {
-		ingressList := svc.Status.LoadBalancer.Ingress
-		if len(ingressList) == 0 {
-			// the LB doesn't exist
-			return cioerrors.NewLoadBalancerNotReadyError()
-		}
-		rhapiLbIP := ingressList[0].IP
-		// ensure forwarding rule exists in GCP for service
-		_, err := findGCPForwardingRuleForExtIP(c, rhapiLbIP)
-		if err != nil {
-			return cioerrors.ForwardingRuleNotFound(err.Error())
-		}
-	} else {
-		log.Info("service type is not LoadBalancer; will not ensure forwarding rule in GCP.")
+	ingressList := svc.Status.LoadBalancer.Ingress
+	if len(ingressList) == 0 {
+		// the LB doesn't exist
+		return cioerrors.NewLoadBalancerNotReadyError()
+	}
+	rhapiLbIP := ingressList[0].IP
+	// ensure forwarding rule exists in GCP for service
+	_, err := findGCPForwardingRuleForExtIP(c, rhapiLbIP)
+	if err != nil {
+		return cioerrors.ForwardingRuleNotFound(err.Error())
 	}
 
 	svcIPs, err := getIPAddressesFromService(svc)
