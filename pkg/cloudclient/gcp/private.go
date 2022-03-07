@@ -5,6 +5,7 @@ package gcp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -206,18 +207,15 @@ func findGCPForwardingRuleForExtIP(c *Client, rhapiLbIP string) (*compute.Forwar
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
-		return nil, cioerrors.ForwardingRuleNotFound(err.Error())
+		return nil, err
 	}
 	var fr *compute.ForwardingRule
 	for _, lb := range response.Items {
 		if lb.IPAddress == rhapiLbIP {
-			fr = lb
+			return fr, nil
 		}
 	}
-	if fr == nil {
-		return nil, fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
-	}
-	return fr, nil
+	return nil, errors.New("Forwarding rule not found in GCP for given service IP " + rhapiLbIP)
 }
 
 func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
