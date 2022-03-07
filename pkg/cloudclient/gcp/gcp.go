@@ -72,7 +72,7 @@ func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client,
 // Healthcheck performs basic calls to make sure client is healthy
 func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
 	_, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
-	return err 
+	return err
 }
 
 func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
