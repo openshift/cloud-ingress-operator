@@ -71,24 +71,8 @@ func (c *GCPClient) SetDefaultAPIPublic(ctx context.Context, kclient client.Clie
 
 // Healthcheck performs basic calls to make sure client is healthy
 func (c *GCPClient) Healthcheck(ctx context.Context, kclient client.Client) error {
-	out, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
-	if err != nil {
-		return err // possible client deformation
-	}
-
-	return performHealthCheck(out, c.clusterName)
-}
-
-func performHealthCheck(l *computev1.BackendServiceList, clusterName string) error {
-	// checking internal lb to ensure it's there and available to use by cloud-client
-	intLBName := clusterName + "-api-internal"
-	for _, lb := range l.Items {
-		if lb.Name == intLBName {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("internal lb not found: exiting to refresh")
+	_, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
+	return err
 }
 
 func newClient(ctx context.Context, serviceAccountJSON []byte) (*GCPClient, error) {
