@@ -2,7 +2,10 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"os"
 
+	compare "github.com/hashicorp/go-version"
 	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,7 +15,7 @@ import (
 )
 
 // GetClusterVersionObject returns the canonical ClusterVersion object
-// To check current version: `output.Status.History[0].Version` or `output.Status.Desired.Version` depending on the use-case.
+// To check current version: `output.Status.History[0].Version`
 //
 // `history contains a list of the most recent versions applied to the cluster.
 // This value may be empty during cluster startup, and then will be updated when a new update is being applied.
@@ -44,4 +47,45 @@ func GetClusterVersionObject(kclient client.Client) (*configv1.ClusterVersion, e
 	}
 
 	return cv, nil
+}
+
+// SetClusterVersion sets the cluster version globally(to ENV as CLUSTER_VERSION)
+func SetClusterVersion(kclient client.Client) error {
+	versionObject, err := GetClusterVersionObject(kclient)
+	if err != nil {
+		return err
+	}
+
+	// handle when there's no object defined || no version found on history
+	if len(versionObject.Status.History) == 0 || versionObject == nil {
+		return fmt.Errorf("version couldn't be grabbed from clusterversion: %+v", versionObject) // (%+v) adds field names
+	}
+
+	return os.Setenv("CLUSTER_VERSION", versionObject.Status.History[0].Version)
+}
+
+// IsVersionHigherThan checks whether the given version is higher than the cluster version
+// input is required to be a version such as: 4.10 or 4.10.1
+// Returns false(no action) if there's an exception.
+func IsVersionHigherThan(input string) bool {
+	version, ok := os.LookupEnv("CLUSTER_VERSION")
+	if !ok {
+		return false
+	}
+
+	EnvVersion, err := compare.NewVersion(version)
+	if err != nil {
+		return false
+	}
+
+	inputVersion, err := compare.NewVersion(input)
+	if err != nil {
+		return false
+	}
+
+	if EnvVersion.LessThan(inputVersion) {
+		return false
+	}
+
+	return true // input greater than env so action
 }

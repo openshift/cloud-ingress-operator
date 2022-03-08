@@ -119,6 +119,13 @@ func main() {
 
 	log.Info("Registering Components.")
 
+	// Setup Global Variables
+	cli := mgr.GetClient()
+	if err := baseutils.SetClusterVersion(cli); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
 	// Setup Healthcheck
 	// There are currently 2 steps:
 	// 1- checking cloud-client via basic ping:
