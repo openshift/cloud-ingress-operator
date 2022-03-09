@@ -16,6 +16,18 @@ func NewLoadBalancerNotReadyError() error {
 	}
 }
 
+type ForwardingRuleNotFoundError struct {
+	e string
+}
+
+func (e *ForwardingRuleNotFoundError) Error() string { return e.e }
+
+func ForwardingRuleNotFound(reason string) error {
+	return &ForwardingRuleNotFoundError{
+		e: "forwarding rule for svc not found in cloud provider. " + reason,
+	}
+}
+
 type DnsUpdateError struct {
 	e string
 }

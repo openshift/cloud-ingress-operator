@@ -119,6 +119,20 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
+	// Forwarding rule is necessary for rh-api lb setup
+	// Check forwarding rule exists first
+	ingressList := svc.Status.LoadBalancer.Ingress
+	if len(ingressList) == 0 {
+		// the LB doesn't exist
+		return cioerrors.NewLoadBalancerNotReadyError()
+	}
+	rhapiLbIP := ingressList[0].IP
+	// ensure forwarding rule exists in GCP for service
+	fr, err := c.findGCPForwardingRuleForExtIP(rhapiLbIP)
+	if err != nil || fr == nil {
+		return cioerrors.ForwardingRuleNotFound(err.Error())
+	}
+
 	svcIPs, err := getIPAddressesFromService(svc)
 	if err != nil {
 		return err
@@ -185,6 +199,22 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	}
 
 	return nil
+}
+
+// Returns GCP forwarding rule for given IP or nil if not found
+func (c *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.ForwardingRule, error) {
+	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
+	response, err := listCall.Do()
+	if err != nil {
+		return nil, err
+	}
+	var fr *compute.ForwardingRule
+	for _, lb := range response.Items {
+		if lb.IPAddress == rhapiLbIP {
+			fr = lb
+		}
+	}
+	return fr, nil
 }
 
 func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {

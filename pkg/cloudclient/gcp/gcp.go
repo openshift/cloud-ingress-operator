@@ -28,7 +28,7 @@ var (
 	log = logf.Log.WithName("gcp_cloudclient")
 )
 
-// Client represents a GCP Client
+// Client represents a GCP cloud Client
 type Client struct {
 	projectID      string
 	region         string
