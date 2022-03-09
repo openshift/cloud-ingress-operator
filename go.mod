@@ -8,6 +8,7 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/go-openapi/spec v0.19.4
 	github.com/golang/mock v1.4.4
+	github.com/hashicorp/go-version v1.4.0
 	github.com/openshift/api v3.9.1-0.20190924102528-32369d4db2ad+incompatible
 	github.com/openshift/cluster-api-provider-gcp v0.0.0
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
