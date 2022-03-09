@@ -72,8 +72,10 @@ func IsVersionHigherThan(input string) bool {
 	if !ok {
 		return false
 	}
+	// Handle the clusternames that have more than 4 chars(such as 4.10.0-rc.4)
+	shortVersion := version[0:4]
 
-	EnvVersion, err := compare.NewVersion(version)
+	EnvVersion, err := compare.NewVersion(shortVersion)
 	if err != nil {
 		return false
 	}
