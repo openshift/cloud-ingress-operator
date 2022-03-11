@@ -63,6 +63,32 @@ It is possible to add additional applicationIngresses, however at this time, OSD
 
 ## Testing
 
+### Manual deployment of CIO onto fleets.
+* Pause syncset to the cluster [SOP](https://github.com/openshift/ops-sop/blob/master/v4/knowledge_base/pause-syncset.md)
+* Delete all the resources related to cloud-ingress-operator:
+
+```shell
+oc delete catalogsource cloud-ingress-operator-registry -n openshift-cloud-ingress-operator
+oc delete operatorgroup cloud-ingress-operator -n openshift-cloud-ingress-operator
+oc delete subscription cloud-ingress-operator -n openshift-cloud-ingress-operator
+oc delete csv cloud-ingress-operator.<version> -n openshift-cloud-ingress-operator
+```
+
+* Commit your changes(otherwise bp doesn't let you produce an image), bake the image with `make docker-build`
+* Tag and publish the image to your own repo
+```shell
+docker tag quay.io/app-sre/cloud-ingress-operator:latest quay.io/<organization>/cloud-ingress-operator:latest
+docker push quay.io/<organization>/cloud-ingress-operator:latest
+```
+
+* Edit [deploy.yaml](deploy/50_cloud-ingress-operator.Deployment.yaml) and replace the image with yours: `image: REPLACE_IMAGE`
+* Apply the resources manually: `oc apply -f deploy/`
+* For olm based deployments, the clusterrolebinding between cloud-ingress-operator SA and clusterrole is automatically created. For manual deployments,
+it needs to be created afterwards the resources have been deployed:
+```shell
+oc create clusterrolebinding cloud-ingress-operator --clusterrole=cloud-ingress-operator --serviceaccount=openshift-cloud-ingress-operator:cloud-ingress-operator --namespace=openshift-cloud-ingress-operator
+```
+
 ### Manual testing of default and nondefault ingresscontroller
 
 Due to a race condition with the [cluster-ingress-operator](https://github.com/openshift/cluster-ingress-operator) we test the logic flow of ingresscontroller manually. Once you are in a cluster, here are the steps to do so:
