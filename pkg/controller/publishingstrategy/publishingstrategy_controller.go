@@ -44,6 +44,7 @@ type patchField string
 var IngressControllerSelector patchField = "IngressControllerSelector"
 var IngressControllerCertificate patchField = "IngressControllerCertificate"
 var IngressControllerNodePlacement patchField = "IngressControllerNodePlacement"
+var IngressControllerEndPoint patchField = "IngressControllerEndpoint"
 
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -318,14 +319,15 @@ func validateStaticStatus(ingressController operatorv1.IngressController, desire
 	if !(desiredSpec.Domain == ingressController.Status.Domain) {
 		return false
 	}
-
+	if !baseutils.IsVersionHigherThan("4.10") {
 	// Preventing nil pointer errors
-	if ingressController.Status.EndpointPublishingStrategy == nil || ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
-		return false
-	}
+		if ingressController.Status.EndpointPublishingStrategy == nil || ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
+			return false
+		}	
 
-	if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
-		return false
+		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+			return false
+		}
 	}
 
 	return true
@@ -342,14 +344,17 @@ func validateStaticSpec(ingressController operatorv1.IngressController, desiredS
 		return false
 	}
 
+	if !baseutils.IsVersionHigherThan("4.10") {
 	// Preventing nil pointer errors
-	if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
-		return false
-	}
+		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
+			return false
+		}	
 
-	if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
-		return false
-	}
+		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
+			return false
+		}	
+	}	
+	
 
 	return true
 }
@@ -407,6 +412,16 @@ func validatePatchableSpec(ingressController operatorv1.IngressController, desir
 
 	if !(reflect.DeepEqual(desiredSpec.NodePlacement.NodeSelector.MatchLabels, ingressController.Spec.NodePlacement.NodeSelector.MatchLabels)) {
 		return false, IngressControllerNodePlacement
+	}
+	if baseutils.IsVersionHigherThan("4.10") {
+		// Preventing nil pointer errors
+		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
+			return false, IngressControllerEndPoint
+		}	
+
+		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
+			return false, IngressControllerEndPoint
+		}	
 	}
 
 	return true, ""
@@ -532,6 +547,9 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 			} else if field == IngressControllerNodePlacement {
 				// If the NodePlacement doesn't match, replace the existing spec with the desired Spec
 				ingressController.Spec.NodePlacement = desiredIngressController.Spec.NodePlacement
+			} else if field == IngressControllerEndPoint {
+				// If the EndpointPublishingStrategy doesn't match, replace the existing spec with the desired Spec
+				ingressController.Spec.EndpointPublishingStrategy = desiredIngressController.Spec.EndpointPublishingStrategy
 			}
 
 			// Perform the patch on the existing IngressController using the base to patch against and the
