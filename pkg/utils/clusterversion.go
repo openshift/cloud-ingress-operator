@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 
 	compare "github.com/hashicorp/go-version"
 	configv1 "github.com/openshift/api/config/v1"
@@ -73,7 +74,8 @@ func IsVersionHigherThan(input string) bool {
 		return false
 	}
 	// Handle the clusternames that have more than 4 chars(such as 4.10.0-rc.4)
-	shortVersion := version[0:4]
+	re := regexp.MustCompile("([0-9]+).([0-9]+)([0-9]?)")
+	shortVersion := re.FindString(version)
 
 	EnvVersion, err := compare.NewVersion(shortVersion)
 	if err != nil {
