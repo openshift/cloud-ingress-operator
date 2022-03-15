@@ -16,7 +16,7 @@ import (
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -28,8 +28,8 @@ var (
 	log = logf.Log.WithName("gcp_cloudclient")
 )
 
-// Client represents a GCP cloud Client
-type Client struct {
+// CloudClient represents a GCP Cloud Client
+type CloudClient struct {
 	projectID      string
 	region         string
 	clusterName    string
@@ -40,42 +40,42 @@ type Client struct {
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) EnsureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.ensureAdminAPIDNS(ctx, kclient, instance, svc)
+func (gcpclient *CloudClient) EnsureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return gcpclient.ensureAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) DeleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.deleteAdminAPIDNS(ctx, kclient, instance, svc)
+func (gcpclient *CloudClient) DeleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return gcpclient.deleteAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // EnsureSSHDNS implements cloudclient.CloudClient
-func (c *Client) EnsureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.ensureSSHDNS(ctx, kclient, instance, svc)
+func (gcpclient *CloudClient) EnsureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return gcpclient.ensureSSHDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteSSHDNS implements cloudclient.CloudClient
-func (c *Client) DeleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.deleteSSHDNS(ctx, kclient, instance, svc)
+func (gcpclient *CloudClient) DeleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return gcpclient.deleteSSHDNS(ctx, kclient, instance, svc)
 }
 
 // SetDefaultAPIPrivate implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPrivate(ctx, kclient, instance)
+func (gcpclient *CloudClient) SetDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return gcpclient.setDefaultAPIPrivate(ctx, kclient, instance)
 }
 
 // SetDefaultAPIPublic implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPublic(ctx, kclient, instance)
+func (gcpclient *CloudClient) SetDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return gcpclient.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
 // Healthcheck performs basic calls to make sure client is healthy
-func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
-	_, err := c.computeService.RegionBackendServices.List(c.projectID, c.region).Do()
-	return err 
+func (gcpclient *CloudClient) Healthcheck(ctx context.Context, kclient k8s.Client) error {
+	_, err := gcpclient.computeService.RegionBackendServices.List(gcpclient.projectID, gcpclient.region).Do()
+	return err
 }
 
-func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
+func newClient(ctx context.Context, serviceAccountJSON []byte) (*CloudClient, error) {
 	credentials, err := google.CredentialsFromJSON(
 		ctx, serviceAccountJSON,
 		dnsv1.NdevClouddnsReadwriteScope,
@@ -94,7 +94,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 		return nil, err
 	}
 
-	return &Client{
+	return &CloudClient{
 		projectID:      credentials.ProjectID,
 		dnsService:     dnsService,
 		computeService: computeService,
@@ -102,7 +102,7 @@ func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) 
 }
 
 // NewClient creates a new CloudClient for use with GCP.
-func NewClient(kclient client.Client) (*Client, error) {
+func NewClient(kclient k8s.Client) (*CloudClient, error) {
 	ctx := context.Background()
 	secret := &corev1.Secret{}
 	err := kclient.Get(
@@ -121,7 +121,7 @@ func NewClient(kclient client.Client) (*Client, error) {
 	}
 
 	// initialize actual client
-	c, err := newClient(ctx, serviceAccountJSON)
+	gcpclient, err := newClient(ctx, serviceAccountJSON)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create GCP client %s", err)
 	}
@@ -131,28 +131,28 @@ func NewClient(kclient client.Client) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.region = region
+	gcpclient.region = region
 
 	masterList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
 		return nil, err
 	}
-	c.masterList = masterList
+	gcpclient.masterList = masterList
 	infrastructureName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
 		return nil, err
 	}
-	c.clusterName = infrastructureName
+	gcpclient.clusterName = infrastructureName
 	baseDomain, err := baseutils.GetClusterBaseDomain(kclient)
 	if err != nil {
 		return nil, err
 	}
-	c.baseDomain = baseDomain
+	gcpclient.baseDomain = baseDomain
 
-	return c, nil
+	return gcpclient, nil
 }
 
-func getClusterRegion(kclient client.Client) (string, error) {
+func getClusterRegion(kclient k8s.Client) (string, error) {
 	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return "", err
