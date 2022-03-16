@@ -128,14 +128,10 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	}
 	rhapiLbIP := ingressList[0].IP
 	// ensure forwarding rule exists in GCP for service
-	fr, err := c.findGCPForwardingRuleForExtIP(rhapiLbIP)
+	_, err := c.findGCPForwardingRuleForExtIP(rhapiLbIP)
 	if err != nil {
 		return cioerrors.ForwardingRuleNotFound(err.Error())
 	}
-	if fr == nil {
-		return cioerrors.ForwardingRuleNotFound("No forwarding rule found for rhapi IP " + rhapiLbIP)
-	}
-
 	svcIPs, err := getIPAddressesFromService(svc)
 	if err != nil {
 		return err
@@ -204,7 +200,7 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	return nil
 }
 
-// Returns GCP forwarding rule for given IP or nil if not found
+// Returns GCP forwarding rule for given IP or error if not found
 func (c *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.ForwardingRule, error) {
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
@@ -215,8 +211,10 @@ func (c *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.Forwa
 	for _, lb := range response.Items {
 		if lb.IPAddress == rhapiLbIP {
 			fr = lb
-			break
 		}
+	}
+	if fr == nil {
+		return nil, fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
 	}
 	return fr, nil
 }
