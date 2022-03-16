@@ -208,13 +208,12 @@ func (c *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.Forwa
 	if err != nil {
 		return nil, err
 	}
-	var fr *compute.ForwardingRule
 	for _, lb := range response.Items {
 		if lb.IPAddress == rhapiLbIP {
-			fr = lb
+			return lb, nil
 		}
 	}
-	return fr, nil
+	return nil, nil
 }
 
 func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
