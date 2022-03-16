@@ -128,9 +128,13 @@ func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service,
 	}
 	rhapiLbIP := ingressList[0].IP
 	// ensure forwarding rule exists in GCP for service
-	_, err := c.findGCPForwardingRuleForExtIP(rhapiLbIP)
+	fr, err := c.findGCPForwardingRuleForExtIP(rhapiLbIP)
 	if err != nil {
 		return cioerrors.ForwardingRuleNotFound(err.Error())
+	}
+	//this will never happen, but here for safety check
+	if fr == nil {
+		return cioerrors.ForwardingRuleNotFound("Unknown return getting forwarding rule for IP " + rhapiLbIP)
 	}
 	svcIPs, err := getIPAddressesFromService(svc)
 	if err != nil {
@@ -210,13 +214,13 @@ func (c *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.Forwa
 	var fr *compute.ForwardingRule
 	for _, lb := range response.Items {
 		if lb.IPAddress == rhapiLbIP {
-			fr = lb
+			return fr, nil
 		}
 	}
 	if fr == nil {
 		return nil, fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
 	}
-	return fr, nil
+	return nil, nil
 }
 
 func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
