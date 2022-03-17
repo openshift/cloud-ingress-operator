@@ -35,7 +35,7 @@ var (
 	log = logf.Log.WithName("aws_cloudclient")
 )
 
-// Client represents an AWS Client
+// AWS implementation of CloudClient
 type Client struct {
 	ec2Client     ec2iface.EC2API
 	route53Client route53iface.Route53API
