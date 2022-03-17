@@ -30,31 +30,31 @@ import (
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
-func (gcpclient *CloudClient) ensureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (gcpclient *Client) ensureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return gcpclient.ensureDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // deleteAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is deleted
-func (gcpclient *CloudClient) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (gcpclient *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return gcpclient.removeDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is accurately set
-func (gcpclient *CloudClient) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (gcpclient *Client) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return gcpclient.ensureDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // deleteSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is deleted
-func (gcpclient *CloudClient) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (gcpclient *Client) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return gcpclient.removeDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
-func (gcpclient *CloudClient) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
+func (gcpclient *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	intIPAddress, err := gcpclient.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
 		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
@@ -79,7 +79,7 @@ func (gcpclient *CloudClient) setDefaultAPIPrivate(ctx context.Context, kclient 
 
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
-func (gcpclient *CloudClient) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+func (gcpclient *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	listCall := gcpclient.computeService.ForwardingRules.List(gcpclient.projectID, gcpclient.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -115,7 +115,7 @@ func (gcpclient *CloudClient) setDefaultAPIPublic(ctx context.Context, kclient k
 	return nil
 }
 
-func (gcpclient *CloudClient) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
+func (gcpclient *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
@@ -202,7 +202,7 @@ func (gcpclient *CloudClient) ensureDNSForService(kclient k8s.Client, svc *corev
 }
 
 // Returns GCP forwarding rule for given IP or nil if not found
-func (gcpclient *CloudClient) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.ForwardingRule, error) {
+func (gcpclient *Client) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*compute.ForwardingRule, error) {
 	listCall := gcpclient.computeService.ForwardingRules.List(gcpclient.projectID, gcpclient.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -217,7 +217,7 @@ func (gcpclient *CloudClient) findGCPForwardingRuleForExtIP(rhapiLbIP string) (*
 	return fr, nil
 }
 
-func (gcpclient *CloudClient) removeDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
+func (gcpclient *Client) removeDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 	FQDN := dnsName + "." + gcpclient.baseDomain + "."
@@ -277,7 +277,7 @@ func getIPAddressesFromService(svc *corev1.Service) ([]string, error) {
 	return ips, nil
 }
 
-func (gcpclient *CloudClient) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient k8s.Client) (string, error) {
+func (gcpclient *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient k8s.Client) (string, error) {
 	listCall := gcpclient.computeService.ForwardingRules.List(gcpclient.projectID, gcpclient.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -394,7 +394,7 @@ func updateGCPLBList(kclient k8s.Client, oldLBList []string, newLBList []string,
 	return nil
 }
 
-func (gcpclient *CloudClient) createExternalIP(name string, scheme string) (ipAddress string, err error) {
+func (gcpclient *Client) createExternalIP(name string, scheme string) (ipAddress string, err error) {
 	// Check if an external IP with the correct name already exists
 	addyList, err := gcpclient.computeService.Addresses.List(gcpclient.projectID, gcpclient.region).Do()
 	if err != nil {
@@ -433,7 +433,7 @@ func (gcpclient *CloudClient) createExternalIP(name string, scheme string) (ipAd
 	return address.Address, nil
 }
 
-func (gcpclient *CloudClient) releaseExternalIP(addressName string) error {
+func (gcpclient *Client) releaseExternalIP(addressName string) error {
 	_, err := gcpclient.computeService.Addresses.Delete(gcpclient.projectID, gcpclient.region, addressName).Do()
 	if err != nil {
 		return fmt.Errorf("Failed to release External IP %v: %v", addressName, err)
@@ -441,7 +441,7 @@ func (gcpclient *CloudClient) releaseExternalIP(addressName string) error {
 	return nil
 }
 
-func (gcpclient *CloudClient) createNetworkLoadBalancer(name string, scheme string, targetPool string, ip string) error {
+func (gcpclient *Client) createNetworkLoadBalancer(name string, scheme string, targetPool string, ip string) error {
 	//Confirm the target pool is present and get its selflink URL
 	tpResp, err := gcpclient.computeService.TargetPools.Get(gcpclient.projectID, gcpclient.region, targetPool).Do()
 	if err != nil {
@@ -465,7 +465,7 @@ func (gcpclient *CloudClient) createNetworkLoadBalancer(name string, scheme stri
 	return nil
 }
 
-func (gcpclient *CloudClient) updateAPIARecord(kclient k8s.Client, recordName string, newIP string) (oldIP string, err error) {
+func (gcpclient *Client) updateAPIARecord(kclient k8s.Client, recordName string, newIP string) (oldIP string, err error) {
 	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return "", err
