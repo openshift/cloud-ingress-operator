@@ -126,6 +126,12 @@ spec:
                   listening:
                     description: Listening defines internal or external ingress
                     type: string
+                  type:
+                    description: Type indicates the type of Load Balancer to use
+                    enum:
+                    - Classic
+                    - NLB
+                    type: string
                 type: object
             required:
             - applicationIngress

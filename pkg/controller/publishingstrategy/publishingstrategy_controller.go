@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
@@ -191,6 +192,20 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// This generated spec will be compared against the actual spec as desrcibed above
 		desiredIngressController := generateIngressController(ingressDefinition)
 
+		cloudPlatform, err := baseutils.GetPlatformType(r.client)
+		isAWS := *cloudPlatform == configv1.AWSPlatformType
+		// Add ProviderParameters if the cloud is AWS to ensure LB type matches
+		if isAWS {
+			/*desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters= {
+				Type: "AWS",
+				AWASProviderParams: {
+					Type: instance.Spec.DefaultAPIServerIngress.Type
+				}
+			}*/
+			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.Type = "AWS"
+			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWSProviderParams.Type = instance.Spec.DefaultAPIServerIngress.Type
+		}
+
 		// Attempt to find the IngressController referenced by the ApplicationIngress
 		// by doing a GET of the namespaced name object build above against the k8s api.
 		ingressController := &operatorv1.IngressController{}
@@ -216,6 +231,15 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// services (ie the load balancer service has finalizers for the cloud provider resource cleanup)
 		if !ingressController.DeletionTimestamp.IsZero() {
 			return r.ensureIngressController(reqLogger, ingressController, desiredIngressController)
+		}
+
+		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
+		if isAWS {
+			result, err := r.enureAWSLoadBalancerType(reqLogger, ingressController, *instance)
+			if err != nil || result.Requeue {
+				return result, err
+			}
+
 		}
 
 		result, err := r.ensureStaticSpec(reqLogger, ingressController, desiredIngressController)
@@ -357,6 +381,41 @@ func validateStaticSpec(ingressController operatorv1.IngressController, desiredS
 	
 
 	return true
+}
+
+func (r *ReconcilePublishingStrategy) enureAWSLoadBalancerType(reqLogger logr.Logger, ic *operatorv1.IngressController, ps cloudingressv1alpha1.PublishingStrategy) (result reconcile.Result, err error) {
+
+	if !validateAWSLoadBalancerType(*ic, ps) {
+
+		if err := r.client.Delete(context.TODO(), ic); err != nil {
+			reqLogger.Error(err, "Error deleting IngressController")
+		}
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	return result, nil
+}
+
+func validateAWSLoadBalancerType(ic operatorv1.IngressController, ps cloudingressv1alpha1.PublishingStrategy) bool {
+
+	// If ProviderParameters are set on the IngressController, then the Type in the PublishingStrategy needs to match exacly
+	if ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters {
+
+		return ps.Spec.DefaultAPIServerIngress.Type == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+	}
+
+	// The status can also hold this information if its not in the spec
+	if ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters {
+		return ps.Spec.DefaultAPIServerIngress.Type == ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+	}
+
+	// When ProviderParameters is not set, the IngressController defaults to Classic, so we only need to ensure the PublishingStrategy Type is not set to  NLB
+	if ps.Spec.DefaultAPIServerIngress.Type == "NLB" {
+		return false
+	}
+
+	return true
+
 }
 
 /* Compares the patchable desired Spec against the existing IngressController's status.

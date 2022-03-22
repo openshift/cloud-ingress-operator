@@ -24,6 +24,7 @@ type PublishingStrategySpec struct {
 type DefaultAPIServerIngress struct {
 	// Listening defines internal or external ingress
 	Listening Listening `json:"listening,omitempty"`
+	Type      Type      `json:"type,omitempty"`
 }
 
 // ApplicationIngress defines application ingress
@@ -39,6 +40,10 @@ type ApplicationIngress struct {
 
 // Listening defines internal or external api and ingress
 type Listening string
+
+// Type indicates the type of Load Balancer to use
+// +kubebuilder:validation:Enum=Classic;NLB
+type Type string
 
 const (
 	// Internal const for listening status
