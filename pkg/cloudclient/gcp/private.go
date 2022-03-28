@@ -23,38 +23,38 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 )
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
-func (c *Client) ensureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *Client) ensureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.ensureDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // deleteAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is deleted
-func (c *Client) deleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+func (c *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
 	return c.removeDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
 // ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is accurately set
-func (c *Client) ensureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *Client) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.ensureDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // deleteSSHDNS ensures the DNS record for the SSH Service LoadBalancer
 // is deleted
-func (c *Client) deleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+func (c *Client) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
 	return c.removeDNSForService(kclient, svc, instance.Spec.DNSName)
 }
 
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
-func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	intIPAddress, err := c.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
 		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
@@ -79,7 +79,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
-func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -115,7 +115,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	return nil
 }
 
-func (c *Client) ensureDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
+func (c *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 
@@ -218,7 +218,7 @@ func (c *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
 
 }
 
-func (c *Client) removeDNSForService(kclient client.Client, svc *corev1.Service, dnsName string) error {
+func (c *Client) removeDNSForService(kclient k8s.Client, svc *corev1.Service, dnsName string) error {
 	// google.golang.org/api/dns/v1.Service is a struct, not an interface, which
 	// will make this all but impossible to write unit tests for
 	FQDN := dnsName + "." + c.baseDomain + "."
@@ -278,7 +278,7 @@ func getIPAddressesFromService(svc *corev1.Service) ([]string, error) {
 	return ips, nil
 }
 
-func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, error) {
+func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient k8s.Client) (string, error) {
 	listCall := c.computeService.ForwardingRules.List(c.projectID, c.region)
 	response, err := listCall.Do()
 	if err != nil {
@@ -314,7 +314,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	return intIPAddress, nil
 }
 
-func removeGCPLBFromMasterMachines(kclient client.Client, lbName string, masterNodes *machineapi.MachineList) error {
+func removeGCPLBFromMasterMachines(kclient k8s.Client, lbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
 		providerSpecDecoded, err := getGCPDecodedProviderSpec(machine)
 		if err != nil {
@@ -373,8 +373,8 @@ func encodeProviderSpec(in runtime.Object) (*runtime.RawExtension, error) {
 	return &runtime.RawExtension{Raw: buf.Bytes()}, nil
 }
 
-func updateGCPLBList(kclient client.Client, oldLBList []string, newLBList []string, machineToPatch machineapi.Machine, providerSpecDecoded *gcpproviderapi.GCPMachineProviderSpec) error {
-	baseToPatch := client.MergeFrom(machineToPatch.DeepCopy())
+func updateGCPLBList(kclient k8s.Client, oldLBList []string, newLBList []string, machineToPatch machineapi.Machine, providerSpecDecoded *gcpproviderapi.GCPMachineProviderSpec) error {
+	baseToPatch := k8s.MergeFrom(machineToPatch.DeepCopy())
 	if !reflect.DeepEqual(oldLBList, newLBList) {
 		providerSpecDecoded.TargetPools = newLBList
 		newProviderSpecEncoded, err := encodeProviderSpec(providerSpecDecoded)
@@ -466,7 +466,7 @@ func (c *Client) createNetworkLoadBalancer(name string, scheme string, targetPoo
 	return nil
 }
 
-func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newIP string) (oldIP string, err error) {
+func (c *Client) updateAPIARecord(kclient k8s.Client, recordName string, newIP string) (oldIP string, err error) {
 	clusterDNS, err := getClusterDNS(kclient)
 	if err != nil {
 		return "", err
@@ -504,7 +504,7 @@ func (c *Client) updateAPIARecord(kclient client.Client, recordName string, newI
 	return oldIP, nil
 }
 
-func getClusterDNS(kclient client.Client) (*configv1.DNS, error) {
+func getClusterDNS(kclient k8s.Client) (*configv1.DNS, error) {
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "",
