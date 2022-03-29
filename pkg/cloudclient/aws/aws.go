@@ -23,7 +23,7 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -44,39 +44,39 @@ type Client struct {
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) EnsureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.ensureAdminAPIDNS(ctx, kclient, instance, svc)
+func (ac *Client) EnsureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.ensureAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) DeleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.deleteAdminAPIDNS(ctx, kclient, instance, svc)
+func (ac *Client) DeleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.deleteAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // EnsureSSHDNS implements cloudclient.CloudClient
-func (c *Client) EnsureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.ensureSSHDNS(ctx, kclient, instance, svc)
+func (ac *Client) EnsureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.ensureSSHDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteSSHDNS implements cloudclient.CloudClient
-func (c *Client) DeleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.deleteSSHDNS(ctx, kclient, instance, svc)
+func (ac *Client) DeleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.deleteSSHDNS(ctx, kclient, instance, svc)
 }
 
 // SetDefaultAPIPrivate implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPrivate(ctx, kclient, instance)
+func (ac *Client) SetDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return ac.setDefaultAPIPrivate(ctx, kclient, instance)
 }
 
 // SetDefaultAPIPublic implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPublic(ctx, kclient, instance)
+func (ac *Client) SetDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return ac.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
 // Healthcheck performs basic calls to make sure client is healthy
-func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
+func (ac *Client) Healthcheck(ctx context.Context, kclient k8s.Client) error {
 	input := &elb.DescribeLoadBalancersInput{}
-	_, err := c.elbClient.DescribeLoadBalancers(input)
+	_, err := ac.elbClient.DescribeLoadBalancers(input)
 
 	return err
 }
@@ -102,7 +102,7 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 }
 
 // NewClient creates a new CloudClient for use with AWS.
-func NewClient(kclient client.Client) (*Client, error) {
+func NewClient(kclient k8s.Client) (*Client, error) {
 	region, err := getClusterRegion(kclient)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get cluster region %w", err)
