@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
@@ -45,6 +44,7 @@ var IngressControllerSelector patchField = "IngressControllerSelector"
 var IngressControllerCertificate patchField = "IngressControllerCertificate"
 var IngressControllerNodePlacement patchField = "IngressControllerNodePlacement"
 var IngressControllerEndPoint patchField = "IngressControllerEndpoint"
+var IngressControllerDeleteLBAnnotation string = "ingress.operator.openshift.io/auto-delete-load-balancer"
 
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -66,7 +66,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PublishingStrategy
-	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.PublishingStrategy{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1alpha1.PublishingStrategy{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 	reqLogger.Info("Reconciling PublishingStrategy")
 
 	// Fetch the PublishingStrategy instance
-	instance := &cloudingressv1alpha1.PublishingStrategy{}
+	instance := &v1alpha1.PublishingStrategy{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
@@ -229,7 +229,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		}
 	}
 
-	result, err := r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
+	result, err := r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
+	result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
 	if err != nil || result.Requeue {
 		return result, err
 	}
@@ -320,10 +325,10 @@ func validateStaticStatus(ingressController operatorv1.IngressController, desire
 		return false
 	}
 	if !baseutils.IsVersionHigherThan("4.10") {
-	// Preventing nil pointer errors
+		// Preventing nil pointer errors
 		if ingressController.Status.EndpointPublishingStrategy == nil || ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false
@@ -345,16 +350,15 @@ func validateStaticSpec(ingressController operatorv1.IngressController, desiredS
 	}
 
 	if !baseutils.IsVersionHigherThan("4.10") {
-	// Preventing nil pointer errors
+		// Preventing nil pointer errors
 		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false
-		}	
-	}	
-	
+		}
+	}
 
 	return true
 }
@@ -417,11 +421,11 @@ func validatePatchableSpec(ingressController operatorv1.IngressController, desir
 		// Preventing nil pointer errors
 		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false, IngressControllerEndPoint
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false, IngressControllerEndPoint
-		}	
+		}
 	}
 
 	return true, ""
@@ -564,9 +568,48 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 	// do nothing, continue
 	return result, err
 }
+func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	// No action if the version is prior 4.10
+	if !baseutils.IsVersionHigherThan("4.10") {
+		return reconcile.Result{}, nil
+	}
+
+	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
+		if inPublishingStrategy {
+
+			// Get managed IngressController CRs
+			ingressController := &operatorv1.IngressController{}
+			namespacedName := types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}
+			if err := r.client.Get(context.TODO(), namespacedName, ingressController); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			// Check if the annotation exists, return if so
+			if _, ok := ingressController.Annotations[IngressControllerDeleteLBAnnotation]; ok {
+				return reconcile.Result{}, nil
+			}
+
+			// Generate Annotation and apply to object
+			baseToPatch := client.MergeFrom(ingressController.DeepCopy())
+			annotations := map[string]string{
+				"Owner":                             "cloud-ingress-operator",
+				IngressControllerDeleteLBAnnotation: "",
+			}
+			ingressController.Annotations = annotations
+
+			// Patch
+			reqLogger.Info(fmt.Sprintf("IngressController's CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
+			if err := r.client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
 
 // ensureAliasScope updates the loadbalancer to match the scope of the ingress in the publishingstrategy
-func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *cloudingressv1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *v1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
 	cloudPlatform, err := baseutils.GetPlatformType(r.client)
 	if err != nil {
 		log.Error(err, "Failed to create a Cloud Client")
@@ -574,7 +617,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 	}
 	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
 
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
+	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.Internal {
 		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
@@ -586,7 +629,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 
 	// if CR is wanted the default server API to be internet-facing, we
 	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
+	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.External {
 		err = cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
