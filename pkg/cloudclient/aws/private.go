@@ -18,7 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/errors"
@@ -65,7 +65,7 @@ type installConfig struct {
 // removeAWSLBFromMasterMachines removes a Load Balancer (with name elbName) from
 // the spec.providerSpec.value.loadBalancers list for each of the master machine
 // objects in a cluster
-func removeAWSLBFromMasterMachines(kclient client.Client, elbName string, masterNodes *machineapi.MachineList) error {
+func removeAWSLBFromMasterMachines(kclient k8s.Client, elbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
 		providerSpecDecoded, err := getAWSDecodedProviderSpec(machine)
 		if err != nil {
@@ -114,8 +114,8 @@ func getAWSDecodedProviderSpec(machine machineapi.Machine) (*awsproviderapi.AWSM
 // the old and new lists are not equal. this function requires the decoded
 // ProviderSpec (as an AWSMachineProviderConfig object) that the
 // getAWSDecodedProviderSpec function will provide
-func updateAWSLBList(kclient client.Client, oldLBList []awsproviderapi.LoadBalancerReference, newLBList []awsproviderapi.LoadBalancerReference, machineToPatch machineapi.Machine, providerSpecDecoded *awsproviderapi.AWSMachineProviderConfig) error {
-	baseToPatch := client.MergeFrom(machineToPatch.DeepCopy())
+func updateAWSLBList(kclient k8s.Client, oldLBList []awsproviderapi.LoadBalancerReference, newLBList []awsproviderapi.LoadBalancerReference, machineToPatch machineapi.Machine, providerSpecDecoded *awsproviderapi.AWSMachineProviderConfig) error {
+	baseToPatch := k8s.MergeFrom(machineToPatch.DeepCopy())
 	awsCodec, err := awsproviderapi.NewCodec()
 	if err != nil {
 		log.Error(err, "Error creating AWSProviderConfigCodec")
@@ -144,33 +144,33 @@ func updateAWSLBList(kclient client.Client, oldLBList []awsproviderapi.LoadBalan
 // ensureAdminAPIDNS ensure the DNS record for the rh-api "admin API" for
 // APIScheme is present and mapped to the corresponding Service's AWS
 // LoadBalancer
-func (c *Client) ensureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.ensureDNSForService(ctx, kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName, "RH API Endpoint")
+func (ac *Client) ensureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.ensureDNSForService(ctx, kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName, "RH API Endpoint")
 }
 
 // deleteAdminAPIDNS removes the DNS record for the rh-api "admin API" for
 // APIScheme
-func (c *Client) deleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.removeDNSForService(ctx, kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName, "RH API Endpoint")
+func (ac *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.removeDNSForService(ctx, kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName, "RH API Endpoint")
 }
 
 // ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer is set
-func (c *Client) ensureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.ensureDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
+func (ac *Client) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.ensureDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
 }
 
 // deleteSSHDNS ensures the DNS record for the SSH Service AWS LoadBalancer is unset
-func (c *Client) deleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.removeDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
+func (ac *Client) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.removeDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
 }
 
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
-func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
+func (ac *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	// Delete the NLB and remove the NLB from the master Machine objects in
 	// cluster. At the same time, get the name of the DNS zone and base domain for
 	// the internal load balancer
-	intDNSName, intHostedZoneID, err := c.removeLoadBalancerFromMasterNodes(ctx, kclient)
+	intDNSName, intHostedZoneID, err := ac.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 	pubDomainName := baseDomain[strings.Index(baseDomain, ".")+1:]
 	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
 	comment := "Update api.<clusterName> alias to internal NLB"
-	err = c.upsertARecord(pubDomainName+".", intDNSName, intHostedZoneID, apiDNSName, comment, false)
+	err = ac.upsertARecord(pubDomainName+".", intDNSName, intHostedZoneID, apiDNSName, comment, false)
 	if err != nil {
 		return err
 	}
@@ -192,8 +192,8 @@ func (c *Client) setDefaultAPIPrivate(ctx context.Context, kclient client.Client
 
 // setDefaultAPIPublic sets the default API (api.<cluster-domain>) to public
 // scope
-func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	nlbs, err := c.listOwnedNLBs(kclient)
+func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	nlbs, err := ac.listOwnedNLBs(kclient)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	}
 	extNLBName := infrastructureName + "-ext"
 
-	subnetIDs, err := c.getPublicSubnets(kclient)
+	subnetIDs, err := ac.getPublicSubnets(kclient)
 	if err != nil {
 		return err
 	}
@@ -220,24 +220,24 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 		return err
 	}
 
-	newNLBs, err := c.createNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0])
+	newNLBs, err := ac.createNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0])
 	if err != nil {
 		return err
 	}
 	if len(newNLBs) != 1 {
 		return fmt.Errorf("more than one NLB, or no new NLB detected (expected 1, got %d)", len(newNLBs))
 	}
-	err = c.addTagsForNLB(newNLBs[0].loadBalancerArn, infrastructureName)
+	err = ac.addTagsForNLB(newNLBs[0].loadBalancerArn, infrastructureName)
 	if err != nil {
 		return err
 	}
 	// attempt to use existing TargetGroup
 	targetGroupName := fmt.Sprintf("%s-aext", infrastructureName)
-	targetGroupARN, err := c.getTargetGroupArn(targetGroupName)
+	targetGroupARN, err := ac.getTargetGroupArn(targetGroupName)
 	if err != nil {
 		return err
 	}
-	err = c.createListenerForNLB(targetGroupARN, newNLBs[0].loadBalancerArn)
+	err = ac.createListenerForNLB(targetGroupARN, newNLBs[0].loadBalancerArn)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == "TargetGroupAssociationLimit" {
@@ -259,7 +259,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 	apiDNSName := fmt.Sprintf("api.%s.", baseDomain)
 	// not tested yet
 	comment := "Update api.<clusterName> alias to external NLB"
-	err = c.upsertARecord(pubDomainName+".",
+	err = ac.upsertARecord(pubDomainName+".",
 		newNLBs[0].dnsName,
 		newNLBs[0].canonicalHostedZoneNameID,
 		apiDNSName,
@@ -279,7 +279,7 @@ func (c *Client) setDefaultAPIPublic(ctx context.Context, kclient client.Client,
 //   private => subnetname,
 // }
 //
-func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
+func getMasterNodeSubnets(kclient k8s.Client) (map[string]string, error) {
 	subnets := make(map[string]string)
 	machineList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
@@ -315,7 +315,7 @@ func getMasterNodeSubnets(kclient client.Client) (map[string]string, error) {
 	return subnets, nil
 }
 
-func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
+func (ac *Client) getPublicSubnets(kclient k8s.Client) ([]string, error) {
 
 	var publicSubnets []string
 
@@ -344,7 +344,7 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 	}
 
 	// Get VPC the instance is in
-	describeInstanceOutput, err := c.ec2Client.DescribeInstances(
+	describeInstanceOutput, err := ac.ec2Client.DescribeInstances(
 		&ec2.DescribeInstancesInput{
 			InstanceIds: []*string{aws.String(instanceID)},
 		},
@@ -357,13 +357,13 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 	targetVPC := describeInstanceOutput.Reservations[0].Instances[0].VpcId
 
 	// List all subnets in the VPC
-	allSubnets, err := c.getAllSubnetsInVPC(*targetVPC)
+	allSubnets, err := ac.getAllSubnetsInVPC(*targetVPC)
 	if err != nil {
 		return nil, err
 	}
 
 	// List all route tables associated with the VPC
-	routeTables, err := c.getAllRouteTablesInVPC(*targetVPC)
+	routeTables, err := ac.getAllRouteTablesInVPC(*targetVPC)
 	if err != nil {
 		return nil, err
 	}
@@ -383,13 +383,13 @@ func (c *Client) getPublicSubnets(kclient client.Client) ([]string, error) {
 	return publicSubnets, nil
 }
 
-func (c *Client) getAllSubnetsInVPC(vpcID string) ([]*ec2.Subnet, error) {
+func (ac *Client) getAllSubnetsInVPC(vpcID string) ([]*ec2.Subnet, error) {
 
 	var subnetIDs []*ec2.Subnet
 	token := aws.String("initString")
 
 	for token != nil {
-		describeSubnetOutput, err := c.ec2Client.DescribeSubnets(
+		describeSubnetOutput, err := ac.ec2Client.DescribeSubnets(
 			&ec2.DescribeSubnetsInput{
 				Filters: []*ec2.Filter{
 					{
@@ -410,13 +410,13 @@ func (c *Client) getAllSubnetsInVPC(vpcID string) ([]*ec2.Subnet, error) {
 	return subnetIDs, nil
 }
 
-func (c *Client) getAllRouteTablesInVPC(vpcID string) ([]*ec2.RouteTable, error) {
+func (ac *Client) getAllRouteTablesInVPC(vpcID string) ([]*ec2.RouteTable, error) {
 
 	var routeTables []*ec2.RouteTable
 	token := aws.String("initString")
 
 	for token != nil {
-		describeRouteTablesOutput, err := c.ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{Filters: []*ec2.Filter{{Name: aws.String("vpc-id"), Values: []*string{aws.String(vpcID)}}}})
+		describeRouteTablesOutput, err := ac.ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{Filters: []*ec2.Filter{{Name: aws.String("vpc-id"), Values: []*string{aws.String(vpcID)}}}})
 		if err != nil {
 			log.Error(err, "Error while describing route tables")
 			return nil, err
@@ -476,7 +476,7 @@ func isSubnetPublic(rt []*ec2.RouteTable, subnetID string) (bool, error) {
 }
 
 //getClusterRegion returns the installed cluster's AWS region
-func getClusterRegion(kclient client.Client) (string, error) {
+func getClusterRegion(kclient k8s.Client) (string, error) {
 	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
 		return "", err
@@ -487,7 +487,7 @@ func getClusterRegion(kclient client.Client) (string, error) {
 	return infra.Status.PlatformStatus.AWS.Region, nil
 }
 
-func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
+func readClusterRegionFromConfigMap(kclient k8s.Client) (string, error) {
 	cm, err := getClusterConfigMap(kclient)
 	if err != nil {
 		return "", err
@@ -495,7 +495,7 @@ func readClusterRegionFromConfigMap(kclient client.Client) (string, error) {
 	return parseClusterRegionFromConfigMap(cm)
 }
 
-func getClusterConfigMap(kclient client.Client) (*corev1.ConfigMap, error) {
+func getClusterConfigMap(kclient k8s.Client) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Namespace: "kube-system",
@@ -523,11 +523,11 @@ func parseClusterRegionFromConfigMap(cm *corev1.ConfigMap) (string, error) {
 /* Helper functions below, sorted by AWS API type */
 
 // ELB (v1)
-func (c *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
+func (ac *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
 	input := &elb.DescribeLoadBalancersInput{
 		LoadBalancerNames: []*string{aws.String(elbName)},
 	}
-	output, err := c.elbClient.DescribeLoadBalancers(input)
+	output, err := ac.elbClient.DescribeLoadBalancers(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -547,14 +547,14 @@ func (c *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
 
 // route53
 
-func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
+func (ac *Client) ensureDNSForService(ctx context.Context, kclient k8s.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	// Get the ELB name from the Service's UID. Truncate to 32 characters for AWS
 	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")
 	if len(elbName) > 32 {
 		// Truncate to 32 characters
 		elbName = elbName[0:32]
 	}
-	awsELB, err := c.doesELBExist(elbName)
+	awsELB, err := ac.doesELBExist(elbName)
 	// Primarily checking to see if this exists. It is an error if it does not,
 	// likely because AWS is still creating it and the Reconcile should be retried
 	if err != nil {
@@ -569,14 +569,14 @@ func (c *Client) ensureDNSForService(ctx context.Context, kclient client.Client,
 		endpointName: dnsName,
 		baseDomain:   clusterBaseDomain,
 	}
-	return c.ensureDNSRecord(lb, awsELB, dnsComment)
+	return ac.ensureDNSRecord(lb, awsELB, dnsComment)
 }
 
 // removeDNSForService will remove a DNS entry for a particular Service
-func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client, svc *corev1.Service, dnsName, dnsComment string) error {
+func (ac *Client) removeDNSForService(ctx context.Context, kclient k8s.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	// Get the ELB name from the Service's UID. Truncate to 32 characters for AWS
 	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")[0:32]
-	awsELB, err := c.doesELBExist(elbName)
+	awsELB, err := ac.doesELBExist(elbName)
 	// Primarily checking to see if this exists. It is an error if it does not,
 	// likely because AWS is still creating it and the Reconcile should be retried
 	if err != nil {
@@ -587,7 +587,7 @@ func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client,
 	if err != nil {
 		return err
 	}
-	return c.ensureDNSRecordsRemoved(
+	return ac.ensureDNSRecordsRemoved(
 		clusterBaseDomain,
 		awsELB.dnsName,
 		awsELB.dnsZoneID,
@@ -596,8 +596,8 @@ func (c *Client) removeDNSForService(ctx context.Context, kclient client.Client,
 		false)
 }
 
-func (c *Client) deleteARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName string, targetHealth bool) error {
-	publicHostedZoneID, err := c.getPublicHostedZoneID(clusterDomain)
+func (ac *Client) deleteARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName string, targetHealth bool) error {
+	publicHostedZoneID, err := ac.getPublicHostedZoneID(clusterDomain)
 	if err != nil {
 		return err
 	}
@@ -621,7 +621,7 @@ func (c *Client) deleteARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceR
 		},
 		HostedZoneId: aws.String(publicHostedZoneID),
 	}
-	_, err = c.route53Client.ChangeResourceRecordSets(change)
+	_, err = ac.route53Client.ChangeResourceRecordSets(change)
 	if err != nil {
 		// If the DNS entry was not found, disregard the error.
 		//
@@ -644,7 +644,7 @@ func (c *Client) deleteARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceR
 }
 
 // recordExists checks if a specific RecordSet already exist in route53
-func (c *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publicHostedZoneID string) (bool, error) {
+func (ac *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publicHostedZoneID string) (bool, error) {
 	if resourceRecordSet == nil {
 		return false, goError.New("resourceRecordSet can't be nil")
 	}
@@ -669,7 +669,7 @@ func (c *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publ
 	// Check if any property of the record was changed.
 	// aws-go-sdk may potentially give all results in multiple pages, so this will go
 	// through every page given in response to the API call
-	err := c.route53Client.ListResourceRecordSetsPages(input, func(p *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
+	err := ac.route53Client.ListResourceRecordSetsPages(input, func(p *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
 		for _, record := range p.ResourceRecordSets {
 			if *record.Name == *resourceRecordSet.Name && *record.Type == *resourceRecordSet.Type && reflect.DeepEqual(record.AliasTarget, resourceRecordSet.AliasTarget) {
 				recordExists = true
@@ -683,8 +683,8 @@ func (c *Client) recordExists(resourceRecordSet *route53.ResourceRecordSet, publ
 	return recordExists, err
 }
 
-func (c *Client) upsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
-	publicHostedZoneID, err := c.getPublicHostedZoneID(clusterDomain)
+func (ac *Client) upsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
+	publicHostedZoneID, err := ac.getPublicHostedZoneID(clusterDomain)
 	if err != nil {
 		return err
 	}
@@ -699,7 +699,7 @@ func (c *Client) upsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceR
 		Type: aws.String("A"),
 	}
 
-	recordExists, err := c.recordExists(resourceRecordSet, publicHostedZoneID)
+	recordExists, err := ac.recordExists(resourceRecordSet, publicHostedZoneID)
 	if err != nil || recordExists {
 		return err
 	}
@@ -716,15 +716,15 @@ func (c *Client) upsertARecord(clusterDomain, DNSName, aliasDNSZoneID, resourceR
 		},
 		HostedZoneId: aws.String(publicHostedZoneID),
 	}
-	_, err = c.route53Client.ChangeResourceRecordSets(change)
+	_, err = ac.route53Client.ChangeResourceRecordSets(change)
 	return err
 }
 
-func (c *Client) getPublicHostedZoneID(clusterDomain string) (string, error) {
+func (ac *Client) getPublicHostedZoneID(clusterDomain string) (string, error) {
 	input := &route53.ListHostedZonesByNameInput{
 		DNSName: aws.String(clusterDomain),
 	}
-	output, err := c.route53Client.ListHostedZonesByName(input)
+	output, err := ac.route53Client.ListHostedZonesByName(input)
 	if err != nil {
 		return "", err
 	}
@@ -738,11 +738,11 @@ func (c *Client) getPublicHostedZoneID(clusterDomain string) (string, error) {
 
 }
 
-func (c *Client) ensureDNSRecord(lb *loadBalancer, awsObj *awsLoadBalancer, comment string) error {
+func (ac *Client) ensureDNSRecord(lb *loadBalancer, awsObj *awsLoadBalancer, comment string) error {
 	// private zone
 
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := c.upsertARecord(
+		err := ac.upsertARecord(
 			lb.baseDomain+".",
 			awsObj.dnsName,
 			awsObj.dnsZoneID,
@@ -780,7 +780,7 @@ func (c *Client) ensureDNSRecord(lb *loadBalancer, awsObj *awsLoadBalancer, comm
 
 	for i := 1; i <= config.MaxAPIRetries; i++ {
 		// Append a . to get the zone name
-		err := c.upsertARecord(
+		err := ac.upsertARecord(
 			publicZone+".",
 			awsObj.dnsName,
 			awsObj.dnsZoneID,
@@ -808,9 +808,9 @@ func (c *Client) ensureDNSRecord(lb *loadBalancer, awsObj *awsLoadBalancer, comm
 }
 
 // ensureDNSRecordsRemoved undoes ensureDNSRecord
-func (c *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
+func (ac *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID, resourceRecordSetName, comment string, targetHealth bool) error {
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := c.deleteARecord(
+		err := ac.deleteARecord(
 			clusterDomain+".",
 			DNSName,
 			aliasDNSZoneID,
@@ -830,7 +830,7 @@ func (c *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID,
 		}
 	}
 	for i := 1; i <= config.MaxAPIRetries; i++ {
-		err := c.deleteARecord(
+		err := ac.deleteARecord(
 			// The public zone name omits the cluster name.
 			// e.g. mycluster.abcd.s1.openshift.com -> abcd.s1.openshift.com
 			clusterDomain[strings.Index(clusterDomain, ".")+1:]+".",
@@ -858,8 +858,8 @@ func (c *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID,
 // ELBv2
 
 // removeLoadBalancerFromMasterNodes
-func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient client.Client) (string, string, error) {
-	nlbs, err := c.listOwnedNLBs(kclient)
+func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient k8s.Client) (string, string, error) {
+	nlbs, err := ac.listOwnedNLBs(kclient)
 	if err != nil {
 		return "", "", err
 	}
@@ -871,7 +871,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	for _, networkLoadBalancer := range nlbs {
 		if networkLoadBalancer.scheme == "internet-facing" {
 			lbName = networkLoadBalancer.loadBalancerName
-			err := c.deleteExternalLoadBalancer(networkLoadBalancer.loadBalancerArn)
+			err := ac.deleteExternalLoadBalancer(networkLoadBalancer.loadBalancerArn)
 			if err != nil {
 				return "", "", err
 			}
@@ -883,7 +883,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 
 	}
 
-	internalAPINLB, err := c.getInteralAPINLB(kclient)
+	internalAPINLB, err := ac.getInteralAPINLB(kclient)
 	if err != nil {
 		return "", "", err
 	}
@@ -896,7 +896,7 @@ func (c *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient 
 	return intDNSName, intHostedZoneID, nil
 }
 
-func (c *Client) getInteralAPINLB(kclient client.Client) (loadBalancerV2, error) {
+func (ac *Client) getInteralAPINLB(kclient k8s.Client) (loadBalancerV2, error) {
 
 	// Build the load balancer tag to look for.
 	clusterName, err := baseutils.GetClusterName(kclient)
@@ -904,7 +904,7 @@ func (c *Client) getInteralAPINLB(kclient client.Client) (loadBalancerV2, error)
 		return loadBalancerV2{}, err
 	}
 
-	nlbs, err := c.listOwnedNLBs(kclient)
+	nlbs, err := ac.listOwnedNLBs(kclient)
 	if err != nil {
 		return loadBalancerV2{}, err
 	}
@@ -916,7 +916,7 @@ func (c *Client) getInteralAPINLB(kclient client.Client) (loadBalancerV2, error)
 
 	for _, nlb := range nlbs {
 		if nlb.scheme == "internal" {
-			tagsOutput, err := c.elbv2Client.DescribeTags(
+			tagsOutput, err := ac.elbv2Client.DescribeTags(
 				&elbv2.DescribeTagsInput{
 					ResourceArns: []*string{aws.String(nlb.loadBalancerArn)},
 				},
@@ -939,7 +939,7 @@ func (c *Client) getInteralAPINLB(kclient client.Client) (loadBalancerV2, error)
 
 // listOwnedNLBs uses the DescribeLoadBalancersV2 to get back a list of all
 // Network Load Balancers, then filters the list to those owned by the cluster
-func (c *Client) listOwnedNLBs(kclient client.Client) ([]loadBalancerV2, error) {
+func (ac *Client) listOwnedNLBs(kclient k8s.Client) ([]loadBalancerV2, error) {
 	// Build the load balancer tag to look for.
 	clusterName, err := baseutils.GetClusterName(kclient)
 	if err != nil {
@@ -955,7 +955,7 @@ func (c *Client) listOwnedNLBs(kclient client.Client) ([]loadBalancerV2, error) 
 	// The slice is used to request load balancer tags in batches.
 	resourceArns := make([]string, 0, 20)
 	loadBalancerMap := make(map[string]*elbv2.LoadBalancer)
-	err = c.elbv2Client.DescribeLoadBalancersPages(
+	err = ac.elbv2Client.DescribeLoadBalancersPages(
 		&elbv2.DescribeLoadBalancersInput{},
 		func(page *elbv2.DescribeLoadBalancersOutput, lastPage bool) bool {
 			for _, loadBalancer := range page.LoadBalancers {
@@ -976,7 +976,7 @@ func (c *Client) listOwnedNLBs(kclient client.Client) ([]loadBalancerV2, error) 
 		if end > len(resourceArns) {
 			end = len(resourceArns)
 		}
-		tagsOutput, err := c.elbv2Client.DescribeTags(
+		tagsOutput, err := ac.elbv2Client.DescribeTags(
 			&elbv2.DescribeTagsInput{
 				ResourceArns: aws.StringSlice(resourceArns[i:end]),
 			},
@@ -1016,16 +1016,16 @@ func (c *Client) listOwnedNLBs(kclient client.Client) ([]loadBalancerV2, error) 
 }
 
 // deleteExternalLoadBalancer takes in the external LB arn and deletes the entire LB
-func (c *Client) deleteExternalLoadBalancer(extLoadBalancerArn string) error {
+func (ac *Client) deleteExternalLoadBalancer(extLoadBalancerArn string) error {
 	i := elbv2.DeleteLoadBalancerInput{
 		LoadBalancerArn: aws.String(extLoadBalancerArn),
 	}
-	_, err := c.elbv2Client.DeleteLoadBalancer(&i)
+	_, err := ac.elbv2Client.DeleteLoadBalancer(&i)
 	return err
 }
 
 // createNetworkLoadBalancer should only return one new NLB at a time
-func (c *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]loadBalancerV2, error) {
+func (ac *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]loadBalancerV2, error) {
 	i := &elbv2.CreateLoadBalancerInput{
 		Name:   aws.String(lbName),
 		Scheme: aws.String(scheme),
@@ -1035,7 +1035,7 @@ func (c *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]loa
 		Type: aws.String("network"),
 	}
 
-	result, err := c.elbv2Client.CreateLoadBalancer(i)
+	result, err := ac.elbv2Client.CreateLoadBalancer(i)
 	if err != nil {
 		return []loadBalancerV2{}, err
 	}
@@ -1057,7 +1057,7 @@ func (c *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]loa
 }
 
 // createListenerForNLB creates a listener between target group and nlb given their arn
-func (c *Client) createListenerForNLB(targetGroupArn, loadBalancerArn string) error {
+func (ac *Client) createListenerForNLB(targetGroupArn, loadBalancerArn string) error {
 	i := &elbv2.CreateListenerInput{
 		DefaultActions: []*elbv2.Action{
 			{
@@ -1070,7 +1070,7 @@ func (c *Client) createListenerForNLB(targetGroupArn, loadBalancerArn string) er
 		Protocol:        aws.String("TCP"),
 	}
 
-	_, err := c.elbv2Client.CreateListener(i)
+	_, err := ac.elbv2Client.CreateListener(i)
 	if err != nil {
 		return err
 	}
@@ -1078,7 +1078,7 @@ func (c *Client) createListenerForNLB(targetGroupArn, loadBalancerArn string) er
 }
 
 // addTagsForNLB creates needed tags for an NLB
-func (c *Client) addTagsForNLB(resourceARN string, clusterName string) error {
+func (ac *Client) addTagsForNLB(resourceARN string, clusterName string) error {
 	i := &elbv2.AddTagsInput{
 		ResourceArns: []*string{
 			aws.String(resourceARN), // ext nlb resources arn
@@ -1095,7 +1095,7 @@ func (c *Client) addTagsForNLB(resourceARN string, clusterName string) error {
 		},
 	}
 
-	_, err := c.elbv2Client.AddTags(i)
+	_, err := ac.elbv2Client.AddTags(i)
 	if err != nil {
 		return err
 	}
@@ -1103,14 +1103,14 @@ func (c *Client) addTagsForNLB(resourceARN string, clusterName string) error {
 }
 
 // getTargetGroupArn by passing in targetGroup Name
-func (c *Client) getTargetGroupArn(targetGroupName string) (string, error) {
+func (ac *Client) getTargetGroupArn(targetGroupName string) (string, error) {
 	i := &elbv2.DescribeTargetGroupsInput{
 		Names: []*string{
 			aws.String(targetGroupName),
 		},
 	}
 
-	result, err := c.elbv2Client.DescribeTargetGroups(i)
+	result, err := ac.elbv2Client.DescribeTargetGroups(i)
 	if err != nil {
 		return "", err
 	}
