@@ -201,6 +201,8 @@ objects:
       kind: Namespace
       metadata:
         name: openshift-sre-sshd
+        labels:
+          managed.openshift.io/service-lb-quota-exempt: "true"
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
       metadata:
@@ -210,6 +212,8 @@ objects:
       - apiGroups:
         - ""
         resources:
+        - pods
+        - secrets
         - services
         - services/finalizers
         verbs:
@@ -221,10 +225,21 @@ objects:
         - update
         - watch
       - apiGroups:
+        - ""
+        resources:
+        - configmaps
+        verbs:
+        - get
+        - list
+        - watch
+      - apiGroups:
         - apps
         resources:
         - deployments
         verbs:
+        - create
+        - update
+        - patch
         - get
         - list
         - watch
@@ -404,7 +419,7 @@ objects:
         - list
         - patch
         - update
-        - watch        
+        - watch
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
       metadata:
@@ -465,7 +480,7 @@ objects:
         - list
         - patch
         - update
-        - watch        
+        - watch
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
       metadata:
@@ -479,4 +494,4 @@ objects:
         kind: Role
         name: cloud-ingress-operator
         namespace: openshift-ingress-operator
-        apiGroup: rbac.authorization.k8s.io        
+        apiGroup: rbac.authorization.k8s.io
