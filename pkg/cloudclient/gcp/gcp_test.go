@@ -70,7 +70,7 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 			name:         "ensureGCPForwardingRule should return error when rule doesn't exist in GCP.",
 			input_ip:     "matching.ip",
 			fr_ip:        "non.matching.ip",
-			expected_err: fmt.Errorf("forwarding rule for svc not found in GCP.  Provided IP: matching.ip"),
+			expected_err: fmt.Errorf("Forwarding rule not found in GCP for given service IP matching.ip"),
 		},
 	}
 
