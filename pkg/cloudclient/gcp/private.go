@@ -28,7 +28,7 @@ import (
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 )
 
-type ForwarrdingRuleGetter func(gc *Client) (*compute.ForwardingRuleList, error)
+type ForwardingRuleListGetter func(gc *Client) (*compute.ForwardingRuleList, error)
 
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
@@ -210,8 +210,8 @@ func getForwardingRuleList(gc *Client) (*compute.ForwardingRuleList, error) {
 }
 
 // Returns nil if forwarding rule is found for a given IP, or error if not found
-func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string, getFR ForwarrdingRuleGetter) error {
-	response, err := getFR(gc)
+func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string, getFrList ForwardingRuleListGetter) error {
+	response, err := getFrList(gc)
 	if err != nil {
 		return err
 	}
