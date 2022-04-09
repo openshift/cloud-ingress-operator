@@ -13,12 +13,14 @@ require (
 	github.com/openshift/cluster-api-provider-gcp v0.0.0
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
 	github.com/openshift/operator-custom-metrics v0.4.2
+	github.com/openshift/origin v0.0.0-20160503220234-8f127d736703
 	github.com/operator-framework/operator-sdk v0.18.2
 	github.com/prometheus/client_golang v1.7.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	google.golang.org/api v0.35.0
 	gopkg.in/yaml.v2 v2.3.0
+	gotest.tools v2.2.0+incompatible
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v12.0.0+incompatible

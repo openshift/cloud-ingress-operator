@@ -28,6 +28,8 @@ import (
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 )
 
+type ForwarrdingRuleGetter func(gc *Client) (*compute.ForwardingRuleList, error)
+
 // ensureAdminAPIDNS ensures the DNS record for the "admin API" Service
 // LoadBalancer is accurately set
 func (gc *Client) ensureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
@@ -128,9 +130,9 @@ func (gc *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, d
 	}
 	rhapiLbIP := ingressList[0].IP
 	// ensure forwarding rule exists in GCP for service
-	err := gc.ensureGCPForwardingRuleForExtIP(rhapiLbIP)
+	err := gc.ensureGCPForwardingRuleForExtIP(rhapiLbIP, getForwardingRuleList)
 	if err != nil {
-		return cioerrors.ForwardingRuleNotFound(err.Error())
+		return err
 	}
 
 	svcIPs, err := getIPAddressesFromService(svc)
@@ -201,10 +203,15 @@ func (gc *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, d
 	return nil
 }
 
-// Returns nil if forwarding rule is found for a given IP, or error if not found
-func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
+func getForwardingRuleList(gc *Client) (*compute.ForwardingRuleList, error) {
 	listCall := gc.computeService.ForwardingRules.List(gc.projectID, gc.region)
 	response, err := listCall.Do()
+	return response, err
+}
+
+// Returns nil if forwarding rule is found for a given IP, or error if not found
+func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string, getFR ForwarrdingRuleGetter) error {
+	response, err := getFR(gc)
 	if err != nil {
 		return err
 	}
@@ -214,7 +221,7 @@ func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
+	return cioerrors.ForwardingRuleNotFound(" Provided IP: " + rhapiLbIP)
 
 }
 
