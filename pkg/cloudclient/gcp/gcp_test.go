@@ -61,17 +61,20 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 		fr_ip        string
 	}{
 		{
+			//happy path
 			name:         "ensureGCPForwardingRule should return nil when forwarding rule exists in GCP.",
 			input_ip:     "matching.ip",
 			fr_ip:        "matching.ip",
 			expected_err: nil,
 		},
 		{
+			// not found
 			name:         "ensureGCPForwardingRule should return error when rule doesn't exist in GCP.",
 			input_ip:     "matching.ip",
 			fr_ip:        "non.matching.ip",
 			expected_err: fmt.Errorf("Forwarding rule not found in GCP for given service IP matching.ip"),
 		},
+		//	GCP errors out (case handled separately)
 	}
 
 	for _, test := range tests {
@@ -99,5 +102,5 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 	result := cli.ensureGCPForwardingRuleForExtIP("rhapi.ip", func(gc *Client) (*compute.ForwardingRuleList, error) {
 		return nil, fmt.Errorf("GCP error message")
 	})
-	assert.Error(t, result, "GCP error message", "ensureGCPForwardingRule should pass on GCP error.")
+	assert.Error(t, result, "GCP error message", "ensureGCPForwardingRule should return GCP error.")
 }
