@@ -1,22 +1,16 @@
 package gcp
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
-	"google.golang.org/api/compute/v1"
-	"google.golang.org/api/googleapi"
-	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-var cli *Client
-
-func setupSuite(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	dummySA := `{
 		"type": "service_account",
 		"private_key_id": "abc",
@@ -49,58 +43,4 @@ func setupSuite(t *testing.T) {
 	if cli == nil {
 		t.Error("cli should have been initialized")
 	}
-}
-
-func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
-
-	tests := []struct {
-		name         string
-		input_ip     string
-		expected_err error
-		frGetter     ForwardingRuleListGetter
-		fr_ip        string
-	}{
-		{
-			//happy path; FR found
-			name:         "ensureGCPForwardingRule should return nil when forwarding rule exists in GCP.",
-			input_ip:     "matching.ip",
-			fr_ip:        "matching.ip",
-			expected_err: nil,
-		},
-		{
-			// FR not found
-			name:         "ensureGCPForwardingRule should return error when rule doesn't exist in GCP.",
-			input_ip:     "matching.ip",
-			fr_ip:        "non.matching.ip",
-			expected_err: fmt.Errorf("Forwarding rule not found in GCP for given service IP matching.ip"),
-		},
-		//	GCP errors out (case handled separately)
-	}
-
-	for _, test := range tests {
-		var frListGetter ForwardingRuleListGetter = func(gc *Client) (*compute.ForwardingRuleList, error) {
-			fr := compute.ForwardingRule{IPAddress: test.fr_ip}
-			frList := compute.ForwardingRuleList{
-				Id:             "",
-				Items:          []*compute.ForwardingRule{&fr},
-				SelfLink:       "",
-				Warning:        nil,
-				ServerResponse: googleapi.ServerResponse{},
-			}
-			return &frList, nil
-		}
-
-		result := cli.ensureGCPForwardingRuleForExtIP(test.input_ip, frListGetter)
-
-		if test.expected_err == nil {
-			assert.Equal(t, result, test.expected_err, test.name)
-		} else {
-			assert.Error(t, result, test.expected_err.Error(), test.name)
-		}
-	}
-	//	Case: GCP errors out
-	result := cli.ensureGCPForwardingRuleForExtIP("rhapi.ip", func(gc *Client) (*compute.ForwardingRuleList, error) {
-		return nil, fmt.Errorf("GCP error message")
-	})
-	assert.Error(t, result, "GCP error message", "ensureGCPForwardingRule should return GCP error.")
 }
