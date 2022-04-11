@@ -144,7 +144,7 @@ func TestGCPProviderDecodeEncode(t *testing.T) {
 	}
 }
 
-func TestClient_ensureGCPForwardingRuleForExtIP(t *testing.T) {
+func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 	type fields struct {
 		projectID      string
 		region         string
