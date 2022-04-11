@@ -222,7 +222,6 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 				} else {
 					actualMessage = ""
 				}
-				//t.Errorf("ensureGCPForwardingRuleForExtIP() error = %v, wantErr %v, expectedMessage %v", err, test.wantErr, test.expectedMessage)
 				t.Errorf("\n Error should be thrown: %v"+
 					"\n Actual error thrown: %v"+
 					"\n Error message expected: %v"+
