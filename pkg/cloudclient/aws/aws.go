@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -81,18 +80,43 @@ func (ac *Client) Healthcheck(ctx context.Context, kclient k8s.Client) error {
 	return err
 }
 
-func newClient(accessID, accessSecret, token, region string) (*Client, error) {
-	awsConfig := &aws.Config{Region: aws.String(region)}
-	if token == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
-		os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
-	} else {
-		awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
+func newClient(region string, kclient k8s.Client) (*Client, error) {
+	sessionOptions := session.Options{
+		Config: aws.Config{
+			Region: aws.String(region),
+		},
 	}
-	s, err := session.NewSession(awsConfig)
+
+	creds := &corev1.Secret{}
+	err := kclient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      config.AWSSecretName,
+			Namespace: config.OperatorNamespace,
+		},
+		creds)
+
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't get secret with credentials %s", err.Error()))
+	}
+
+	// get sharedCredsFile from secret
+	sharedCredsFile, err := SharedCredentialsFileFromSecret(creds)
 	if err != nil {
 		return nil, err
 	}
+
+	sessionOptions.SharedConfigState = session.SharedConfigEnable // Force enable Shared Config support
+	sessionOptions.SharedConfigFiles = []string{sharedCredsFile}  // Ordered list of files the session will load configuration from.
+
+	s, err := session.NewSessionWithOptions(sessionOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove temporary shared credentials token at end of func after creating session
+	defer os.Remove(sharedCredsFile)
+
 	return &Client{
 		ec2Client:     ec2.New(s),
 		elbClient:     elb.New(s),
@@ -107,31 +131,10 @@ func NewClient(kclient k8s.Client) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get cluster region %w", err)
 	}
-	secret := &corev1.Secret{}
-	err = kclient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      config.AWSSecretName,
-			Namespace: config.OperatorNamespace,
-		},
-		secret)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
-	}
-	accessKeyID, ok := secret.Data["aws_access_key_id"]
-	if !ok {
-		return nil, fmt.Errorf("access credentials missing key")
-	}
-	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
-	if !ok {
-		return nil, fmt.Errorf("access credentials missing secret key")
-	}
 
 	c, err := newClient(
-		string(accessKeyID),
-		string(secretAccessKey),
-		"",
-		region)
+		region,
+		kclient)
 
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create AWS client %w", err)

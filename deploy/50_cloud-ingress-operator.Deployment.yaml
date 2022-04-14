@@ -34,6 +34,12 @@ spec:
               path: tls-ca-bundle.pem
           name: trusted-ca-bundle
         name: trusted-ca-bundle
+      - name: bound-sa-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: openshift
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
@@ -67,4 +73,5 @@ spec:
           - mountPath: /etc/pki/ca-trust/extracted/pem
             name: trusted-ca-bundle
             readOnly: true
-            
+          - name: bound-sa-token
+            mountPath: /var/run/secrets/openshift/serviceaccount
