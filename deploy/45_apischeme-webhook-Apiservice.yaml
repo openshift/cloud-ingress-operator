@@ -1,0 +1,17 @@
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+  labels:
+    name: cloud-ingress-operator-apiregistration
+  name: v1alpha1.cloudingress.managed.openshift.io 
+spec:
+  group: cloudingress.managed.openshift.io
+  groupPriorityMinimum: 2500
+  versionPriority: 10
+  version: v1alpha1
+  service:
+    namespace: openshift-cloud-ingress-operator
+    name: cloud-ingress-operator-webhook

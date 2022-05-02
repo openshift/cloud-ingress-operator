@@ -8,8 +8,8 @@
 package v1alpha1
 
 import (
-	spec "github.com/go-openapi/spec"
 	common "k8s.io/kube-openapi/pkg/common"
+	spec "k8s.io/kube-openapi/pkg/validation/spec"
 )
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
@@ -104,6 +104,11 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceC
 						},
 					},
 					"conditions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Type: []string{"array"},
 							Items: &spec.SchemaOrArray{
@@ -144,6 +149,11 @@ func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback
 						},
 					},
 					"allowedCIDRBlocks": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
 						SchemaProps: spec.SchemaProps{
 							Description: "AllowedCIDRBlocks is the list of CIDR blocks that should be allowed to access the SSHD service",
 							Type:        []string{"array"},

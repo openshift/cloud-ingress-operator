@@ -24,6 +24,7 @@ type SSHDSpec struct {
 	DNSName string `json:"dnsName"`
 
 	// AllowedCIDRBlocks is the list of CIDR blocks that should be allowed to access the SSHD service
+	// +listType=atomic
 	AllowedCIDRBlocks []string `json:"allowedCIDRBlocks"`
 
 	// Image is the URL of the SSHD container image

@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         name: cloud-ingress-operator
+        app: cloud-ingress-operator
     spec:
       serviceAccountName: cloud-ingress-operator
       affinity:
@@ -40,6 +41,9 @@ spec:
           - serviceAccountToken:
               path: token
               audience: openshift
+      - name: webhook-certs
+        secret:
+          secretName: webhook-cert
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
@@ -75,3 +79,22 @@ spec:
             readOnly: true
           - name: bound-sa-token
             mountPath: /var/run/secrets/openshift/serviceaccount
+        - name: cio-admission
+          resources:
+          requests:cpu: "200m"
+          limits:memory: "1G"
+          # Replace this with the built image name
+          image: REPLACE_IMAGE
+          command:
+          - cioadmission
+          - "--secure-port=5000"
+          - "--tls-cert-file=/var/webhook-certs/tls.crt"
+          - "--tls-private-key-file=/var/webhook-certs/tls.key"
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 5000
+            protocol: TCP
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /var/webhook-certs
+              readOnly: true

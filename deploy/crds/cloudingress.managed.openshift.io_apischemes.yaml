@@ -111,6 +111,7 @@ spec:
                   - status
                   type: object
                 type: array
+                x-kubernetes-list-type: atomic
               state:
                 description: APISchemeConditionType - APISchemeConditionType
                 type: string

@@ -22,3 +22,24 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - flowcontrol.apiserver.k8s.io
+  resources:
+  - flowschemas
+  - prioritylevelconfigurations
+  verbs:
+  - list
+  - get
+  - watch
+- apiGroups:
+  - admission.managed.openshift.io
+  resources:
+  - apischemevalidators
+  verbs:
+  - create

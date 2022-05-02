@@ -1,0 +1,48 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: cloudingress.managed.openshift.io
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+webhooks:
+- name: apischemevalidators.cloudingress.managed.openshift.io
+  admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      namespace: openshift-cloud-ingress-operator
+      name: cloud-ingress-operator-webhook
+      path: /apis/cloudingress.managed.openshift.io/v1alpha1/apischemes
+  rules:
+  - operations:
+    - DELETE
+    apiGroups:
+    - cloudingress.managed.openshift.io
+    apiVersions:
+    - v1alpha1
+    resources:
+    - apischemes
+    scope: "Namespaced"
+  failurePolicy: Fail
+  sideEffects: None
+- name: sshdvalidators.cloudingress.managed.openshift.io
+  admissionReviewVersions:
+  - v1beta1
+  clientConfig:
+    service:
+      namespace: openshift-cloud-ingress-operator
+      name: cloud-ingress-operator-webhook
+      path: /apis/cloudingress.managed.openshift.io/v1alpha1/sshds
+  rules:
+  - operations:
+    - DELETE
+    apiGroups:
+    - cloudingress.managed.openshift.io
+    apiVersions:
+    - v1alpha1
+    resources:
+    - sshds
+    scope: "Namespaced"
+  failurePolicy: Fail
+  sideEffects: None

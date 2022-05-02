@@ -42,6 +42,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               configMapSelector:
                 description: ConfigMapSelector is a label selector to isolate config
                   maps containing SSH authorized keys to be mounted into the SSHD
