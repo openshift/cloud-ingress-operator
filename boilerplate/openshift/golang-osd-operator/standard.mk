@@ -75,7 +75,13 @@ GOARCH?=$(shell go env GOARCH)
 # Consumers may override GOFLAGS_MOD e.g. to use `-mod=vendor`
 unexport GOFLAGS
 GOFLAGS_MOD ?=
-GOENV=GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 GOFLAGS=${GOFLAGS_MOD}
+
+ifeq (${FIPS_ENABLED}, true)
+GOFLAGS_MOD+=-tags=fips_enabled
+GOFLAGS_MOD:=$(strip ${GOFLAGS_MOD})
+endif
+
+GOENV=GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 GOFLAGS="${GOFLAGS_MOD}"
 
 GOBUILDFLAGS=-gcflags="all=-trimpath=${GOPATH}" -asmflags="all=-trimpath=${GOPATH}"
 
@@ -191,6 +197,10 @@ openapi-generate:
 .PHONY: generate
 generate: op-generate go-generate openapi-generate
 
+ifeq (${FIPS_ENABLED}, true)
+go-build: ensure-fips
+endif
+
 .PHONY: go-build
 go-build: ## Build binary
 	# Force GOOS=linux as we may want to build containers in other *nix-like systems (ie darwin).
@@ -272,3 +282,7 @@ opm-build-push: docker-push
 	OPERATOR_IMAGE_TAG="${OPERATOR_IMAGE_TAG}" \
 	OLM_CHANNEL="${OLM_CHANNEL}" \
 	${CONVENTION_DIR}/build-opm-catalog.sh
+
+.PHONY: ensure-fips
+ensure-fips:
+	${CONVENTION_DIR}/configure-fips.sh
