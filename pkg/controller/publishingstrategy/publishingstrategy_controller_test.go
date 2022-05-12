@@ -713,7 +713,7 @@ func TestReconcile(t *testing.T) {
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
 			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
-			ClientErr:     map[string]string{"on": "Get", "type": "InternalError", "target": "*v1.IngressController"},
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
