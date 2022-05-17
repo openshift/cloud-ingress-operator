@@ -14,11 +14,11 @@ import (
 	"github.com/openshift/cloud-ingress-operator/pkg/apis"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/controller"
+	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/version"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	configv1 "github.com/openshift/api/config/v1"
-	operatorv1 "github.com/openshift/api/operator/v1"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -166,12 +166,12 @@ func main() {
 		log.Error(err, "")
 		os.Exit(1)
 	}
-	if err := operatorv1.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
 	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "error registering prometheus monitoring objects")
+		os.Exit(1)
+	}
+	if err := ingresscontroller.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
 		os.Exit(1)
 	}
 

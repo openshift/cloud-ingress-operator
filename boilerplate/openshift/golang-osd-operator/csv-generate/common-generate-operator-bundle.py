@@ -44,7 +44,7 @@ BUNDLE_PERMITTED_RESOURCES = (
 parser = argparse.ArgumentParser()
 parser.add_argument("-o", "--operator-name", type=str, help="Name of the operator", required=True)
 parser.add_argument("-d", "--output-dir", type=str, help="Directory for the CSV generation", required=True)
-parser.add_argument("-p", "--previous-version", type=str, help="Semver of the version being replaced", required=True)
+parser.add_argument("-p", "--previous-version", type=str, help="Semver of the version being replaced", required=False)
 parser.add_argument("-i", "--operator-image", type=str, help="Base index image to be used", required=True)
 parser.add_argument("-V", "--operator-version", type=str, help="The full version of the operator (without the leading `v`): {major}.{minor}.{commit-number}-{hash}", required=True)
 args = parser.parse_args()
@@ -359,7 +359,8 @@ for kind, docs in by_kind.items():
 # Update the versions to include git hash:
 csv['metadata']['name'] = f"{OPERATOR_NAME}.v{full_version}"
 csv['spec']['version'] = full_version
-csv['spec']['replaces'] = f"{OPERATOR_NAME}.v{prev_version}"
+if prev_version:
+    csv['spec']['replaces'] = f"{OPERATOR_NAME}.v{prev_version}"
 
 # Set the CSV createdAt annotation:
 now = datetime.datetime.now()

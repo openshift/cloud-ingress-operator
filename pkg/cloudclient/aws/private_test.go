@@ -215,10 +215,11 @@ func TestAWSProviderDecode(t *testing.T) {
 
 type mockDescribeELBv2LoadBalancers struct {
 	elbv2iface.ELBV2API
-	Resp        elbv2.DescribeLoadBalancersOutput
-	ErrResp     string
-	TagsResp    elbv2.DescribeTagsOutput
-	TagsErrResp string
+	Resp                elbv2.DescribeLoadBalancersOutput
+	ErrResp             string
+	TagsResp            elbv2.DescribeTagsOutput
+	TagsFilteredResp    elbv2.DescribeTagsOutput
+	TagsErrResp         string
 }
 
 func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancers(_ *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
@@ -253,7 +254,19 @@ func (m mockDescribeELBv2LoadBalancers) DescribeTags(input *elbv2.DescribeTagsIn
 	if m.TagsErrResp != "" {
 		e = awserr.New(m.TagsErrResp, m.TagsErrResp, fmt.Errorf("Error raised by test"))
 	}
-	return &m.TagsResp, e
+
+	m.TagsFilteredResp = elbv2.DescribeTagsOutput{}
+
+	for _, arn := range input.ResourceArns {
+		for _, tagDesc := range m.TagsResp.TagDescriptions {
+
+			if *arn == *(tagDesc.ResourceArn) {
+				m.TagsFilteredResp.TagDescriptions = append(m.TagsFilteredResp.TagDescriptions, tagDesc)
+			}
+		}
+	}
+
+	return &m.TagsFilteredResp, e
 }
 
 func TestGetInternalAPINLB(t *testing.T) {
@@ -318,7 +331,7 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 				},
@@ -364,7 +377,7 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -425,11 +438,11 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:654321"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -497,11 +510,11 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:654321"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -520,9 +533,10 @@ func TestGetInternalAPINLB(t *testing.T) {
 	for _, test := range tests {
 		client := &Client{
 			elbv2Client: mockDescribeELBv2LoadBalancers{
-				Resp:        test.Resp,
-				TagsResp:    test.TagsResp,
-				TagsErrResp: "",
+				Resp:              test.Resp,
+				TagsResp:          test.TagsResp,
+				TagsFilteredResp:  elbv2.DescribeTagsOutput{},
+				TagsErrResp:       "",
 			},
 		}
 		resp, err := client.getInteralAPINLB(mocks.FakeKubeClient)

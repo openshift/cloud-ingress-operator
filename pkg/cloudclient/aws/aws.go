@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -23,7 +22,7 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -44,55 +43,80 @@ type Client struct {
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) EnsureAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.ensureAdminAPIDNS(ctx, kclient, instance, svc)
+func (ac *Client) EnsureAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.ensureAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteAdminAPIDNS implements cloudclient.CloudClient
-func (c *Client) DeleteAdminAPIDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
-	return c.deleteAdminAPIDNS(ctx, kclient, instance, svc)
+func (ac *Client) DeleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.APIScheme, svc *corev1.Service) error {
+	return ac.deleteAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
 // EnsureSSHDNS implements cloudclient.CloudClient
-func (c *Client) EnsureSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.ensureSSHDNS(ctx, kclient, instance, svc)
+func (ac *Client) EnsureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.ensureSSHDNS(ctx, kclient, instance, svc)
 }
 
 // DeleteSSHDNS implements cloudclient.CloudClient
-func (c *Client) DeleteSSHDNS(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return c.deleteSSHDNS(ctx, kclient, instance, svc)
+func (ac *Client) DeleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
+	return ac.deleteSSHDNS(ctx, kclient, instance, svc)
 }
 
 // SetDefaultAPIPrivate implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPrivate(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPrivate(ctx, kclient, instance)
+func (ac *Client) SetDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return ac.setDefaultAPIPrivate(ctx, kclient, instance)
 }
 
 // SetDefaultAPIPublic implements cloudclient.CloudClient
-func (c *Client) SetDefaultAPIPublic(ctx context.Context, kclient client.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
-	return c.setDefaultAPIPublic(ctx, kclient, instance)
+func (ac *Client) SetDefaultAPIPublic(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
+	return ac.setDefaultAPIPublic(ctx, kclient, instance)
 }
 
 // Healthcheck performs basic calls to make sure client is healthy
-func (c *Client) Healthcheck(ctx context.Context, kclient client.Client) error {
+func (ac *Client) Healthcheck(ctx context.Context, kclient k8s.Client) error {
 	input := &elb.DescribeLoadBalancersInput{}
-	_, err := c.elbClient.DescribeLoadBalancers(input)
+	_, err := ac.elbClient.DescribeLoadBalancers(input)
 
 	return err
 }
 
-func newClient(accessID, accessSecret, token, region string) (*Client, error) {
-	awsConfig := &aws.Config{Region: aws.String(region)}
-	if token == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", accessID)
-		os.Setenv("AWS_SECRET_ACCESS_KEY", accessSecret)
-	} else {
-		awsConfig.Credentials = credentials.NewStaticCredentials(accessID, accessSecret, token)
+func newClient(region string, kclient k8s.Client) (*Client, error) {
+	sessionOptions := session.Options{
+		Config: aws.Config{
+			Region: aws.String(region),
+		},
 	}
-	s, err := session.NewSession(awsConfig)
+
+	creds := &corev1.Secret{}
+	err := kclient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      config.AWSSecretName,
+			Namespace: config.OperatorNamespace,
+		},
+		creds)
+
+	if err != nil {
+		panic(fmt.Sprintf("Couldn't get secret with credentials %s", err.Error()))
+	}
+
+	// get sharedCredsFile from secret
+	sharedCredsFile, err := SharedCredentialsFileFromSecret(creds)
 	if err != nil {
 		return nil, err
 	}
+
+	sessionOptions.SharedConfigState = session.SharedConfigEnable // Force enable Shared Config support
+	sessionOptions.SharedConfigFiles = []string{sharedCredsFile}  // Ordered list of files the session will load configuration from.
+
+	s, err := session.NewSessionWithOptions(sessionOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove temporary shared credentials token at end of func after creating session
+	defer os.Remove(sharedCredsFile)
+
 	return &Client{
 		ec2Client:     ec2.New(s),
 		elbClient:     elb.New(s),
@@ -102,36 +126,15 @@ func newClient(accessID, accessSecret, token, region string) (*Client, error) {
 }
 
 // NewClient creates a new CloudClient for use with AWS.
-func NewClient(kclient client.Client) (*Client, error) {
+func NewClient(kclient k8s.Client) (*Client, error) {
 	region, err := getClusterRegion(kclient)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get cluster region %w", err)
 	}
-	secret := &corev1.Secret{}
-	err = kclient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      config.AWSSecretName,
-			Namespace: config.OperatorNamespace,
-		},
-		secret)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't get Secret with credentials %w", err)
-	}
-	accessKeyID, ok := secret.Data["aws_access_key_id"]
-	if !ok {
-		return nil, fmt.Errorf("access credentials missing key")
-	}
-	secretAccessKey, ok := secret.Data["aws_secret_access_key"]
-	if !ok {
-		return nil, fmt.Errorf("access credentials missing secret key")
-	}
 
 	c, err := newClient(
-		string(accessKeyID),
-		string(secretAccessKey),
-		"",
-		region)
+		region,
+		kclient)
 
 	if err != nil {
 		return nil, fmt.Errorf("couldn't create AWS client %w", err)

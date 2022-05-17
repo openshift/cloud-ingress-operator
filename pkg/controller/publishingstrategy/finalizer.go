@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/openshift/api/operator/v1"
 	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 )
 
 // addFinalizer adds Finalizer to an IngressController
-func (r *ReconcilePublishingStrategy) addFinalizer(reqLogger logr.Logger, ingressController *operatorv1.IngressController, finalizer string) error {
+func (r *ReconcilePublishingStrategy) addFinalizer(reqLogger logr.Logger, ingressController *ingresscontroller.IngressController, finalizer string) error {
 	reqLogger.Info(fmt.Sprintf("Adding Finalizer %v for the IngressController %v", finalizer, ingressController.Name))
 	ingressController.SetFinalizers(append(ingressController.GetFinalizers(), finalizer))
 
@@ -24,7 +24,7 @@ func (r *ReconcilePublishingStrategy) addFinalizer(reqLogger logr.Logger, ingres
 }
 
 // removeFinalizer removes a Finalizer from an IngressController
-func (r *ReconcilePublishingStrategy) removeFinalizer(reqLogger logr.Logger, ingressController *operatorv1.IngressController, finalizer string) error {
+func (r *ReconcilePublishingStrategy) removeFinalizer(reqLogger logr.Logger, ingressController *ingresscontroller.IngressController, finalizer string) error {
 	reqLogger.Info(fmt.Sprintf("Removing Finalizer %v for the IngressController %v", finalizer, ingressController.Name))
 	ingressController.SetFinalizers(ctlutils.Remove(ingressController.GetFinalizers(), finalizer))
 

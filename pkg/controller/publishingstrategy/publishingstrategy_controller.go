@@ -7,12 +7,10 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	configv1 "github.com/openshift/api/config/v1"
-	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +44,7 @@ var IngressControllerSelector patchField = "IngressControllerSelector"
 var IngressControllerCertificate patchField = "IngressControllerCertificate"
 var IngressControllerNodePlacement patchField = "IngressControllerNodePlacement"
 var IngressControllerEndPoint patchField = "IngressControllerEndpoint"
+var IngressControllerDeleteLBAnnotation string = "ingress.operator.openshift.io/auto-delete-load-balancer"
 
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -67,7 +66,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to primary resource PublishingStrategy
-	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.PublishingStrategy{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v1alpha1.PublishingStrategy{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -98,7 +97,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 	reqLogger.Info("Reconciling PublishingStrategy")
 
 	// Fetch the PublishingStrategy instance
-	instance := &cloudingressv1alpha1.PublishingStrategy{}
+	instance := &v1alpha1.PublishingStrategy{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
@@ -112,7 +111,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 	}
 
 	// Get all IngressControllers on cluster with an annotation that indicates cloud-ingress-operator owns it
-	ingressControllerList := &operatorv1.IngressControllerList{}
+	ingressControllerList := &ingresscontroller.IngressControllerList{}
 	listOptions := []client.ListOption{
 		client.InNamespace("openshift-ingress-operator"),
 	}
@@ -208,7 +207,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 		// Attempt to find the IngressController referenced by the ApplicationIngress
 		// by doing a GET of the namespaced name object build above against the k8s api.
-		ingressController := &operatorv1.IngressController{}
+		ingressController := &ingresscontroller.IngressController{}
 		err = r.client.Get(context.TODO(), namespacedName, ingressController)
 		if err != nil {
 			// Attempt to create the CR if not found
@@ -253,7 +252,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		}
 	}
 
-	result, err := r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
+	result, err := r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
+	result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
 	if err != nil || result.Requeue {
 		return result, err
 	}
@@ -274,16 +278,16 @@ func getIngressName(dnsName string) string {
 }
 
 // Generates an IngressController CR object based on the configuration of an ApplicationIngress instance
-func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operatorv1.IngressController {
+func generateIngressController(appIngress v1alpha1.ApplicationIngress) *ingresscontroller.IngressController {
 	// Translate the ApplicationIngress listening string into the matching type for the IngressController
-	loadBalancerScope := operatorv1.LoadBalancerScope("")
+	loadBalancerScope := ingresscontroller.LoadBalancerScope("")
 	switch appIngress.Listening {
 	case "internal":
-		loadBalancerScope = operatorv1.InternalLoadBalancer
+		loadBalancerScope = ingresscontroller.InternalLoadBalancer
 	case "external":
-		loadBalancerScope = operatorv1.ExternalLoadBalancer
+		loadBalancerScope = ingresscontroller.ExternalLoadBalancer
 	default:
-		loadBalancerScope = operatorv1.ExternalLoadBalancer
+		loadBalancerScope = ingresscontroller.ExternalLoadBalancer
 	}
 
 	ingressName := getIngressName(appIngress.DNSName)
@@ -292,7 +296,7 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operator
 	}
 
 	// Builds the IngressController CR object based on the ApplicationIngress
-	return &operatorv1.IngressController{
+	return &ingresscontroller.IngressController{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ingressName,
 			Namespace: ingressControllerNamespace,
@@ -300,11 +304,11 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operator
 				"Owner": "cloud-ingress-operator",
 			},
 		},
-		Spec: operatorv1.IngressControllerSpec{
+		Spec: ingresscontroller.IngressControllerSpec{
 			DefaultCertificate: &corev1.LocalObjectReference{
 				Name: appIngress.Certificate.Name,
 			},
-			NodePlacement: &operatorv1.NodePlacement{
+			NodePlacement: &ingresscontroller.NodePlacement{
 				NodeSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{infraNodeLabelKey: ""},
 				},
@@ -317,9 +321,9 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *operator
 				},
 			},
 			Domain: appIngress.DNSName,
-			EndpointPublishingStrategy: &operatorv1.EndpointPublishingStrategy{
-				Type: operatorv1.LoadBalancerServiceStrategyType,
-				LoadBalancer: &operatorv1.LoadBalancerStrategy{
+			EndpointPublishingStrategy: &ingresscontroller.EndpointPublishingStrategy{
+				Type: ingresscontroller.LoadBalancerServiceStrategyType,
+				LoadBalancer: &ingresscontroller.LoadBalancerStrategy{
 					Scope: loadBalancerScope,
 				},
 			},
@@ -338,16 +342,16 @@ filled in at all when fisrt created. Instead, the default CRs status holds the c
 is meant to be used when the default CRs spec is not filled in to see if the desired configuration is present in
 its status instead. Returns false if at least one of the existing fields don't match the desired.
 */
-func validateStaticStatus(ingressController operatorv1.IngressController, desiredSpec operatorv1.IngressControllerSpec) bool {
+func validateStaticStatus(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) bool {
 
 	if !(desiredSpec.Domain == ingressController.Status.Domain) {
 		return false
 	}
 	if !baseutils.IsVersionHigherThan("4.10") {
-	// Preventing nil pointer errors
+		// Preventing nil pointer errors
 		if ingressController.Status.EndpointPublishingStrategy == nil || ingressController.Status.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false
@@ -363,22 +367,21 @@ that editing them will have no effect. Instead, the CR must be fully deleted and
 Domain and EndpointPublishingStrategy filled in. Returns false if at least one of the existing fields don't match the desired
 */
 
-func validateStaticSpec(ingressController operatorv1.IngressController, desiredSpec operatorv1.IngressControllerSpec) bool {
+func validateStaticSpec(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) bool {
 	if !(desiredSpec.Domain == ingressController.Spec.Domain) {
 		return false
 	}
 
 	if !baseutils.IsVersionHigherThan("4.10") {
-	// Preventing nil pointer errors
+		// Preventing nil pointer errors
 		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false
-		}	
-	}	
-	
+		}
+	}
 
 	return true
 }
@@ -425,7 +428,7 @@ filled in at all when fisrt created. Instead, the default CRs status holds the c
 is meant to be used when the default CRs spec is not filled in to see if the desired configuration is present in
 its status instead. Returns false if the RouteSelector in the status is empty or does not match the desired Spec.
 */
-func validatePatchableStatus(ingressController operatorv1.IngressController, desiredSpec operatorv1.IngressControllerSpec) (bool, patchField) {
+func validatePatchableStatus(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) (bool, patchField) {
 	ingressControllerSelector, _ := metav1.ParseToLabelSelector(ingressController.Status.Selector)
 	if ingressControllerSelector != nil {
 		if !(reflect.DeepEqual(desiredSpec.RouteSelector.MatchLabels, ingressControllerSelector.MatchLabels)) {
@@ -444,7 +447,7 @@ func validatePatchableStatus(ingressController operatorv1.IngressController, des
 Both the DefaultCertificate and the RouteSelector fields in the IngressController spec are patchable.
 The function returns false if a field doesn't match and which field specifically should be changed.
 */
-func validatePatchableSpec(ingressController operatorv1.IngressController, desiredSpec operatorv1.IngressControllerSpec) (bool, patchField) {
+func validatePatchableSpec(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) (bool, patchField) {
 
 	// Preventing nil pointer errors
 	if ingressController.Spec.RouteSelector == nil {
@@ -476,20 +479,20 @@ func validatePatchableSpec(ingressController operatorv1.IngressController, desir
 		// Preventing nil pointer errors
 		if ingressController.Spec.EndpointPublishingStrategy == nil || ingressController.Spec.EndpointPublishingStrategy.LoadBalancer == nil {
 			return false, IngressControllerEndPoint
-		}	
+		}
 
 		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
 			return false, IngressControllerEndPoint
-		}	
+		}
 	}
 
 	return true, ""
 }
 
 // Given an IngressControllerList, returns only IngressControllers with the cloud-ingress-operator Owner annotation
-func getIngressWithCloudIngressOpreatorOwnerAnnotation(ingressList operatorv1.IngressControllerList) *operatorv1.IngressControllerList {
+func getIngressWithCloudIngressOpreatorOwnerAnnotation(ingressList ingresscontroller.IngressControllerList) *ingresscontroller.IngressControllerList {
 
-	ownedIngressList := &operatorv1.IngressControllerList{}
+	ownedIngressList := &ingresscontroller.IngressControllerList{}
 
 	for _, ingress := range ingressList.Items {
 		if _, ok := ingress.Annotations["Owner"]; ok {
@@ -508,7 +511,7 @@ func (r *ReconcilePublishingStrategy) deleteUnpublishedIngressControllers(ownedI
 	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
 		if !inPublishingStrategy {
 			// Delete requires an object referece, so we must get it first
-			ingressToDelete := &operatorv1.IngressController{}
+			ingressToDelete := &ingresscontroller.IngressController{}
 			err = r.client.Get(context.TODO(), types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}, ingressToDelete)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -523,7 +526,7 @@ func (r *ReconcilePublishingStrategy) deleteUnpublishedIngressControllers(ownedI
 }
 
 // ensureStaticSpec deletes or marks an IngressController for deletion when a static spec has been changed in the publishing strategy
-func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
 	reqLogger.Info(fmt.Sprintf("Checking Static Spec for IngressController %s ", desiredIngressController.Name))
 	// Compare the Spec fields that cannot be patched in the desired IngressController and the actual IngressController
 	if !validateStaticSpec(*ingressController, desiredIngressController.Spec) {
@@ -569,7 +572,7 @@ func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, in
 }
 
 // ensurePatchableSpec patches an IngressController when a patchable field as been changed in the publishingstrategy
-func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
 	reqLogger.Info(fmt.Sprintf("Checking Patchable Spec for IngressController %s ", desiredIngressController.Name))
 	// All the remaining fields are mutable and don't require a deletion of the IngresscController
 	// If any of the fields are differet, that field will be patched
@@ -623,9 +626,48 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 	// do nothing, continue
 	return result, err
 }
+func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	// No action if the version is prior 4.10
+	if !baseutils.IsVersionHigherThan("4.10") {
+		return reconcile.Result{}, nil
+	}
+
+	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
+		if inPublishingStrategy {
+
+			// Get managed IngressController CRs
+			ingressController := &ingresscontroller.IngressController{}
+			namespacedName := types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}
+			if err := r.client.Get(context.TODO(), namespacedName, ingressController); err != nil {
+				return reconcile.Result{}, err
+			}
+
+			// Check if the annotation exists, return if so
+			if _, ok := ingressController.Annotations[IngressControllerDeleteLBAnnotation]; ok {
+				return reconcile.Result{}, nil
+			}
+
+			// Generate Annotation and apply to object
+			baseToPatch := client.MergeFrom(ingressController.DeepCopy())
+			annotations := map[string]string{
+				"Owner":                             "cloud-ingress-operator",
+				IngressControllerDeleteLBAnnotation: "",
+			}
+			ingressController.Annotations = annotations
+
+			// Patch
+			reqLogger.Info(fmt.Sprintf("IngressController's CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
+			if err := r.client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
 
 // ensureAliasScope updates the loadbalancer to match the scope of the ingress in the publishingstrategy
-func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *cloudingressv1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *v1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
 	cloudPlatform, err := baseutils.GetPlatformType(r.client)
 	if err != nil {
 		log.Error(err, "Failed to create a Cloud Client")
@@ -633,7 +675,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 	}
 	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
 
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.Internal {
+	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.Internal {
 		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
@@ -645,7 +687,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 
 	// if CR is wanted the default server API to be internet-facing, we
 	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
-	if instance.Spec.DefaultAPIServerIngress.Listening == cloudingressv1alpha1.External {
+	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.External {
 		err = cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
@@ -658,7 +700,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 }
 
 // ensureIngressController makes sure that an IngressController being deleted, gets recreated by cloud-ingress-operator, instead of cluster-ingress-operator
-func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *operatorv1.IngressController) (reconcile.Result, error) {
+func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (reconcile.Result, error) {
 	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
 	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
 	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
