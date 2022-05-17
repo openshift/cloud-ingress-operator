@@ -215,11 +215,11 @@ func TestAWSProviderDecode(t *testing.T) {
 
 type mockDescribeELBv2LoadBalancers struct {
 	elbv2iface.ELBV2API
-	Resp                elbv2.DescribeLoadBalancersOutput
-	ErrResp             string
-	TagsResp            elbv2.DescribeTagsOutput
-	TagsFilteredResp    elbv2.DescribeTagsOutput
-	TagsErrResp         string
+	Resp             elbv2.DescribeLoadBalancersOutput
+	ErrResp          string
+	TagsResp         elbv2.DescribeTagsOutput
+	TagsFilteredResp elbv2.DescribeTagsOutput
+	TagsErrResp      string
 }
 
 func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancers(_ *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
@@ -533,10 +533,10 @@ func TestGetInternalAPINLB(t *testing.T) {
 	for _, test := range tests {
 		client := &Client{
 			elbv2Client: mockDescribeELBv2LoadBalancers{
-				Resp:              test.Resp,
-				TagsResp:          test.TagsResp,
-				TagsFilteredResp:  elbv2.DescribeTagsOutput{},
-				TagsErrResp:       "",
+				Resp:             test.Resp,
+				TagsResp:         test.TagsResp,
+				TagsFilteredResp: elbv2.DescribeTagsOutput{},
+				TagsErrResp:      "",
 			},
 		}
 		resp, err := client.getInteralAPINLB(mocks.FakeKubeClient)
@@ -1139,10 +1139,10 @@ func TestRecordExists(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && err.Error() != test.ErrResp {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrResp, err.Error())
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrResp, err.Error())
 		}
 		if resp != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, resp)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, resp)
 		}
 
 	}

@@ -452,10 +452,10 @@ func TestEnsureIngressController(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
 		}
 		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
 
@@ -506,10 +506,10 @@ func TestDeleteUnpublishedIngressControllers(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
 		}
 		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
 }
@@ -566,10 +566,10 @@ func TestEnsureStaticSpec(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
 		}
 		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
 }
@@ -649,10 +649,10 @@ func TestEnsurePatchableSpec(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
 		}
 		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
 }
@@ -789,10 +789,10 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
 		}
 		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
 }
