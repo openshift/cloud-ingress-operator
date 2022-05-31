@@ -418,6 +418,10 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1al
 		return ingresscontroller.AWSLoadBalancerType(ps.Spec.DefaultAPIServerIngress.Type) == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
 	}
 
+	if ic.Status.EndpointPublishingStrategy == nil {
+		return false
+	}
+
 	// The status can also hold this information if its not in the spec
 	if ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
 

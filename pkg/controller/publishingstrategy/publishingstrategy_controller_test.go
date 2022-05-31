@@ -9,6 +9,7 @@ import (
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
+	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -657,7 +658,7 @@ func TestEnsurePatchableSpec(t *testing.T) {
 	}
 }
 
-func TestReconcile(t *testing.T) {
+func TestReconcileGCP(t *testing.T) {
 	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "publishingstrategy",
@@ -668,7 +669,159 @@ func TestReconcile(t *testing.T) {
 			ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
 				{
 					Default:       true,
-					DNSName:       "example-domain.example.com",
+					DNSName:       "my.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		Name          string
+		Resp          reconcile.Result
+		ClientObj     []client.Object
+		RuntimeObj    []runtime.Object
+		ClientErr     map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected bool
+		ErrorReason   string
+		LBType        string
+	}{
+		{
+			Name:          "Should complete without error when PublishingStrategy is NotFound",
+			Resp:          reconcile.Result{},
+			ErrorExpected: false,
+			ClientErr:     map[string]string{"on": "Get", "type": "IsNotFound"},
+		},
+		{
+			Name:          "Should error when failing to retrieve PublishingStrategy",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
+		},
+		{
+			Name:          "Should error when failing to list IngressControllerList",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy},
+			ClientErr:     map[string]string{"on": "List", "type": "InternalError"},
+		},
+		{
+			Name:          "Should error when failing to retrieve ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should error when failing to create missing ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
+			ClientErr:     map[string]string{"on": "Create", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue when succesfully creating missing ingresscontroller",
+			Resp:          reconcile.Result{Requeue: true},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue with delay when ingresscontroller is marked as deleted",
+			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue with erorr when failing to ensure static specs on ingresscontroller",
+			Resp:          reconcile.Result{Requeue: true},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer})},
+			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should error when failing to ensure patchable specs on ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
+			},
+			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should erorr when failing delete punblished ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
+				makeIngressControllerCR("unpublished-ingress", "external", []string{}),
+			},
+			ClientErr:  map[string]string{"on": "Delete", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+	}
+
+	for _, test := range tests {
+		// Create infrastructure object
+		infraObj := testutils.CreateGCPInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+		// Register all local CRDs with the scheme
+		testScheme := setupLocalV1alpha1Scheme(test.ClientObj, test.RuntimeObj)
+		// Add the infra object to the scheme and the runtime objects
+		testScheme.AddKnownTypes(schema.GroupVersion{Group: "config.openshift.io", Version: "v1"}, infraObj)
+		test.RuntimeObj = append(test.RuntimeObj, infraObj)
+
+		// Create the client with the scheme and objects, then wrap it in our custom client
+		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
+		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
+
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.Reconcile(context.TODO(), reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "publishingstrategy",
+				Namespace: "openshift-cloud-ingress-operator",
+			},
+		})
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func TestReconcileAWS(t *testing.T) {
+	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "publishingstrategy",
+			Namespace: "openshift-cloud-ingress-operator",
+		},
+		Spec: cloudingressv1alpha1.PublishingStrategySpec{
+			DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
+			ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "my.unit.test",
 					Listening:     "external",
 					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
 					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
@@ -736,7 +889,7 @@ func TestReconcile(t *testing.T) {
 			Name:          "Should requeue with delay when ingresscontroller is marked as deleted",
 			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
 			ErrorExpected: false,
-			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
@@ -744,18 +897,18 @@ func TestReconcile(t *testing.T) {
 			Resp:          reconcile.Result{Requeue: true},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
-			ClientObj:     []client.Object{defaultPublishingStrategy, makeIngressControllerCR("default", "internal", []string{ClusterIngressFinalizer})},
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})},
 			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
-			Name:          "Should erorr when failing to ensure patchable specs on ingresscontroller",
+			Name:          "Should error when failing to ensure patchable specs on ingresscontroller",
 			Resp:          reconcile.Result{},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
 			ClientObj: []client.Object{
 				defaultPublishingStrategy,
-				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
+				makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
 			},
 			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
@@ -767,16 +920,34 @@ func TestReconcile(t *testing.T) {
 			ErrorReason:   "InternalError",
 			ClientObj: []client.Object{
 				defaultPublishingStrategy,
-				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}),
-				makeIngressControllerCR("unpublished-ingress", "external", []string{}),
+				makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}),
+				makeAWSClassicIC("unpublished-ingress", "external", []string{}),
 			},
 			ClientErr:  map[string]string{"on": "Delete", "type": "InternalError"},
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
+		{
+			Name:          "Should requeue when PublishingStrategy and IngressController LB Types mismatch",
+			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
 	}
 
 	for _, test := range tests {
-		testClient, testScheme := setUpTestClient(test.ClientObj, test.RuntimeObj, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		// Create infrastructure object
+		infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+		// Register all local CRDs with the scheme
+		testScheme := setupLocalV1alpha1Scheme(test.ClientObj, test.RuntimeObj)
+		// Add the infra object to the scheme and the runtime objects
+		testScheme.AddKnownTypes(schema.GroupVersion{Group: "config.openshift.io", Version: "v1"}, infraObj)
+		test.RuntimeObj = append(test.RuntimeObj, infraObj)
+
+		// Create the client with the scheme and objects, then wrap it in our custom client
+		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
+		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
+
 		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.Reconcile(context.TODO(), reconcile.Request{
 			NamespacedName: types.NamespacedName{
@@ -795,6 +966,144 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
 		}
 	}
+}
+
+func TestReconsileAWSNLB(t *testing.T) {
+	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "publishingstrategy",
+			Namespace: "openshift-cloud-ingress-operator",
+		},
+		Spec: cloudingressv1alpha1.PublishingStrategySpec{
+			DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External, Type: "NLB"},
+			ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "my.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		Name          string
+		Resp          reconcile.Result
+		ClientObj     []client.Object
+		RuntimeObj    []runtime.Object
+		ClientErr     map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected bool
+		ErrorReason   string
+	}{
+		{
+			Name:          "Should requeue with delay when ingresscontroller is marked as deleted",
+			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue with erorr when failing to ensure static specs on ingresscontroller",
+			Resp:          reconcile.Result{Requeue: true},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "internal", []string{ClusterIngressFinalizer})},
+			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should error when failing to ensure patchable specs on ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
+			},
+			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should error when failing delete published ingresscontroller",
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+			ErrorReason:   "InternalError",
+			ClientObj: []client.Object{
+				defaultPublishingStrategy,
+				makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}),
+				makeAWSNLBIC("unpublished-ingress", "external", []string{}),
+			},
+			ClientErr:  map[string]string{"on": "Delete", "type": "InternalError"},
+			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+		{
+			Name:          "Should requeue when PublishingStrategy and IngressController LB Types mismatch",
+			Resp:          reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second},
+			ErrorExpected: false,
+			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+		},
+	}
+
+	for _, test := range tests {
+		// Create infrastructure object
+		infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+		// Register all local CRDs with the scheme
+		testScheme := setupLocalV1alpha1Scheme(test.ClientObj, test.RuntimeObj)
+		// Add the infra object to the scheme and the runtime objects
+		testScheme.AddKnownTypes(schema.GroupVersion{Group: "config.openshift.io", Version: "v1"}, infraObj)
+		test.RuntimeObj = append(test.RuntimeObj, infraObj)
+
+		// Create the client with the scheme and objects, then wrap it in our custom client
+		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
+		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
+
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
+		result, err := r.Reconcile(context.TODO(), reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "publishingstrategy",
+				Namespace: "openshift-cloud-ingress-operator",
+			},
+		})
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func makeAWSClassicIC(name, lbScope string, finalizers []string, overrides ...interface{}) *ingresscontroller.IngressController {
+	ic := makeIngressControllerCR(name, lbScope, finalizers, overrides...)
+
+	ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
+		Type: ingresscontroller.AWSLoadBalancerProvider,
+		AWS: &ingresscontroller.AWSLoadBalancerParameters{
+			Type: ingresscontroller.AWSClassicLoadBalancer,
+		},
+	}
+
+	return ic
+}
+
+func makeAWSNLBIC(name, lbScope string, finalizers []string, overrides ...interface{}) *ingresscontroller.IngressController {
+	ic := makeIngressControllerCR(name, lbScope, finalizers, overrides...)
+
+	ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
+		Type: ingresscontroller.AWSLoadBalancerProvider,
+		AWS: &ingresscontroller.AWSLoadBalancerParameters{
+			Type: ingresscontroller.AWSNetworkLoadBalancer,
+		},
+	}
+
+	return ic
 }
 
 // utils
@@ -852,7 +1161,7 @@ func makeIngressControllerCR(name, lbScope string, finalizers []string, override
 		Spec: ingresscontroller.IngressControllerSpec{
 			DefaultCertificate: &defaultCert,
 
-			Domain: "example-domain.example.com",
+			Domain: "my.unit.test",
 			EndpointPublishingStrategy: &ingresscontroller.EndpointPublishingStrategy{
 				Type: ingresscontroller.LoadBalancerServiceStrategyType,
 				LoadBalancer: &ingresscontroller.LoadBalancerStrategy{
@@ -866,7 +1175,6 @@ func makeIngressControllerCR(name, lbScope string, finalizers []string, override
 }
 
 //setUpTestClient builds and returns a fakeclient for testing
-//func setUpTestClient(cr *operatorv1.IngressController, errorOn, errorType string) (*customClient, *runtime.Scheme) {
 func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType, errorTarget string) (*customClient, *runtime.Scheme) {
 	s := scheme.Scheme
 	for _, v := range cr {
@@ -878,6 +1186,19 @@ func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType
 
 	testClient := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(ro...).WithObjects(cr...).Build()
 	return &customClient{testClient, errorOn, errorType, errorTarget}, s
+}
+
+// Registers the CIO CRDs
+func setupLocalV1alpha1Scheme(cr []client.Object, ro []runtime.Object) *runtime.Scheme {
+	s := scheme.Scheme
+	for _, v := range cr {
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
+	}
+	for _, v := range ro {
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
+	}
+
+	return s
 }
 
 // A custom k8s client, which can fail on demand, on get, create, update or delete operations
