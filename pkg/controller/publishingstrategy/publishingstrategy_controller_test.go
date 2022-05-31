@@ -757,7 +757,7 @@ func TestReconcileGCP(t *testing.T) {
 			ErrorReason:   "InternalError",
 			ClientObj: []client.Object{
 				defaultPublishingStrategy,
-				makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
+				makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer}, metav1.LabelSelector{MatchLabels: map[string]string{"random": "label"}}),
 			},
 			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
@@ -968,7 +968,7 @@ func TestReconcileAWS(t *testing.T) {
 	}
 }
 
-func TestReconsileAWSNLB(t *testing.T) {
+func TestReconcileAWSNLB(t *testing.T) {
 	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "publishingstrategy",
