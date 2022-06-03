@@ -241,7 +241,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
 		if isAWS {
-			result, err := r.enureAWSLoadBalancerType(reqLogger, ingressController, *instance)
+			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, *instance)
 			if err != nil || result.Requeue {
 				return result, err
 			}
@@ -393,7 +393,7 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	return true
 }
 
-func (r *ReconcilePublishingStrategy) enureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ps v1alpha1.PublishingStrategy) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ps v1alpha1.PublishingStrategy) (result reconcile.Result, err error) {
 
 	if !validateAWSLoadBalancerType(*ic, ps) {
 
