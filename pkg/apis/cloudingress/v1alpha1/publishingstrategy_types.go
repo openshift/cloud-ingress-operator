@@ -46,6 +46,8 @@ type Listening string
 type Type string
 
 const (
+	Classic Type = "Classic"
+	NLB     Type = "NLB"
 	// Internal const for listening status
 	Internal Listening = "internal"
 	// External const for listening status

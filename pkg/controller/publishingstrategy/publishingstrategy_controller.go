@@ -201,7 +201,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 			// Default to Classic LB to match default IngressController behavior
 			if instance.Spec.DefaultAPIServerIngress.Type == "" {
-				instance.Spec.DefaultAPIServerIngress.Type = "Classic"
+				instance.Spec.DefaultAPIServerIngress.Type = v1alpha1.Classic
 			}
 
 			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
@@ -421,7 +421,7 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1al
 		}
 
 		// When ProviderParameters is not set, the IngressController defaults to Classic, so we only need to ensure the PublishingStrategy Type is not set to  NLB
-		if ps.Spec.DefaultAPIServerIngress.Type == "NLB" {
+		if ps.Spec.DefaultAPIServerIngress.Type == v1alpha1.NLB {
 			return false
 		}
 	}
