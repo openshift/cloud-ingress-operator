@@ -424,6 +424,8 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1al
 		if ps.Spec.DefaultAPIServerIngress.Type == "NLB" {
 			return false
 		}
+
+		return true
 	}
 
 	// If ProviderParameters are set on the IngressController, then the Type in the PublishingStrategy needs to match exacly
