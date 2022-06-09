@@ -200,14 +200,14 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		if isAWS {
 
 			// Default to Classic LB to match default IngressController behavior
-			if instance.Spec.DefaultAPIServerIngress.Type == "" {
-				instance.Spec.DefaultAPIServerIngress.Type = "Classic"
+			if ingressDefinition.Type == "" {
+				ingressDefinition.Type = "Classic"
 			}
 
 			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
 				Type: ingresscontroller.AWSLoadBalancerProvider,
 				AWS: &ingresscontroller.AWSLoadBalancerParameters{
-					Type: ingresscontroller.AWSLoadBalancerType(instance.Spec.DefaultAPIServerIngress.Type),
+					Type: ingresscontroller.AWSLoadBalancerType(ingressDefinition.Type),
 				},
 			}
 		}
@@ -241,7 +241,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
 		if isAWS {
-			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, *instance)
+			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, ingressDefinition)
 			if err != nil || result.Requeue {
 				return result, err
 			}
@@ -393,9 +393,9 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	return true
 }
 
-func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ps v1alpha1.PublishingStrategy) (result reconcile.Result, err error) {
+func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
 
-	if !validateAWSLoadBalancerType(*ic, ps) {
+	if !validateAWSLoadBalancerType(*ic, ai) {
 
 		if err := r.client.Delete(context.TODO(), ic); err != nil {
 			reqLogger.Error(err, "Error deleting IngressController")
@@ -406,7 +406,7 @@ func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.L
 	return result, nil
 }
 
-func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1alpha1.PublishingStrategy) bool {
+func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) bool {
 
 	if ic.Spec.EndpointPublishingStrategy == nil {
 
@@ -417,11 +417,11 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1al
 		// The status can also hold this information if its not in the spec
 		if ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
 
-			return ingresscontroller.AWSLoadBalancerType(ps.Spec.DefaultAPIServerIngress.Type) == ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+			return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
 		}
 
 		// When ProviderParameters is not set, the IngressController defaults to Classic, so we only need to ensure the PublishingStrategy Type is not set to  NLB
-		if ps.Spec.DefaultAPIServerIngress.Type == "NLB" {
+		if ai.Type == "NLB" {
 			return false
 		}
 
@@ -431,7 +431,7 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ps v1al
 	// If ProviderParameters are set on the IngressController, then the Type in the PublishingStrategy needs to match exacly
 	if ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
 
-		return ingresscontroller.AWSLoadBalancerType(ps.Spec.DefaultAPIServerIngress.Type) == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+		return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
 	}
 
 	return true
@@ -673,7 +673,7 @@ func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Lo
 			ingressController.Annotations = annotations
 
 			// Patch
-			reqLogger.Info(fmt.Sprintf("IngressController's CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
+			reqLogger.Info(fmt.Sprintf("IngressController CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
 			if err := r.client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
 				return reconcile.Result{}, err
 			}

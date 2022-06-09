@@ -113,6 +113,12 @@ spec:
                             only "value". The requirements are ANDed.
                           type: object
                       type: object
+                    type:
+                      description: Type indicates the type of Load Balancer to use
+                      enum:
+                      - Classic
+                      - NLB
+                      type: string
                   required:
                   - certificate
                   - default
@@ -125,12 +131,6 @@ spec:
                 properties:
                   listening:
                     description: Listening defines internal or external ingress
-                    type: string
-                  type:
-                    description: Type indicates the type of Load Balancer to use
-                    enum:
-                    - Classic
-                    - NLB
                     type: string
                 type: object
             required:

@@ -975,7 +975,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			Namespace: "openshift-cloud-ingress-operator",
 		},
 		Spec: cloudingressv1alpha1.PublishingStrategySpec{
-			DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External, Type: "NLB"},
+			DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
 			ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
 				{
 					Default:       true,
@@ -983,6 +983,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 					Listening:     "external",
 					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
 					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+					Type:          "NLB",
 				},
 			},
 		},

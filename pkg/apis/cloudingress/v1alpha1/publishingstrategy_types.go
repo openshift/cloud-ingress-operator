@@ -24,7 +24,6 @@ type PublishingStrategySpec struct {
 type DefaultAPIServerIngress struct {
 	// Listening defines internal or external ingress
 	Listening Listening `json:"listening,omitempty"`
-	Type      Type      `json:"type,omitempty"`
 }
 
 // ApplicationIngress defines application ingress
@@ -36,6 +35,7 @@ type ApplicationIngress struct {
 	DNSName       string                 `json:"dnsName"`
 	Certificate   corev1.SecretReference `json:"certificate"`
 	RouteSelector metav1.LabelSelector   `json:"routeSelector,omitempty"`
+	Type          Type                   `json:"type,omitempty"`
 }
 
 // Listening defines internal or external api and ingress
