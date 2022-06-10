@@ -721,7 +721,7 @@ func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Log
 	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
 	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
 	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
-		reqLogger.Info(fmt.Sprintf("%s IngressController's  is in the process of being deleted, requeing", ingressController.Name))
+		reqLogger.Info(fmt.Sprintf("%s IngressController is in the process of being deleted, requeing", ingressController.Name))
 		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
