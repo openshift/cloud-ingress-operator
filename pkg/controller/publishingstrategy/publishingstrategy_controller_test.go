@@ -893,7 +893,7 @@ func TestReconcileAWS(t *testing.T) {
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
-			Name:          "Should requeue with erorr when failing to ensure static specs on ingresscontroller",
+			Name:          "Should requeue with error when failing to ensure static specs on ingresscontroller",
 			Resp:          reconcile.Result{Requeue: true},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
@@ -914,7 +914,7 @@ func TestReconcileAWS(t *testing.T) {
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
-			Name:          "Should erorr when failing delete punblished ingresscontroller",
+			Name:          "Should error when failing delete punblished ingresscontroller",
 			Resp:          reconcile.Result{},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
@@ -1006,7 +1006,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
-			Name:          "Should requeue with erorr when failing to ensure static specs on ingresscontroller",
+			Name:          "Should requeue with error when failing to ensure static specs on ingresscontroller",
 			Resp:          reconcile.Result{Requeue: true},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
@@ -1027,7 +1027,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
 		},
 		{
-			Name:          "Should error when failing delete published ingresscontroller",
+			Name:          "Should error when failing to delete published ingresscontroller",
 			Resp:          reconcile.Result{},
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
