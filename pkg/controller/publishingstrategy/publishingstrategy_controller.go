@@ -438,7 +438,6 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1al
 		return ai.Type != "NLB"
 	}
 
-	fmt.Printf("No cases caught. Desired: %s\n", ai.Type)
 	return true
 
 }
