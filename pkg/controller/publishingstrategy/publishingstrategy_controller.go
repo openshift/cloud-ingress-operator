@@ -241,6 +241,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
 		if isAWS {
+			reqLogger.Info("Cluster is AWS, checking load balancers")
 			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, ingressDefinition)
 			if err != nil || result.Requeue {
 				return result, err
@@ -396,7 +397,6 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
 
 	if !validateAWSLoadBalancerType(*ic, ai) {
-
 		if err := r.client.Delete(context.TODO(), ic); err != nil {
 			reqLogger.Error(err, "Error deleting IngressController")
 		}
@@ -409,14 +409,12 @@ func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.L
 func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) bool {
 
 	if ic.Spec.EndpointPublishingStrategy == nil {
-
 		if ic.Status.EndpointPublishingStrategy == nil {
 			return false
 		}
 
 		// The status can also hold this information if its not in the spec
 		if ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
-
 			return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
 		}
 
@@ -430,10 +428,17 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1al
 
 	// If ProviderParameters are set on the IngressController, then the Type in the PublishingStrategy needs to match exacly
 	if ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
-
 		return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
 	}
 
+	// If ProviderParameters aren't provided, but the LB config is, the default is Classic
+	// The return then relies on if the desired is NLB
+	if ic.Spec.EndpointPublishingStrategy.LoadBalancer != nil {
+		// If desired is Classic then we're at the desired state and return true
+		return ai.Type != "NLB"
+	}
+
+	fmt.Printf("No cases caught. Desired: %s\n", ai.Type)
 	return true
 
 }
