@@ -35,10 +35,15 @@ type ApplicationIngress struct {
 	DNSName       string                 `json:"dnsName"`
 	Certificate   corev1.SecretReference `json:"certificate"`
 	RouteSelector metav1.LabelSelector   `json:"routeSelector,omitempty"`
+	Type          Type                   `json:"type,omitempty"`
 }
 
 // Listening defines internal or external api and ingress
 type Listening string
+
+// Type indicates the type of Load Balancer to use
+// +kubebuilder:validation:Enum=Classic;NLB
+type Type string
 
 const (
 	// Internal const for listening status

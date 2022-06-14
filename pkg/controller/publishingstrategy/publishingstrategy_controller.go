@@ -191,6 +191,27 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// This generated spec will be compared against the actual spec as desrcibed above
 		desiredIngressController := generateIngressController(ingressDefinition)
 
+		cloudPlatform, err := baseutils.GetPlatformType(r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		isAWS := *cloudPlatform == "AWS"
+		// Add ProviderParameters if the cloud is AWS to ensure LB type matches
+		if isAWS {
+
+			// Default to Classic LB to match default IngressController behavior
+			if ingressDefinition.Type == "" {
+				ingressDefinition.Type = "Classic"
+			}
+
+			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
+				Type: ingresscontroller.AWSLoadBalancerProvider,
+				AWS: &ingresscontroller.AWSLoadBalancerParameters{
+					Type: ingresscontroller.AWSLoadBalancerType(ingressDefinition.Type),
+				},
+			}
+		}
+
 		// Attempt to find the IngressController referenced by the ApplicationIngress
 		// by doing a GET of the namespaced name object build above against the k8s api.
 		ingressController := &ingresscontroller.IngressController{}
@@ -216,6 +237,16 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// services (ie the load balancer service has finalizers for the cloud provider resource cleanup)
 		if !ingressController.DeletionTimestamp.IsZero() {
 			return r.ensureIngressController(reqLogger, ingressController, desiredIngressController)
+		}
+
+		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
+		if isAWS {
+			reqLogger.Info("Cluster is AWS, checking load balancers")
+			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, ingressDefinition)
+			if err != nil || result.Requeue {
+				return result, err
+			}
+
 		}
 
 		result, err := r.ensureStaticSpec(reqLogger, ingressController, desiredIngressController)
@@ -361,6 +392,54 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	}
 
 	return true
+}
+
+func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
+
+	if !validateAWSLoadBalancerType(*ic, ai) {
+		if err := r.client.Delete(context.TODO(), ic); err != nil {
+			reqLogger.Error(err, "Error deleting IngressController")
+		}
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	return result, nil
+}
+
+func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) bool {
+
+	if ic.Spec.EndpointPublishingStrategy == nil {
+		if ic.Status.EndpointPublishingStrategy == nil {
+			return false
+		}
+
+		// The status can also hold this information if its not in the spec
+		if ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
+			return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Status.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+		}
+
+		// When ProviderParameters is not set, the IngressController defaults to Classic, so we only need to ensure the PublishingStrategy Type is not set to  NLB
+		if ai.Type == "NLB" {
+			return false
+		}
+
+		return true
+	}
+
+	// If ProviderParameters are set on the IngressController, then the Type in the PublishingStrategy needs to match exacly
+	if ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters != nil {
+		return ingresscontroller.AWSLoadBalancerType(ai.Type) == ic.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.Type
+	}
+
+	// If ProviderParameters aren't provided, but the LB config is, the default is Classic
+	// The return then relies on if the desired is NLB
+	if ic.Spec.EndpointPublishingStrategy.LoadBalancer != nil {
+		// If desired is Classic then we're at the desired state and return true
+		return ai.Type != "NLB"
+	}
+
+	return true
+
 }
 
 /* Compares the patchable desired Spec against the existing IngressController's status.
@@ -598,7 +677,7 @@ func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Lo
 			ingressController.Annotations = annotations
 
 			// Patch
-			reqLogger.Info(fmt.Sprintf("IngressController's CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
+			reqLogger.Info(fmt.Sprintf("IngressController CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
 			if err := r.client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -646,7 +725,7 @@ func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Log
 	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
 	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
 	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
-		reqLogger.Info(fmt.Sprintf("%s IngressController's  is in the process of being deleted, requeing", ingressController.Name))
+		reqLogger.Info(fmt.Sprintf("%s IngressController is in the process of being deleted, requeing", ingressController.Name))
 		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
