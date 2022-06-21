@@ -1051,61 +1051,6 @@ func TestRecordExists(t *testing.T) {
 			ErrorExpected: false,
 		},
 		{
-			Name: "Record shouldn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(false),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name but missmatched Type shouldn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(false),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("AAAA"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name and Type, but no AliasTarget, shoudn't exist",
-			Record: &route53.ResourceRecordSet{
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name and Type, but missmatched AliasTarget.EvaluateTargetHealth , shoudn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(true),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
 			Name:          "nil Record should error",
 			Record:        nil,
 			Resp:          false,

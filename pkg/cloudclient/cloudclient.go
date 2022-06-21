@@ -23,13 +23,6 @@ type CloudClient interface {
 	// DeleteAdminAPIDNS will ensure that the A record for the admin API (rh-api) is removed
 	DeleteAdminAPIDNS(context.Context, client.Client, *cloudingressv1alpha1.APIScheme, *corev1.Service) error
 
-	/* SSH */
-	// EnsureSSHDNS ensures there's a rh-ssh (for example) alias to the Service for the SSH pod
-	EnsureSSHDNS(context.Context, client.Client, *cloudingressv1alpha1.SSHD, *corev1.Service) error
-
-	// DeleteSSHDNS will ensure that the A record for the SSH pod (rh-ssh) is removed
-	DeleteSSHDNS(context.Context, client.Client, *cloudingressv1alpha1.SSHD, *corev1.Service) error
-
 	/* Publishing Strategy */
 	// SetDefaultAPIPrivate ensures that the default API is private, per user configure
 	SetDefaultAPIPrivate(context.Context, client.Client, *cloudingressv1alpha1.PublishingStrategy) error

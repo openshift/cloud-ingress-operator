@@ -52,16 +52,6 @@ func (ac *Client) DeleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, ins
 	return ac.deleteAdminAPIDNS(ctx, kclient, instance, svc)
 }
 
-// EnsureSSHDNS implements cloudclient.CloudClient
-func (ac *Client) EnsureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return ac.ensureSSHDNS(ctx, kclient, instance, svc)
-}
-
-// DeleteSSHDNS implements cloudclient.CloudClient
-func (ac *Client) DeleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return ac.deleteSSHDNS(ctx, kclient, instance, svc)
-}
-
 // SetDefaultAPIPrivate implements cloudclient.CloudClient
 func (ac *Client) SetDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.PublishingStrategy) error {
 	return ac.setDefaultAPIPrivate(ctx, kclient, instance)

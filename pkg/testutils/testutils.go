@@ -87,8 +87,6 @@ platform:
   aws:
     region: %s
 pullSecret: ""
-sshKey: |
-  ssh-rsa nothingreal
 `
 
 // NewMockTest sets up for a new mock test, pass in some localObjs to seed the fake Kubernetes environment

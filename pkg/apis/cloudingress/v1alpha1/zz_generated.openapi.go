@@ -17,8 +17,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APIScheme":       schema_pkg_apis_cloudingress_v1alpha1_APIScheme(ref),
 		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeSpec":   schema_pkg_apis_cloudingress_v1alpha1_APISchemeSpec(ref),
 		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeStatus": schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref),
-		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.SSHDSpec":        schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref),
-		"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.SSHDStatus":      schema_pkg_apis_cloudingress_v1alpha1_SSHDStatus(ref),
 	}
 }
 
@@ -126,82 +124,5 @@ func schema_pkg_apis_cloudingress_v1alpha1_APISchemeStatus(ref common.ReferenceC
 		},
 		Dependencies: []string{
 			"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1.APISchemeCondition"},
-	}
-}
-
-func schema_pkg_apis_cloudingress_v1alpha1_SSHDSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "SSHDSpec defines the desired state of SSHD",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"dnsName": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DNSName is the DNS name that should point to the SSHD service load balancers, e.g. rh-ssh",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"allowedCIDRBlocks": {
-						SchemaProps: spec.SchemaProps{
-							Description: "AllowedCIDRBlocks is the list of CIDR blocks that should be allowed to access the SSHD service",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Type:   []string{"string"},
-										Format: "",
-									},
-								},
-							},
-						},
-					},
-					"image": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Image is the URL of the SSHD container image",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"configMapSelector": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ConfigMapSelector is a label selector to isolate config maps containing SSH authorized keys to be mounted into the SSHD container",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"),
-						},
-					},
-				},
-				Required: []string{"dnsName", "allowedCIDRBlocks", "image"},
-			},
-		},
-		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector"},
-	}
-}
-
-func schema_pkg_apis_cloudingress_v1alpha1_SSHDStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "SSHDStatus defines the observed state of SSHD",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"state": {
-						SchemaProps: spec.SchemaProps{
-							Description: "State is the current state of the controller",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"message": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Message is a description of the current state",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
 	}
 }
