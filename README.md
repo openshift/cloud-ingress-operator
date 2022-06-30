@@ -155,7 +155,7 @@ You can quickly debug the operator on your existing OSD cluster by following the
         "name": "Launch Program",
         "program": "${workspaceFolder}/cmd/manager/main.go",
         "env":{
-            "WATCH_NAMESPACE": "openshift-sre-sshd,openshift-cloud-ingress-operator,openshift-ingress,openshift-ingress-operator,openshift-kube-apiserver,openshift-machine-api"
+            "WATCH_NAMESPACE": "openshift-cloud-ingress-operator,openshift-ingress,openshift-ingress-operator,openshift-kube-apiserver,openshift-machine-api"
         }
     }]
 }

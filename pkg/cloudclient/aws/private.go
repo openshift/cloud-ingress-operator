@@ -154,16 +154,6 @@ func (ac *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, ins
 	return ac.removeDNSForService(ctx, kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName, "RH API Endpoint")
 }
 
-// ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer is set
-func (ac *Client) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return ac.ensureDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
-}
-
-// deleteSSHDNS ensures the DNS record for the SSH Service AWS LoadBalancer is unset
-func (ac *Client) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return ac.removeDNSForService(ctx, kclient, svc, instance.Spec.DNSName, "RH SSH Endpoint")
-}
-
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
 func (ac *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
