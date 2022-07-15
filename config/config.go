@@ -47,10 +47,10 @@ const (
 	MaxAPIRetries int = 10
 
 	// AWSSecretName
-	AWSSecretName string = "cloud-ingress-operator-credentials-aws"
+	AWSSecretName string = "cloud-ingress-operator-credentials-aws" //#nosec G101 -- This is a false positive
 
 	// GCPSecretName
-	GCPSecretName string = "cloud-ingress-operator-credentials-gcp"
+	GCPSecretName string = "cloud-ingress-operator-credentials-gcp" //#nosec G101 -- This is a false positive
 
 	// OperatorNamespace
 	OperatorNamespace string = "openshift-cloud-ingress-operator"

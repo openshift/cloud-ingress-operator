@@ -127,6 +127,7 @@ func TestRemoveAWSELB(t *testing.T) {
 				Name:      machine.GetName(),
 				Namespace: machine.GetNamespace(),
 			}
+			machine := machine
 			// reload the object to make sure we're not just working with the "in-memory"
 			// representation, that being, the un-saved one.
 			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
@@ -170,6 +171,7 @@ func TestRemoveAWSELB(t *testing.T) {
 				Name:      machine.GetName(),
 				Namespace: machine.GetNamespace(),
 			}
+			machine := machine
 
 			err = mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
 			if err != nil {
@@ -200,7 +202,6 @@ func TestAWSProviderDecode(t *testing.T) {
 		Name:      machine.GetName(),
 		Namespace: machine.GetNamespace(),
 	}
-
 	err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
 	if err != nil {
 		t.Fatalf("Couldn't reload machine %s: %v", machine.GetName(), err)
