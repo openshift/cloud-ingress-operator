@@ -34,6 +34,7 @@ const (
 	infraNodeLabelKey          = "node-role.kubernetes.io/infra"
 	CloudIngressFinalizer      = "cloudingress.managed.openshift.io/finalizer-cloud-ingress-controller"
 	ClusterIngressFinalizer    = "ingresscontroller.operator.openshift.io/finalizer-ingresscontroller"
+	ELBIdleTimeoutDuration     = 1800
 )
 
 var log = logf.Log.WithName("controller_publishingstrategy")
@@ -45,6 +46,7 @@ var IngressControllerCertificate patchField = "IngressControllerCertificate"
 var IngressControllerNodePlacement patchField = "IngressControllerNodePlacement"
 var IngressControllerEndPoint patchField = "IngressControllerEndpoint"
 var IngressControllerDeleteLBAnnotation string = "ingress.operator.openshift.io/auto-delete-load-balancer"
+var IngressControllerELBIdleTimeout metav1.Duration = metav1.Duration{Duration: ELBIdleTimeoutDuration * time.Second}
 
 // Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -209,6 +211,13 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 				AWS: &ingresscontroller.AWSLoadBalancerParameters{
 					Type: ingresscontroller.AWSLoadBalancerType(ingressDefinition.Type),
 				},
+			}
+
+			// For Classic LB in v4.11+, set the ELB idle connection timeout on the IngressController
+			if ingressDefinition.Type == "Classic" && baseutils.IsVersionHigherThan("4.11") {
+				desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.ClassicLoadBalancerParameters = &ingresscontroller.AWSClassicLoadBalancerParameters{
+					ConnectionIdleTimeout: IngressControllerELBIdleTimeout,
+				}
 			}
 		}
 

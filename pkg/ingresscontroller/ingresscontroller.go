@@ -88,6 +88,7 @@ const (
 )
 
 type AWSClassicLoadBalancerParameters struct {
+	ConnectionIdleTimeout metav1.Duration `json:"connectionIdleTimeout,omitempty"`
 }
 
 type AWSNetworkLoadBalancerParameters struct {
