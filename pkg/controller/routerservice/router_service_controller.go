@@ -3,6 +3,7 @@ package routerservice
 import (
 	"context"
 
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -100,7 +101,8 @@ func (r *ReconcileRouterService) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Only check LoadBalancer service types for annotations
-	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+	// Only set timeout annotations on services for < OCP 4.11. In 4.11+, the cluster-ingress-operator maintains this annotation
+	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && !baseutils.IsVersionHigherThan("4.11") {
 		if !metav1.HasAnnotation(svc.ObjectMeta, ELBAnnotationKey) ||
 			svc.ObjectMeta.Annotations[ELBAnnotationKey] != ELBAnnotationValue {
 			reqLogger.Info("Updating annotation for " + svc.Name)
