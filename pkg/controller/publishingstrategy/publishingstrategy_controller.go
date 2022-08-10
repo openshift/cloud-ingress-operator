@@ -515,6 +515,12 @@ func validatePatchableSpec(ingressController ingresscontroller.IngressController
 			return false, IngressControllerEndPoint
 		}
 	}
+	if baseutils.IsVersionHigherThan("4.11") {
+		if !(reflect.DeepEqual(desiredSpec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters,
+			ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters)) {
+			return false, IngressControllerEndPoint
+		}
+	}
 
 	return true, ""
 }
