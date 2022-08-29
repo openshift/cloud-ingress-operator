@@ -79,7 +79,7 @@ tags
 build/_output
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 .venv/
 .operator-sdk/
 

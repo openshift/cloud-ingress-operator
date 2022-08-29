@@ -1,0 +1,5 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- cloudingress.managed.openshift.io_v1alpha1_apischeme.yaml
+- cloudingress.managed.openshift.io_v1alpha1_publishingstrategy.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

@@ -13,14 +13,14 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/openshift/cloud-ingress-operator/config"
+	"github.com/openshift/cloud-ingress-operator/pkg/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/errors"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 

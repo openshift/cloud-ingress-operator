@@ -1,0 +1,6 @@
+apiVersion: cloudingress.managed.openshift.io.cloudingress.managed.openshift.io/v1alpha1
+kind: APIScheme
+metadata:
+  name: apischeme-sample
+spec:
+  # TODO(user): Add fields here

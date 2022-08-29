@@ -1,0 +1,24 @@
+# permissions for end users to edit publishingstrategies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: publishingstrategy-editor-role
+rules:
+- apiGroups:
+  - cloudingress.managed.openshift.io.cloudingress.managed.openshift.io
+  resources:
+  - publishingstrategies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cloudingress.managed.openshift.io.cloudingress.managed.openshift.io
+  resources:
+  - publishingstrategies/status
+  verbs:
+  - get
