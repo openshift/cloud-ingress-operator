@@ -1,0 +1,12 @@
+apiVersion: cloudingress.managed.openshift.io/v1alpha1
+kind: APIScheme
+metadata:
+  name: example-apischeme
+spec:
+  # Add fields here
+  managementAPIServerIngress:
+    enabled: true
+    dnsName: rh-api
+    allowedCIDRBlocks:
+      - "0.0.0.0/0"
+

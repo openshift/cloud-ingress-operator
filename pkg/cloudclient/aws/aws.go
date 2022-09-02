@@ -19,7 +19,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	"github.com/openshift/cloud-ingress-operator/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"reflect"
 	"testing"
 
@@ -121,6 +122,8 @@ func TestRemoveAWSELB(t *testing.T) {
 		objs := []runtime.Object{machineList}
 		mocks := testutils.NewTestMock(t, objs)
 
+		var newMachines []machineapi.Machine
+
 		// each Machine ought to have 2 NLBs at the start, so let's check
 		for _, machine := range machineList.Items {
 			machineInfo := types.NamespacedName{
@@ -134,6 +137,8 @@ func TestRemoveAWSELB(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Couldn't reload the test machine (named %s): %v", machineInfo.Name, err)
 			}
+			newMachines = append(newMachines, machine)
+
 			l, lbNames, lbTypes, err := testutils.ValidateMachineLB(&machine)
 			if err != nil {
 				t.Fatalf("Couldn't lookup the LB info: %v", err)
@@ -157,8 +162,12 @@ func TestRemoveAWSELB(t *testing.T) {
 			// End of pre-check
 		}
 
+		newMachineList := machineapi.MachineList{
+			Items: newMachines,
+		}
+
 		// Make change
-		err := removeAWSLBFromMasterMachines(mocks.FakeKubeClient, test.nameToRemove, machineList)
+		err := removeAWSLBFromMasterMachines(mocks.FakeKubeClient, test.nameToRemove, &newMachineList)
 		if err != nil {
 			t.Fatalf("Unexpected test couldn't remove LB %s from Machine: %v", test.nameToRemove, err)
 		}

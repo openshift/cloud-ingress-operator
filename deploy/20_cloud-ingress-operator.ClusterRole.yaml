@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloud-ingress-operator
+rules:
+- apiGroups:
+  - config.openshift.io
+  resources:
+    - clusterversions
+    - infrastructures
+    - apiservers
+    - dnses
+  verbs:
+    - list
+    - get
+    - watch
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - apiservers
+  verbs:
+  - patch
+  - update
+  - watch

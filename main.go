@@ -19,21 +19,21 @@ package main
 import (
 	"context"
 	"flag"
+	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"os"
+	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	"github.com/openshift/cloud-ingress-operator/pkg/config"
+	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	osdmetrics "github.com/openshift/operator-custom-metrics/pkg/metrics"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -53,9 +53,8 @@ var (
 )
 
 var (
-	osdMetricsPort    = "8181"
-	osdMetricsPath    = "/metrics"
-	livenessProbePort = "8000"
+	osdMetricsPort = "8181"
+	osdMetricsPath = "/metrics"
 )
 
 func init() {
@@ -65,9 +64,9 @@ func init() {
 
 	utilruntime.Must(configv1.Install(scheme))
 	utilruntime.Must(machineapi.AddToScheme(scheme))
-	utilruntime.Must(awsproviderapi.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(ingresscontroller.AddToScheme(scheme))
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
+	utilruntime.Must(awsproviderapi.SchemeBuilder.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -117,11 +116,6 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PublishingStrategy")
-		os.Exit(1)
-	}
-
-	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "")
 		os.Exit(1)
 	}
 
