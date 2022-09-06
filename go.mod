@@ -12,6 +12,7 @@ require (
 	github.com/openshift/cluster-api-provider-gcp v0.0.0
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
 	github.com/openshift/operator-custom-metrics v0.5.0
+	github.com/operator-framework/operator-lib v0.11.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.55.0
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/api v0.88.0
@@ -19,7 +20,7 @@ require (
 	k8s.io/apimachinery v0.24.3
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
 	sigs.k8s.io/cluster-api-provider-aws v0.0.0
-	sigs.k8s.io/controller-runtime v0.11.2
+	sigs.k8s.io/controller-runtime v0.12.3
 )
 
 require k8s.io/klog v1.0.0 // indirect
@@ -92,8 +93,8 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.23.5 // indirect
-	k8s.io/component-base v0.23.5 // indirect
+	k8s.io/apiextensions-apiserver v0.24.2 // indirect
+	k8s.io/component-base v0.24.2 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9

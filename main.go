@@ -19,14 +19,18 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"github.com/operator-framework/operator-lib/leader"
 	"k8s.io/apimachinery/pkg/runtime"
 	"net/http"
 	"os"
 	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/config"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
@@ -41,9 +45,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	cloudingressmanagedopenshiftiov1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	apiv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
 	publishingstrategycontroller "github.com/openshift/cloud-ingress-operator/controllers/publishingstrategy"
+	routerservicecontroller "github.com/openshift/cloud-ingress-operator/controllers/routerservice"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -59,9 +64,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(cloudingressmanagedopenshiftiov1alpha1.AddToScheme(scheme))
-
+	utilruntime.Must(apiv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(configv1.Install(scheme))
 	utilruntime.Must(machineapi.AddToScheme(scheme))
 	utilruntime.Must(ingresscontroller.AddToScheme(scheme))
@@ -75,7 +78,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8000", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -87,15 +90,34 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	watchNamespace, err := getWatchNamespace()
+	if err != nil {
+		setupLog.Error(err, "unable to get WatchNamespace,"+"the manager will watch and manage resources in all namespaces")
+	}
+
+	options := ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "f3d6b689.cloudingress.managed.openshift.io",
-		Namespace:              config.OperatorNamespace,
-	})
+		Namespace:              watchNamespace,
+	}
+
+	if strings.Contains(watchNamespace, ",") {
+		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
+		options.Namespace = ""
+		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
+	}
+
+	ctx := context.TODO()
+	// Become the leader before proceeding
+	err = leader.Become(ctx, "cloud-ingress-operator-lock")
+	if err != nil {
+		setupLog.Error(err, "failed to setup leader lock")
+		os.Exit(1)
+	}
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -119,7 +141,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.TODO()
+	// setup routerservice with mgr
+	if err = (&routerservicecontroller.RouterServiceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RouterService")
+		os.Exit(1)
+	}
+
 	addMetrics(ctx)
 
 	//+kubebuilder:scaffold:builder
@@ -165,4 +195,17 @@ func addMetrics(ctx context.Context) {
 	if err := osdmetrics.ConfigureMetrics(ctx, *metricsServer); err != nil {
 		setupLog.Error(err, "Failed to configure OSD metrics")
 	}
+}
+
+func getWatchNamespace() (string, error) {
+	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
+	// which specifies the Namespace to watch.
+	// An empty value means the operator is running with cluster scope.
+	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
+
+	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	}
+	return ns, nil
 }

@@ -18,6 +18,7 @@ package routerservice
 
 import (
 	"context"
+
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -55,6 +56,12 @@ type RouterServiceReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
+
+// Reconcile reads that state of the cluster for a RouterService object and makes changes based on the state read
+// and what is in the Service.Spec
+// Note:
+// The Controller will requeue the Request to be processed again if the returned error is non-nil or
+// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *RouterServiceReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 

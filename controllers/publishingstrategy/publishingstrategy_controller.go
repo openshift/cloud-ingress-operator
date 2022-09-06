@@ -28,7 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +74,14 @@ type PublishingStrategyReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
+
+// Reconcile reads that state of the cluster for a PublishingStrategy object and makes changes based on the state read
+// and what is in the PublishingStrategy.Spec
+// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
+// a Pod as an example
+// Note:
+// The Controller will requeue the Request to be processed again if the returned error is non-nil or
+// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PublishingStrategy")
@@ -559,7 +567,7 @@ func (r *PublishingStrategyReconciler) ensureStaticSpec(reqLogger logr.Logger, i
 				// Prior to deleting the ingress controller, we are  adding a finalizer.
 				// While we need cluster-ingress-operator to delete dependencies,
 				// cloud-ingress will take care of the final IngressController delete.
-				if !ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+				if !localctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
 					err = r.addFinalizer(reqLogger, ingressController, CloudIngressFinalizer)
 					if err != nil {
 						return reconcile.Result{Requeue: true}, err
@@ -720,14 +728,14 @@ func (r *PublishingStrategyReconciler) ensureAliasScope(reqLogger logr.Logger, i
 func (r *PublishingStrategyReconciler) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (reconcile.Result, error) {
 	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
 	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
-	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
+	if localctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
 		reqLogger.Info(fmt.Sprintf("%s IngressController is in the process of being deleted, requeing", ingressController.Name))
 		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// At this point, ClusterIngressFinalizer is gone, meaning cluster-ingress-operator has completed dependency cleanup
 	// so we can proceed with deleting the IngressController
-	if ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+	if localctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
 		// First remove the CloudIngressFinalizer, to allow it to be deleted
 		if err := r.removeFinalizer(reqLogger, ingressController, CloudIngressFinalizer); err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
@@ -768,6 +776,6 @@ func (r *PublishingStrategyReconciler) ensureIngressController(reqLogger logr.Lo
 // SetupWithManager sets up the controller with the Manager.
 func (r *PublishingStrategyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Owns(&v1alpha1.PublishingStrategy{}).
+		For(&v1alpha1.PublishingStrategy{}).
 		Complete(r)
 }

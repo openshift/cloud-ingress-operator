@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
 	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
@@ -79,6 +79,13 @@ type LoadBalancer struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
+
+// Reconcile will ensure that the rh-api management api endpoint is created and ready.
+// Rough Steps:
+// 1. Create Service
+// 2. Add DNS CNAME from rh-api to the ELB created by AWS provider
+// 3. Add Forwarding rule in GCP for the lb service
+// 3. Ready for work (Ready)
 func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIScheme")
@@ -264,7 +271,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return reconcile.Result{Requeue: true, RequeueAfter: longwait * time.Second}, nil
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatusMetric(instance)
-		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
+		if localctlutils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
 			// The APIscheme was never ready. The Load Balancer is likely still creating
 			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 			reqLogger.Info("LoadBalancer isn't ready yet")
@@ -327,13 +334,13 @@ func (r *APISchemeReconciler) newServiceFor(instance *cloudingressv1alpha1.APISc
 
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
 func (r *APISchemeReconciler) SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
-	crObject.Status.Conditions = utils.SetAPISchemeCondition(
+	crObject.Status.Conditions = localctlutils.SetAPISchemeCondition(
 		crObject.Status.Conditions,
 		ctype,
 		corev1.ConditionTrue,
 		reason,
 		message,
-		utils.UpdateConditionIfReasonOrMessageChange)
+		localctlutils.UpdateConditionIfReasonOrMessageChange)
 	crObject.Status.State = ctype
 	err := r.Client.Status().Update(context.TODO(), crObject)
 	// TODO: Should we return an error here if this update fails?
@@ -367,6 +374,6 @@ func sliceEquals(left, right []string) bool {
 // SetupWithManager sets up the controller with the Manager.
 func (r *APISchemeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Owns(&cloudingressv1alpha1.APIScheme{}).
+		For(&cloudingressv1alpha1.APIScheme{}).
 		Complete(r)
 }
