@@ -51,20 +51,6 @@ func (mr *MockCloudClientMockRecorder) DeleteAdminAPIDNS(arg0, arg1, arg2, arg3 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAdminAPIDNS", reflect.TypeOf((*MockCloudClient)(nil).DeleteAdminAPIDNS), arg0, arg1, arg2, arg3)
 }
 
-// DeleteSSHDNS mocks base method.
-func (m *MockCloudClient) DeleteSSHDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.SSHD, arg3 *v1.Service) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteSSHDNS", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteSSHDNS indicates an expected call of DeleteSSHDNS.
-func (mr *MockCloudClientMockRecorder) DeleteSSHDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSSHDNS", reflect.TypeOf((*MockCloudClient)(nil).DeleteSSHDNS), arg0, arg1, arg2, arg3)
-}
-
 // EnsureAdminAPIDNS mocks base method.
 func (m *MockCloudClient) EnsureAdminAPIDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.APIScheme, arg3 *v1.Service) error {
 	m.ctrl.T.Helper()
@@ -77,20 +63,6 @@ func (m *MockCloudClient) EnsureAdminAPIDNS(arg0 context.Context, arg1 client.Cl
 func (mr *MockCloudClientMockRecorder) EnsureAdminAPIDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureAdminAPIDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureAdminAPIDNS), arg0, arg1, arg2, arg3)
-}
-
-// EnsureSSHDNS mocks base method.
-func (m *MockCloudClient) EnsureSSHDNS(arg0 context.Context, arg1 client.Client, arg2 *v1alpha1.SSHD, arg3 *v1.Service) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnsureSSHDNS", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EnsureSSHDNS indicates an expected call of EnsureSSHDNS.
-func (mr *MockCloudClientMockRecorder) EnsureSSHDNS(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureSSHDNS", reflect.TypeOf((*MockCloudClient)(nil).EnsureSSHDNS), arg0, arg1, arg2, arg3)
 }
 
 // Healthcheck mocks base method.

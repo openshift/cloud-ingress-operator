@@ -42,18 +42,6 @@ func (gc *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, ins
 	return gc.removeDNSForService(kclient, svc, instance.Spec.ManagementAPIServerIngress.DNSName)
 }
 
-// ensureSSHDNS ensures the DNS record for the SSH Service LoadBalancer
-// is accurately set
-func (gc *Client) ensureSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return gc.ensureDNSForService(kclient, svc, instance.Spec.DNSName)
-}
-
-// deleteSSHDNS ensures the DNS record for the SSH Service LoadBalancer
-// is deleted
-func (gc *Client) deleteSSHDNS(ctx context.Context, kclient k8s.Client, instance *cloudingressv1alpha1.SSHD, svc *corev1.Service) error {
-	return gc.removeDNSForService(kclient, svc, instance.Spec.DNSName)
-}
-
 // setDefaultAPIPrivate sets the default api (api.<cluster-domain>) to private
 // scope
 func (gc *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {

@@ -127,6 +127,7 @@ func TestRemoveAWSELB(t *testing.T) {
 				Name:      machine.GetName(),
 				Namespace: machine.GetNamespace(),
 			}
+			machine := machine
 			// reload the object to make sure we're not just working with the "in-memory"
 			// representation, that being, the un-saved one.
 			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
@@ -170,6 +171,7 @@ func TestRemoveAWSELB(t *testing.T) {
 				Name:      machine.GetName(),
 				Namespace: machine.GetNamespace(),
 			}
+			machine := machine
 
 			err = mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
 			if err != nil {
@@ -200,7 +202,6 @@ func TestAWSProviderDecode(t *testing.T) {
 		Name:      machine.GetName(),
 		Namespace: machine.GetNamespace(),
 	}
-
 	err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
 	if err != nil {
 		t.Fatalf("Couldn't reload machine %s: %v", machine.GetName(), err)
@@ -215,10 +216,11 @@ func TestAWSProviderDecode(t *testing.T) {
 
 type mockDescribeELBv2LoadBalancers struct {
 	elbv2iface.ELBV2API
-	Resp        elbv2.DescribeLoadBalancersOutput
-	ErrResp     string
-	TagsResp    elbv2.DescribeTagsOutput
-	TagsErrResp string
+	Resp             elbv2.DescribeLoadBalancersOutput
+	ErrResp          string
+	TagsResp         elbv2.DescribeTagsOutput
+	TagsFilteredResp elbv2.DescribeTagsOutput
+	TagsErrResp      string
 }
 
 func (m mockDescribeELBv2LoadBalancers) DescribeLoadBalancers(_ *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
@@ -253,7 +255,19 @@ func (m mockDescribeELBv2LoadBalancers) DescribeTags(input *elbv2.DescribeTagsIn
 	if m.TagsErrResp != "" {
 		e = awserr.New(m.TagsErrResp, m.TagsErrResp, fmt.Errorf("Error raised by test"))
 	}
-	return &m.TagsResp, e
+
+	m.TagsFilteredResp = elbv2.DescribeTagsOutput{}
+
+	for _, arn := range input.ResourceArns {
+		for _, tagDesc := range m.TagsResp.TagDescriptions {
+
+			if *arn == *(tagDesc.ResourceArn) {
+				m.TagsFilteredResp.TagDescriptions = append(m.TagsFilteredResp.TagDescriptions, tagDesc)
+			}
+		}
+	}
+
+	return &m.TagsFilteredResp, e
 }
 
 func TestGetInternalAPINLB(t *testing.T) {
@@ -318,7 +332,7 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 				},
@@ -364,7 +378,7 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -425,11 +439,11 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:654321"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -497,11 +511,11 @@ func TestGetInternalAPINLB(t *testing.T) {
 			TagsResp: elbv2.DescribeTagsOutput{
 				TagDescriptions: []*elbv2.TagDescription{
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:123456"),
 						Tags:        []*elbv2.Tag{nameTag, ownedTag},
 					},
 					{
-						ResourceArn: aws.String("arn:123"),
+						ResourceArn: aws.String("arn:654321"),
 						Tags:        []*elbv2.Tag{{Key: aws.String("Name"), Value: aws.String("foo")}, ownedTag},
 					},
 				},
@@ -520,9 +534,10 @@ func TestGetInternalAPINLB(t *testing.T) {
 	for _, test := range tests {
 		client := &Client{
 			elbv2Client: mockDescribeELBv2LoadBalancers{
-				Resp:        test.Resp,
-				TagsResp:    test.TagsResp,
-				TagsErrResp: "",
+				Resp:             test.Resp,
+				TagsResp:         test.TagsResp,
+				TagsFilteredResp: elbv2.DescribeTagsOutput{},
+				TagsErrResp:      "",
 			},
 		}
 		resp, err := client.getInteralAPINLB(mocks.FakeKubeClient)
@@ -1037,61 +1052,6 @@ func TestRecordExists(t *testing.T) {
 			ErrorExpected: false,
 		},
 		{
-			Name: "Record shouldn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(false),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name but missmatched Type shouldn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(false),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("AAAA"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name and Type, but no AliasTarget, shoudn't exist",
-			Record: &route53.ResourceRecordSet{
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
-			Name: "Record with matching Name and Type, but missmatched AliasTarget.EvaluateTargetHealth , shoudn't exist",
-			Record: &route53.ResourceRecordSet{
-				AliasTarget: &route53.AliasTarget{
-					DNSName:              aws.String("abcdefgh.us-east-1.elb.amazon.com."),
-					EvaluateTargetHealth: aws.Bool(true),
-					HostedZoneId:         aws.String("AAAAAAAAAA"),
-				},
-				Name: aws.String("rh-ssh.osd-cluster.org."),
-				Type: aws.String("A"),
-			},
-			Resp:          false,
-			ErrResp:       "",
-			ErrorExpected: false,
-		},
-		{
 			Name:          "nil Record should error",
 			Record:        nil,
 			Resp:          false,
@@ -1125,10 +1085,10 @@ func TestRecordExists(t *testing.T) {
 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
 		}
 		if err != nil && test.ErrorExpected && err.Error() != test.ErrResp {
-			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrResp, err.Error())
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrResp, err.Error())
 		}
 		if resp != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, resp)
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, resp)
 		}
 
 	}

@@ -7,8 +7,8 @@ import (
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
+	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 
-	operv1 "github.com/openshift/api/operator/v1"
 	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
 	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -87,8 +87,6 @@ platform:
   aws:
     region: %s
 pullSecret: ""
-sshKey: |
-  ssh-rsa nothingreal
 `
 
 // NewMockTest sets up for a new mock test, pass in some localObjs to seed the fake Kubernetes environment
@@ -104,7 +102,7 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	if err := cloudingressv1alpha1.SchemeBuilder.AddToScheme(s); err != nil {
 		t.Fatalf("Couldn't add cloudingressv1alpha1 scheme: (%v)", err)
 	}
-	if err := operv1.AddToScheme(s); err != nil {
+	if err := ingresscontroller.AddToScheme(s); err != nil {
 		t.Fatalf("Unable to add route scheme: (%v)", err)
 	}
 	ret := &Mocks{
