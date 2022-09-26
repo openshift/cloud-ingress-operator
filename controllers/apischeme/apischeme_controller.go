@@ -1,3 +1,19 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package apischeme
 
 import (
@@ -5,28 +21,24 @@ import (
 	"fmt"
 	"time"
 
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	utils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
 	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-	localmetrics "github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
+	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -43,48 +55,12 @@ var (
 	cloudClient cloudclient.CloudClient
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+var _ reconcile.Reconciler = &APISchemeReconciler{}
 
-// Add creates a new APIScheme Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileAPIScheme{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("apischeme-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource APIScheme
-	err = c.Watch(&source.Kind{Type: &cloudingressv1alpha1.APIScheme{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// blank assignment to verify that ReconcileAPIScheme implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileAPIScheme{}
-
-// ReconcileAPIScheme reconciles a APIScheme object
-type ReconcileAPIScheme struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+// APISchemeReconciler reconciles a APIScheme object
+type APISchemeReconciler struct {
+	Client client.Client
+	Scheme *runtime.Scheme
 }
 
 // LoadBalancer contains the relevant information to create a Load Balancer
@@ -94,19 +70,29 @@ type LoadBalancer struct {
 	BaseDomain   string // What is the base domain (DNS zone) for the EndpointName record?
 }
 
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the APIScheme object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
+
 // Reconcile will ensure that the rh-api management api endpoint is created and ready.
 // Rough Steps:
 // 1. Create Service
 // 2. Add DNS CNAME from rh-api to the ELB created by AWS provider
 // 3. Add Forwarding rule in GCP for the lb service
 // 3. Ready for work (Ready)
-func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIScheme")
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -127,13 +113,13 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	if cloudClient == nil {
-		cloudPlatform, err := baseutils.GetPlatformType(r.client)
+		cloudPlatform, err := baseutils.GetPlatformType(r.Client)
 		if err != nil {
 			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Couldn't create a Cloud Client", cloudingressv1alpha1.ConditionError)
 			r.SetAPISchemeStatusMetric(instance)
 			return reconcile.Result{}, err
 		}
-		cloudClient = cloudclient.GetClientFor(r.client, *cloudPlatform)
+		cloudClient = cloudclient.GetClientFor(r.Client, *cloudPlatform)
 	}
 
 	serviceNamespacedName := types.NamespacedName{
@@ -146,7 +132,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			controllerutil.AddFinalizer(instance, reconcileFinalizerDNS)
-			if err = r.client.Update(context.TODO(), instance); err != nil {
+			if err = r.Client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
@@ -154,7 +140,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		// Request object is being deleted.
 		if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			found := &corev1.Service{}
-			if err = r.client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
+			if err = r.Client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
 				if errors.IsNotFound(err) {
 					// Service was not found!
 					//
@@ -174,7 +160,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 			}
 
 			if found != nil {
-				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.client, instance, found)
+				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.Client, instance, found)
 				switch err := err.(type) {
 				case nil:
 					// all good
@@ -193,7 +179,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 
 			// Remove the DNS finalizer and update the request object.
 			controllerutil.RemoveFinalizer(instance, reconcileFinalizerDNS)
-			if err = r.client.Update(context.TODO(), instance); err != nil {
+			if err = r.Client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -208,13 +194,13 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Does the Service exist already?
 	found := &corev1.Service{}
-	err = r.client.Get(context.TODO(), serviceNamespacedName, found)
+	err = r.Client.Get(context.TODO(), serviceNamespacedName, found)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// need to create it
 			dep := r.newServiceFor(instance)
 			reqLogger.Info("Service not found. Creating", "service", dep)
-			err = r.client.Create(context.TODO(), dep)
+			err = r.Client.Create(context.TODO(), dep)
 			if err != nil {
 				reqLogger.Error(err, "Failure to create new Service")
 				return reconcile.Result{}, err
@@ -232,7 +218,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
 		reqLogger.Info(fmt.Sprintf("Mismatch between %s/service/%s LoadBalancerSourceRanges and AllowedCIDRBlocks. Updating...", found.GetNamespace(), found.GetName()))
 		found.Spec.LoadBalancerSourceRanges = instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
-		err = r.client.Update(context.TODO(), found)
+		err = r.Client.Update(context.TODO(), found)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s LoadBalancerSourceRanges", found.GetNamespace(), found.GetName()))
 			return reconcile.Result{}, err
@@ -245,7 +231,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
 		found.Annotations[elbAnnotationKey] != elbAnnotationValue {
 		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationKey, elbAnnotationValue)
-		err = r.client.Update(context.TODO(), found)
+		err = r.Client.Update(context.TODO(), found)
 		if err != nil {
 			reqLogger.Error(err, "Error updating service annotation")
 			return reconcile.Result{}, err
@@ -253,7 +239,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationValue))
 	}
 
-	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.client, instance, found)
+	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.Client, instance, found)
 	// Check for error types that this operator knows about
 	switch err := err.(type) {
 	case nil:
@@ -273,7 +259,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		// To recover from this case we will need to delete the lb service.
 		// It will be recreated  at the next reconcile.
 		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted on cloud provider, deleting service %s/service/%s to force recreation", found.GetNamespace(), found.GetName()))
-		deleteSvcErr := r.client.Delete(context.TODO(), found)
+		deleteSvcErr := r.Client.Delete(context.TODO(), found)
 		if deleteSvcErr != nil {
 			if instance.DeletionTimestamp.IsZero() {
 				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service. It could already be deleted. Waiting %d seconds to complete possible deletion.", found.GetNamespace(), found.GetName(), longwait))
@@ -285,7 +271,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{Requeue: true, RequeueAfter: longwait * time.Second}, nil
 	case *cioerrors.LoadBalancerNotReadyError:
 		r.SetAPISchemeStatusMetric(instance)
-		if utils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
+		if localctlutils.FindAPISchemeCondition(instance.Status.Conditions, cloudingressv1alpha1.ConditionReady) == nil {
 			// The APIscheme was never ready. The Load Balancer is likely still creating
 			r.SetAPISchemeStatus(instance, "Couldn't reconcile", "Load balancer isn't ready", cloudingressv1alpha1.ConditionError)
 			reqLogger.Info("LoadBalancer isn't ready yet")
@@ -295,7 +281,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 
 			// To recover from this case we will need to delete the service. It will be recreated  at the next reconcile
 			reqLogger.Info(fmt.Sprintf("LoadBalancer was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
-			err := r.client.Delete(context.TODO(), found)
+			err := r.Client.Delete(context.TODO(), found)
 			if err != nil {
 				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service, it could already be deleted. Waiting to complete possible deletion.", found.GetNamespace(), found.GetName()))
 			}
@@ -309,7 +295,7 @@ func (r *ReconcileAPIScheme) Reconcile(ctx context.Context, request reconcile.Re
 	}
 }
 
-func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
+func (r *APISchemeReconciler) newServiceFor(instance *cloudingressv1alpha1.APIScheme) *corev1.Service {
 	labels := map[string]string{
 		"app":          "cloud-ingress-operator-" + instance.Spec.ManagementAPIServerIngress.DNSName,
 		"apischeme_cr": instance.GetName(),
@@ -347,16 +333,16 @@ func (r *ReconcileAPIScheme) newServiceFor(instance *cloudingressv1alpha1.APISch
 }
 
 // SetAPISchemeStatus will set the status on the APISscheme object with a human message, as in an error situation
-func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
-	crObject.Status.Conditions = utils.SetAPISchemeCondition(
+func (r *APISchemeReconciler) SetAPISchemeStatus(crObject *cloudingressv1alpha1.APIScheme, reason, message string, ctype cloudingressv1alpha1.APISchemeConditionType) {
+	crObject.Status.Conditions = localctlutils.SetAPISchemeCondition(
 		crObject.Status.Conditions,
 		ctype,
 		corev1.ConditionTrue,
 		reason,
 		message,
-		utils.UpdateConditionIfReasonOrMessageChange)
+		localctlutils.UpdateConditionIfReasonOrMessageChange)
 	crObject.Status.State = ctype
-	err := r.client.Status().Update(context.TODO(), crObject)
+	err := r.Client.Status().Update(context.TODO(), crObject)
 	// TODO: Should we return an error here if this update fails?
 	if err != nil {
 		log.Error(err, "Error updating cr status")
@@ -364,7 +350,7 @@ func (r *ReconcileAPIScheme) SetAPISchemeStatus(crObject *cloudingressv1alpha1.A
 }
 
 // SetAPISchemeStatusMetric updates a gauge in localmetrics
-func (r *ReconcileAPIScheme) SetAPISchemeStatusMetric(crObject *cloudingressv1alpha1.APIScheme) {
+func (r *APISchemeReconciler) SetAPISchemeStatusMetric(crObject *cloudingressv1alpha1.APIScheme) {
 	if crObject.Status.State == "Ready" {
 		localmetrics.MetricAPISchemeConditionStatus.Set(float64(1))
 		return
@@ -383,4 +369,11 @@ func sliceEquals(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *APISchemeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&cloudingressv1alpha1.APIScheme{}).
+		Complete(r)
 }

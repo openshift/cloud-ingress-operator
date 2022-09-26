@@ -82,6 +82,7 @@ build/_output
 # vendor/
 .venv/
 .operator-sdk/
+.idea
 
 # vscode workspace files
 *.code-workspace
