@@ -1,3 +1,19 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package publishingstrategy
 
 import (
@@ -6,27 +22,24 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/go-logr/logr"
-	"github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	ctlutils "github.com/openshift/cloud-ingress-operator/pkg/controller/utils"
+
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"time"
 )
 
 const (
@@ -48,44 +61,19 @@ var IngressControllerEndPoint patchField = "IngressControllerEndpoint"
 var IngressControllerDeleteLBAnnotation string = "ingress.operator.openshift.io/auto-delete-load-balancer"
 var IngressControllerELBIdleTimeout metav1.Duration = metav1.Duration{Duration: ELBIdleTimeoutDuration * time.Second}
 
-// Add creates a new PublishingStrategy Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+var _ reconcile.Reconciler = &PublishingStrategyReconciler{}
+
+// PublishingStrategyReconciler reconciles a PublishingStrategy object
+type PublishingStrategyReconciler struct {
+	Client client.Client
+	Scheme *runtime.Scheme
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcilePublishingStrategy{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("publishingstrategy-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource PublishingStrategy
-	err = c.Watch(&source.Kind{Type: &v1alpha1.PublishingStrategy{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// blank assignment to verify that ReconcilePublishingStrategy implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcilePublishingStrategy{}
-
-// ReconcilePublishingStrategy reconciles a PublishingStrategy object
-type ReconcilePublishingStrategy struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
-}
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 
 // Reconcile reads that state of the cluster for a PublishingStrategy object and makes changes based on the state read
 // and what is in the PublishingStrategy.Spec
@@ -94,13 +82,13 @@ type ReconcilePublishingStrategy struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PublishingStrategy")
 
 	// Fetch the PublishingStrategy instance
 	instance := &v1alpha1.PublishingStrategy{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if k8serr.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -117,7 +105,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 	listOptions := []client.ListOption{
 		client.InNamespace("openshift-ingress-operator"),
 	}
-	err = r.client.List(context.TODO(), ingressControllerList, listOptions...)
+	err = r.Client.List(context.TODO(), ingressControllerList, listOptions...)
 	if err != nil {
 		log.Error(err, "Cannot get list of ingresscontroller")
 		return reconcile.Result{}, err
@@ -125,7 +113,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 
 	// Retrieve the cluster base domain. Discard the error since it's just for logging messages.
 	// In case of failure, clusterBaseDomain is an empty string.
-	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.client)
+	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.Client)
 
 	ownedIngressControllers := getIngressWithCloudIngressOpreatorOwnerAnnotation(*ingressControllerList)
 
@@ -193,7 +181,7 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// This generated spec will be compared against the actual spec as desrcibed above
 		desiredIngressController := generateIngressController(ingressDefinition)
 
-		cloudPlatform, err := baseutils.GetPlatformType(r.client)
+		cloudPlatform, err := baseutils.GetPlatformType(r.Client)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -224,12 +212,12 @@ func (r *ReconcilePublishingStrategy) Reconcile(ctx context.Context, request rec
 		// Attempt to find the IngressController referenced by the ApplicationIngress
 		// by doing a GET of the namespaced name object build above against the k8s api.
 		ingressController := &ingresscontroller.IngressController{}
-		err = r.client.Get(context.TODO(), namespacedName, ingressController)
+		err = r.Client.Get(context.TODO(), namespacedName, ingressController)
 		if err != nil {
 			// Attempt to create the CR if not found
 			if k8serr.IsNotFound(err) {
 				reqLogger.Info(fmt.Sprintf("ApplicationIngress %s not found, attempting to create", ingressName))
-				err = r.client.Create(context.TODO(), desiredIngressController)
+				err = r.Client.Create(context.TODO(), desiredIngressController)
 				if err != nil {
 					return reconcile.Result{}, err
 				}
@@ -403,10 +391,10 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	return true
 }
 
-func (r *ReconcilePublishingStrategy) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
+func (r *PublishingStrategyReconciler) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
 
 	if !validateAWSLoadBalancerType(*ic, ai) {
-		if err := r.client.Delete(context.TODO(), ic); err != nil {
+		if err := r.Client.Delete(context.TODO(), ic); err != nil {
 			reqLogger.Error(err, "Error deleting IngressController")
 		}
 		return reconcile.Result{Requeue: true}, nil
@@ -542,17 +530,17 @@ func getIngressWithCloudIngressOpreatorOwnerAnnotation(ingressList ingresscontro
 }
 
 // deleteUnpublishedIngressControllers deletes all IngressControllers owned by cloud-ingress-controller which are not in the publishingstategy
-func (r *ReconcilePublishingStrategy) deleteUnpublishedIngressControllers(ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+func (r *PublishingStrategyReconciler) deleteUnpublishedIngressControllers(ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
 	// Delete all IngressControllers that are owned by cloud-ingress-operator but not in PublishingStrategy
 	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
 		if !inPublishingStrategy {
 			// Delete requires an object referece, so we must get it first
 			ingressToDelete := &ingresscontroller.IngressController{}
-			err = r.client.Get(context.TODO(), types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}, ingressToDelete)
+			err = r.Client.Get(context.TODO(), types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}, ingressToDelete)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			err = r.client.Delete(context.TODO(), ingressToDelete)
+			err = r.Client.Delete(context.TODO(), ingressToDelete)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -562,7 +550,7 @@ func (r *ReconcilePublishingStrategy) deleteUnpublishedIngressControllers(ownedI
 }
 
 // ensureStaticSpec deletes or marks an IngressController for deletion when a static spec has been changed in the publishing strategy
-func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
+func (r *PublishingStrategyReconciler) ensureStaticSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
 	reqLogger.Info(fmt.Sprintf("Checking Static Spec for IngressController %s ", desiredIngressController.Name))
 	// Compare the Spec fields that cannot be patched in the desired IngressController and the actual IngressController
 	if !validateStaticSpec(*ingressController, desiredIngressController.Spec) {
@@ -579,14 +567,14 @@ func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, in
 				// Prior to deleting the ingress controller, we are  adding a finalizer.
 				// While we need cluster-ingress-operator to delete dependencies,
 				// cloud-ingress will take care of the final IngressController delete.
-				if !ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+				if !localctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
 					err = r.addFinalizer(reqLogger, ingressController, CloudIngressFinalizer)
 					if err != nil {
 						return reconcile.Result{Requeue: true}, err
 					}
 				}
 				// initiate the delete => asking cluster-ingress-operator to delete the dependencies
-				if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+				if err := r.Client.Delete(context.TODO(), ingressController); err != nil {
 					reqLogger.Error(err, "Error deleting IngressController")
 				}
 				return reconcile.Result{Requeue: true}, nil
@@ -597,7 +585,7 @@ func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, in
 			// the IngressController must be deleted
 			reqLogger.Info(fmt.Sprintf("Static Spec does not match for for IngressController %s, deleting", desiredIngressController.Name))
 			// TODO: Should we return an error here if this delete fails?
-			if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+			if err := r.Client.Delete(context.TODO(), ingressController); err != nil {
 				reqLogger.Error(err, "Error deleting IngressController")
 			}
 			return reconcile.Result{Requeue: true}, nil
@@ -608,7 +596,7 @@ func (r *ReconcilePublishingStrategy) ensureStaticSpec(reqLogger logr.Logger, in
 }
 
 // ensurePatchableSpec patches an IngressController when a patchable field as been changed in the publishingstrategy
-func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
+func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (result reconcile.Result, err error) {
 	reqLogger.Info(fmt.Sprintf("Checking Patchable Spec for IngressController %s ", desiredIngressController.Name))
 	// All the remaining fields are mutable and don't require a deletion of the IngresscController
 	// If any of the fields are differet, that field will be patched
@@ -626,7 +614,7 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 				ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
 				// Perform the patch on the existing IngressController using the base to patch against and the
 				// changes added to bring the exsting CR to the desired state
-				err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
+				err = r.Client.Patch(context.TODO(), ingressController, baseToPatch)
 				if err != nil {
 					return reconcile.Result{}, err
 				}
@@ -652,7 +640,7 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 
 			// Perform the patch on the existing IngressController using the base to patch against and the
 			// changes added to bring the exsting CR to the desired state
-			err = r.client.Patch(context.TODO(), ingressController, baseToPatch)
+			err = r.Client.Patch(context.TODO(), ingressController, baseToPatch)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -662,7 +650,8 @@ func (r *ReconcilePublishingStrategy) ensurePatchableSpec(reqLogger logr.Logger,
 	// do nothing, continue
 	return result, err
 }
-func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+
+func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
 	// No action if the version is prior 4.10
 	if !baseutils.IsVersionHigherThan("4.10") {
 		return reconcile.Result{}, nil
@@ -674,7 +663,7 @@ func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Lo
 			// Get managed IngressController CRs
 			ingressController := &ingresscontroller.IngressController{}
 			namespacedName := types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}
-			if err := r.client.Get(context.TODO(), namespacedName, ingressController); err != nil {
+			if err := r.Client.Get(context.TODO(), namespacedName, ingressController); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -693,7 +682,7 @@ func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Lo
 
 			// Patch
 			reqLogger.Info(fmt.Sprintf("IngressController CR of %s is being patched for the missing annotation: %s", ingress, IngressControllerDeleteLBAnnotation))
-			if err := r.client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
+			if err := r.Client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
@@ -703,16 +692,16 @@ func (r *ReconcilePublishingStrategy) ensureAnnotationsDefined(reqLogger logr.Lo
 }
 
 // ensureAliasScope updates the loadbalancer to match the scope of the ingress in the publishingstrategy
-func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, instance *v1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
-	cloudPlatform, err := baseutils.GetPlatformType(r.client)
+func (r *PublishingStrategyReconciler) ensureAliasScope(reqLogger logr.Logger, instance *v1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
+	cloudPlatform, err := baseutils.GetPlatformType(r.Client)
 	if err != nil {
 		log.Error(err, "Failed to create a Cloud Client")
 		return reconcile.Result{}, err
 	}
-	cloudClient := cloudclient.GetClientFor(r.client, *cloudPlatform)
+	cloudClient := cloudclient.GetClientFor(r.Client, *cloudPlatform)
 
 	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.Internal {
-		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.client, instance)
+		err := cloudClient.SetDefaultAPIPrivate(context.TODO(), r.Client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to internal NLB", clusterBaseDomain))
 			return reconcile.Result{}, err
@@ -724,7 +713,7 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 	// if CR is wanted the default server API to be internet-facing, we
 	// create the external NLB for port 6443/TCP and add api.<cluster-name> DNS record to point to external NLB
 	if instance.Spec.DefaultAPIServerIngress.Listening == v1alpha1.External {
-		err = cloudClient.SetDefaultAPIPublic(context.TODO(), r.client, instance)
+		err = cloudClient.SetDefaultAPIPublic(context.TODO(), r.Client, instance)
 		if err != nil {
 			log.Error(err, fmt.Sprintf("Error updating api.%s alias to external NLB", clusterBaseDomain))
 			return reconcile.Result{}, err
@@ -736,17 +725,17 @@ func (r *ReconcilePublishingStrategy) ensureAliasScope(reqLogger logr.Logger, in
 }
 
 // ensureIngressController makes sure that an IngressController being deleted, gets recreated by cloud-ingress-operator, instead of cluster-ingress-operator
-func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (reconcile.Result, error) {
+func (r *PublishingStrategyReconciler) ensureIngressController(reqLogger logr.Logger, ingressController, desiredIngressController *ingresscontroller.IngressController) (reconcile.Result, error) {
 	// If ingresscontroller still has the ClusterIngressFinalizer, there is no point continuing.
 	// Cluster-ingress-operator typically needs a few minutes to delete all dependencies
-	if ctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
+	if localctlutils.Contains(ingressController.GetFinalizers(), ClusterIngressFinalizer) {
 		reqLogger.Info(fmt.Sprintf("%s IngressController is in the process of being deleted, requeing", ingressController.Name))
 		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// At this point, ClusterIngressFinalizer is gone, meaning cluster-ingress-operator has completed dependency cleanup
 	// so we can proceed with deleting the IngressController
-	if ctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
+	if localctlutils.Contains(ingressController.GetFinalizers(), CloudIngressFinalizer) {
 		// First remove the CloudIngressFinalizer, to allow it to be deleted
 		if err := r.removeFinalizer(reqLogger, ingressController, CloudIngressFinalizer); err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
@@ -761,7 +750,7 @@ func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Log
 
 	// At this point, if the IngressController still exists, and has no Finalizer
 	// Therefore, it is ready to be deleted
-	if err := r.client.Delete(context.TODO(), ingressController); err != nil {
+	if err := r.Client.Delete(context.TODO(), ingressController); err != nil {
 		if k8serr.IsNotFound(err) {
 			// It is possible that cluster-ingress-operator might be faster to delete the IngressController
 			// If that's the case, we proceed
@@ -775,11 +764,18 @@ func (r *ReconcilePublishingStrategy) ensureIngressController(reqLogger logr.Log
 	// At this point, the IngressController doesn't exist anymore
 	// Create the desiredIngressController (hopefully before cluster-ingress-operator did)
 	reqLogger.Info(fmt.Sprintf("Create IngressController %s", ingressController.Name))
-	if err := r.client.Create(context.TODO(), desiredIngressController); err != nil {
+	if err := r.Client.Create(context.TODO(), desiredIngressController); err != nil {
 		reqLogger.Error(err, "Error creating the IngressController")
 		return reconcile.Result{Requeue: true}, err
 	}
 	// If the CR was created, requeue PublishingStrategy
 	return reconcile.Result{Requeue: true}, nil
 
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *PublishingStrategyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.PublishingStrategy{}).
+		Complete(r)
 }

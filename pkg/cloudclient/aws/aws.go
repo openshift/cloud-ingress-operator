@@ -18,8 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53/route53iface"
 
 	configv1 "github.com/openshift/api/config/v1"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"

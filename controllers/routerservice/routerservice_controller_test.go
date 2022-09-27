@@ -50,7 +50,7 @@ func TestRouterServiceController(t *testing.T) {
 
 	log.Info("Creating ReconcileRouterService")
 	// Create a ReconcileRouterService object with the scheme and fake client.
-	r := &ReconcileRouterService{client: cl, scheme: s}
+	r := &RouterServiceReconciler{Client: cl, Scheme: s}
 
 	// Mock request to simulate Reconcile() being called on an event for a
 	// watched resource .
@@ -83,7 +83,7 @@ func TestRouterServiceController(t *testing.T) {
 
 	// Get the updated Service object.
 	actualSvc := &corev1.Service{}
-	err = r.client.Get(context.TODO(), req.NamespacedName, actualSvc)
+	err = r.Client.Get(context.TODO(), req.NamespacedName, actualSvc)
 	if err != nil {
 		t.Errorf("get service: (%v)", err)
 	}
