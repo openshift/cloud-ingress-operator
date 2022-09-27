@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/aws/aws-sdk-go v1.38.38
 	github.com/coreos/prometheus-operator v0.38.1-0.20200424145508-7e176fda06cc
+	github.com/go-delve/delve v1.9.1 // indirect
 	github.com/go-logr/logr v0.3.0
 	github.com/go-openapi/spec v0.19.4
 	github.com/golang/mock v1.4.4
@@ -19,9 +20,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.1 // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
-	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e // indirect
 	google.golang.org/api v0.35.0
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2

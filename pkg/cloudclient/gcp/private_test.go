@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"github.com/golang/mock/gomock"
+	mocks2 "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mocks"
 	"google.golang.org/api/googleapi"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
@@ -152,70 +154,75 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 		computeService *computev1.Service
 	}
 	type args struct {
-		rhapiLbIP    string
-		frListGetter ForwardingRuleListGetter
+		rhapiLbIP string
 	}
+	projectID := "dummyProject"
+	region := "dummyRegion"
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	FakeGCPCli := mocks2.NewMockGCPInterface(ctrl)
+
 	tests := []struct {
 		name            string
 		fields          fields
 		args            args
+		fwdingRuleList  computev1.ForwardingRuleList
+		fwdingRuleError error
 		wantErr         bool
 		expectedMessage string
 	}{
 		{
 			//Case: Happy path; FR found
 			name: "method should return nil when forwarding rule exists in GCP.",
-			args: args{rhapiLbIP: "matching.ip",
-				frListGetter: func(gc *Client) (*computev1.ForwardingRuleList, error) {
-					forwardingRule := computev1.ForwardingRule{IPAddress: "matching.ip"}
-					frList := computev1.ForwardingRuleList{
-						Id:             "",
-						Items:          []*computev1.ForwardingRule{&forwardingRule},
-						SelfLink:       "",
-						Warning:        nil,
-						ServerResponse: googleapi.ServerResponse{},
-					}
-					return &frList, nil
-				}},
-			wantErr: false,
+			args: args{rhapiLbIP: "matching.ip"},
+			fwdingRuleList: computev1.ForwardingRuleList{
+				Id:             "",
+				Items:          []*computev1.ForwardingRule{&computev1.ForwardingRule{IPAddress: "matching.ip"}},
+				SelfLink:       "",
+				Warning:        nil,
+				ServerResponse: googleapi.ServerResponse{},
+			},
+			fwdingRuleError: nil,
+			wantErr:         false,
 		},
 		{
 			// Case: FR not found
 			name: "method should return error when rule doesn't exist in GCP.",
-			args: args{rhapiLbIP: "matching.ip",
-				frListGetter: func(gc *Client) (*computev1.ForwardingRuleList, error) {
-					forwardingRule := computev1.ForwardingRule{IPAddress: "non-matching.ip"}
-					frList := computev1.ForwardingRuleList{
-						Id:             "",
-						Items:          []*computev1.ForwardingRule{&forwardingRule},
-						SelfLink:       "",
-						Warning:        nil,
-						ServerResponse: googleapi.ServerResponse{},
-					}
-					return &frList, nil
-				}},
+			args: args{rhapiLbIP: "matching.ip"},
+			fwdingRuleList: computev1.ForwardingRuleList{
+				Id:             "",
+				Items:          []*computev1.ForwardingRule{&computev1.ForwardingRule{IPAddress: "non-matching.ip"}},
+				SelfLink:       "",
+				Warning:        nil,
+				ServerResponse: googleapi.ServerResponse{},
+			},
+			fwdingRuleError: nil,
 			wantErr:         true,
 			expectedMessage: "Forwarding rule not found in GCP for given service IP matching.ip",
 		},
 		{
-			// Case: GCP errors out
-			name: "method should return error returned from GCP",
-			args: args{rhapiLbIP: "matching.ip",
-				frListGetter: func(gc *Client) (*computev1.ForwardingRuleList, error) { return nil, fmt.Errorf("GCP error") }},
+			// Case: GCP returns error
+			name:            "method should return error when GCP returns error getting forwarding rules.",
+			args:            args{rhapiLbIP: "matching.ip"},
+			fwdingRuleList:  computev1.ForwardingRuleList{},
+			fwdingRuleError: fmt.Errorf("Dummy GCP error"),
 			wantErr:         true,
-			expectedMessage: "GCP error",
+			expectedMessage: "Dummy GCP error",
 		},
 	}
 	var actualMessage string
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			FakeGCPCli.EXPECT().GetForwardingRuleList().Times(1).Return(&test.fwdingRuleList, test.fwdingRuleError)
 			gc := &Client{
-				projectID:      test.fields.projectID,
-				region:         test.fields.region,
-				clusterName:    test.fields.clusterName,
-				computeService: test.fields.computeService,
+				gcpComputeClient: FakeGCPCli,
+				projectID:        projectID,
+				region:           region,
+				clusterName:      test.fields.clusterName,
+				computeService:   test.fields.computeService,
 			}
-			if err := gc.ensureGCPForwardingRuleForExtIP(test.args.rhapiLbIP, test.args.frListGetter); ((err != nil) != test.wantErr) || (test.wantErr && (err.Error() != test.expectedMessage)) {
+			err := gc.ensureGCPForwardingRuleForExtIP(test.args.rhapiLbIP)
+			if ((err != nil) != test.wantErr) || (test.wantErr && (err.Error() != test.expectedMessage)) {
 
 				if err != nil {
 					actualMessage = err.Error()
