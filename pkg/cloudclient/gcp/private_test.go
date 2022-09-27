@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
 	"github.com/golang/mock/gomock"
-	mocks2 "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mocks"
+	mocks2 "github.com/openshift/cloud-ingress-operator/pkg/cloudclient/mock_cloudclient/gcp"
 	"google.golang.org/api/googleapi"
 
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"

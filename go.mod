@@ -11,28 +11,22 @@ require (
 	github.com/openshift/api v3.9.1-0.20190517100836-d5b34b957e91+incompatible
 	github.com/openshift/cluster-api-provider-gcp v0.0.0
 	github.com/openshift/machine-api-operator v0.2.1-0.20200226185612-9b0170a1ba07
-  github.com/openshift/operator-custom-metrics v0.5.0
-	github.com/operator-framework/operator-sdk v0.18.2
-  github.com/operator-framework/operator-lib v0.11.0
+	github.com/openshift/operator-custom-metrics v0.5.0
+	github.com/operator-framework/operator-lib v0.11.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.7.1
-  github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.55.0
-	github.com/spf13/pflag v1.0.5
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.55.0
+	github.com/prometheus/client_golang v1.12.1
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.7.0
-  
-	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
+	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094
 	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e // indirect
-
 	google.golang.org/api v0.88.0
-  
-  gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-
-	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/kube-openapi v0.0.0-20201113171705-d219536bb9fd
-	k8s.io/utils v0.0.0-20210111153108-fddb29f9d009
-  k8s.io/api v0.24.3
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3
-  
+	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cluster-api-provider-aws v0.0.0
 	sigs.k8s.io/controller-runtime v0.12.3
 )
@@ -80,21 +74,16 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
-	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
-	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094
-	golang.org/x/sys v0.0.0-20220624220833-87e55d714810 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
@@ -106,12 +95,9 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apiextensions-apiserver v0.24.2 // indirect
 	k8s.io/component-base v0.24.2 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42
-	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
