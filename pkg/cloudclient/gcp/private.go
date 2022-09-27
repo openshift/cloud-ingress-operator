@@ -189,10 +189,15 @@ func (gc *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, d
 	return nil
 }
 
-// Returns nil if forwarding rule is found for a given IP, or error if not found
-func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
+func (gc *Client) getForwardingRuleList() (*compute.ForwardingRuleList, error) {
 	listCall := gc.computeService.ForwardingRules.List(gc.projectID, gc.region)
 	response, err := listCall.Do()
+	return response, err
+}
+
+// Returns nil if forwarding rule is found for a given IP, or error if not found
+func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
+	response, err := gc.gcpComputeClient.GetForwardingRuleList()
 	if err != nil {
 		return err
 	}

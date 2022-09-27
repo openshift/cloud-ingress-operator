@@ -28,15 +28,22 @@ var (
 	log = logf.Log.WithName("gcp_cloudclient")
 )
 
+type GCPComputeClient interface {
+	GetForwardingRuleList() (*computev1.ForwardingRuleList, error)
+}
+
 // Client represents a GCP cloud Client
+// To recreate mock for this, run:
+// mockgen -source=pkg/cloudclient/gcp/gcp.go -destination=pkg/cloudclient/mocks/mock_gcp.go
 type Client struct {
-	projectID      string
-	region         string
-	clusterName    string
-	baseDomain     string
-	masterList     *machineapi.MachineList
-	dnsService     *dnsv1.Service
-	computeService *computev1.Service
+	gcpComputeClient GCPComputeClient
+	projectID        string
+	region           string
+	clusterName      string
+	baseDomain       string
+	masterList       *machineapi.MachineList
+	dnsService       *dnsv1.Service
+	computeService   *computev1.Service
 }
 
 // EnsureAdminAPIDNS implements cloudclient.CloudClient
@@ -63,6 +70,10 @@ func (gc *Client) SetDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 func (gc *Client) Healthcheck(ctx context.Context, kclient k8s.Client) error {
 	_, err := gc.computeService.RegionBackendServices.List(gc.projectID, gc.region).Do()
 	return err
+}
+
+func (gc *Client) GetForwardingRuleList() (*computev1.ForwardingRuleList, error) {
+	return gc.getForwardingRuleList()
 }
 
 func newClient(ctx context.Context, serviceAccountJSON []byte) (*Client, error) {
