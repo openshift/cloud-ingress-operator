@@ -148,24 +148,17 @@ func TestGCPProviderDecodeEncode(t *testing.T) {
 }
 
 func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
-	type fields struct {
-		projectID      string
-		region         string
-		clusterName    string
-		computeService *computev1.Service
-	}
+
 	type args struct {
 		rhapiLbIP string
 	}
-	projectID := "dummyProject"
-	region := "dummyRegion"
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	FakeGCPCli := mocks2.NewMockGCPInterface(ctrl)
 
 	tests := []struct {
 		name            string
-		fields          fields
 		args            args
 		fwdingRuleList  computev1.ForwardingRuleList
 		fwdingRuleError error
@@ -178,7 +171,7 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 			args: args{rhapiLbIP: "matching.ip"},
 			fwdingRuleList: computev1.ForwardingRuleList{
 				Id:             "",
-				Items:          []*computev1.ForwardingRule{&computev1.ForwardingRule{IPAddress: "matching.ip"}},
+				Items:          []*computev1.ForwardingRule{{IPAddress: "matching.ip"}},
 				SelfLink:       "",
 				Warning:        nil,
 				ServerResponse: googleapi.ServerResponse{},
@@ -192,7 +185,7 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 			args: args{rhapiLbIP: "matching.ip"},
 			fwdingRuleList: computev1.ForwardingRuleList{
 				Id:             "",
-				Items:          []*computev1.ForwardingRule{&computev1.ForwardingRule{IPAddress: "non-matching.ip"}},
+				Items:          []*computev1.ForwardingRule{{IPAddress: "non-matching.ip"}},
 				SelfLink:       "",
 				Warning:        nil,
 				ServerResponse: googleapi.ServerResponse{},
@@ -206,9 +199,9 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 			name:            "method should return error when GCP returns error getting forwarding rules.",
 			args:            args{rhapiLbIP: "matching.ip"},
 			fwdingRuleList:  computev1.ForwardingRuleList{},
-			fwdingRuleError: fmt.Errorf("Dummy GCP error"),
+			fwdingRuleError: fmt.Errorf("dummy GCP error"),
 			wantErr:         true,
-			expectedMessage: "Dummy GCP error",
+			expectedMessage: "dummy GCP error",
 		},
 	}
 	var actualMessage string
@@ -217,10 +210,10 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 			FakeGCPCli.EXPECT().GetForwardingRuleList().Times(1).Return(&test.fwdingRuleList, test.fwdingRuleError)
 			gc := &Client{
 				gcpComputeClient: FakeGCPCli,
-				projectID:        projectID,
-				region:           region,
-				clusterName:      test.fields.clusterName,
-				computeService:   test.fields.computeService,
+				projectID:        "dummyProject",
+				region:           "dummyRegion",
+				clusterName:      "dummyCluster",
+				computeService:   &computev1.Service{},
 			}
 			err := gc.ensureGCPForwardingRuleForExtIP(test.args.rhapiLbIP)
 			if ((err != nil) != test.wantErr) || (test.wantErr && (err.Error() != test.expectedMessage)) {
