@@ -155,7 +155,7 @@ func TestEnsureGCPForwardingRuleForExtIP(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	FakeGCPCli := mocks2.NewMockGCPInterface(ctrl)
+	FakeGCPCli := mocks2.NewMockGCPComputeClient(ctrl)
 
 	tests := []struct {
 		name            string

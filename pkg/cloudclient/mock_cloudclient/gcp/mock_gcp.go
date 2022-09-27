@@ -2,7 +2,7 @@
 // Source: pkg/cloudclient/gcp/gcp.go
 
 // Package mock_gcp is a generated GoMock package.
-package gcp
+package mock_gcp
 
 import (
 	reflect "reflect"
@@ -11,31 +11,31 @@ import (
 	compute "google.golang.org/api/compute/v1"
 )
 
-// MockGCPInterface is a mock of GCPInterface interface.
-type MockGCPInterface struct {
+// MockGCPComputeClient is a mock of GCPComputeClient interface.
+type MockGCPComputeClient struct {
 	ctrl     *gomock.Controller
-	recorder *MockGCPInterfaceMockRecorder
+	recorder *MockGCPComputeClientMockRecorder
 }
 
-// MockGCPInterfaceMockRecorder is the mock recorder for MockGCPInterface.
-type MockGCPInterfaceMockRecorder struct {
-	mock *MockGCPInterface
+// MockGCPComputeClientMockRecorder is the mock recorder for MockGCPComputeClient.
+type MockGCPComputeClientMockRecorder struct {
+	mock *MockGCPComputeClient
 }
 
-// NewMockGCPInterface creates a new mock instance.
-func NewMockGCPInterface(ctrl *gomock.Controller) *MockGCPInterface {
-	mock := &MockGCPInterface{ctrl: ctrl}
-	mock.recorder = &MockGCPInterfaceMockRecorder{mock}
+// NewMockGCPComputeClient creates a new mock instance.
+func NewMockGCPComputeClient(ctrl *gomock.Controller) *MockGCPComputeClient {
+	mock := &MockGCPComputeClient{ctrl: ctrl}
+	mock.recorder = &MockGCPComputeClientMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockGCPInterface) EXPECT() *MockGCPInterfaceMockRecorder {
+func (m *MockGCPComputeClient) EXPECT() *MockGCPComputeClientMockRecorder {
 	return m.recorder
 }
 
 // GetForwardingRuleList mocks base method.
-func (m *MockGCPInterface) GetForwardingRuleList() (*compute.ForwardingRuleList, error) {
+func (m *MockGCPComputeClient) GetForwardingRuleList() (*compute.ForwardingRuleList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetForwardingRuleList")
 	ret0, _ := ret[0].(*compute.ForwardingRuleList)
@@ -44,7 +44,7 @@ func (m *MockGCPInterface) GetForwardingRuleList() (*compute.ForwardingRuleList,
 }
 
 // GetForwardingRuleList indicates an expected call of GetForwardingRuleList.
-func (mr *MockGCPInterfaceMockRecorder) GetForwardingRuleList() *gomock.Call {
+func (mr *MockGCPComputeClientMockRecorder) GetForwardingRuleList() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetForwardingRuleList", reflect.TypeOf((*MockGCPInterface)(nil).GetForwardingRuleList))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetForwardingRuleList", reflect.TypeOf((*MockGCPComputeClient)(nil).GetForwardingRuleList))
 }
