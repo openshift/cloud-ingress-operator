@@ -13,7 +13,7 @@ import (
 
 // CloudClient defines the interface for a cloud agnostic implementation
 // For mocking: mockgen -source=pkg/cloudclient/cloudclient.go -destination=pkg/cloudclient/mock_cloudclient/mock_cloudclient.go
-// Or run `make generate-mocks`
+// Or run `make generate`
 type CloudClient interface {
 
 	/* APIScheme */

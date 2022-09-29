@@ -33,7 +33,7 @@ type GCPComputeClient interface {
 }
 
 // Client represents a GCP cloud Client
-// To recreate mock for this, run: `make generate-mocks`
+// To recreate mock for this, run: `make generate`
 type Client struct {
 	gcpComputeClient GCPComputeClient
 	projectID        string
