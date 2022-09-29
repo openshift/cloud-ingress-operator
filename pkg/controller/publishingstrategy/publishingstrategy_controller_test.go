@@ -7,7 +7,7 @@ import (
 
 	"context"
 
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/pkg/apis/cloudingress/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	corev1 "k8s.io/api/core/v1"
@@ -446,7 +446,7 @@ func TestEnsureIngressController(t *testing.T) {
 
 	for _, test := range tests {
 		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.ensureIngressController(log, test.IngressController, desiredIngressController)
 
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
@@ -500,7 +500,7 @@ func TestDeleteUnpublishedIngressControllers(t *testing.T) {
 	}
 	for _, test := range tests {
 		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.deleteUnpublishedIngressControllers(test.Map)
 
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
@@ -560,7 +560,7 @@ func TestEnsureStaticSpec(t *testing.T) {
 	}
 	for _, test := range tests {
 		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.ensureStaticSpec(log, test.IngressController, test.DesiredIngressController)
 
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
@@ -643,7 +643,7 @@ func TestEnsurePatchableSpec(t *testing.T) {
 
 	for _, test := range tests {
 		testClient, testScheme := setUpTestClient([]client.Object{test.IngressController}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.ensurePatchableSpec(log, test.IngressController, test.DesiredIngressController)
 
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
@@ -790,7 +790,7 @@ func TestReconcileGCP(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
 		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
 
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.Reconcile(context.TODO(), reconcile.Request{
 			NamespacedName: types.NamespacedName{
 				Name:      "publishingstrategy",
@@ -948,7 +948,7 @@ func TestReconcileAWS(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
 		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
 
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.Reconcile(context.TODO(), reconcile.Request{
 			NamespacedName: types.NamespacedName{
 				Name:      "publishingstrategy",
@@ -1061,7 +1061,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
 		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
 
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		r := &ReconcilePublishingStrategy{client: testClient, scheme: testScheme}
 		result, err := r.Reconcile(context.TODO(), reconcile.Request{
 			NamespacedName: types.NamespacedName{
 				Name:      "publishingstrategy",
@@ -1179,10 +1179,10 @@ func makeIngressControllerCR(name, lbScope string, finalizers []string, override
 func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType, errorTarget string) (*customClient, *runtime.Scheme) {
 	s := scheme.Scheme
 	for _, v := range cr {
-		s.AddKnownTypes(cloudingressv1alpha1.GroupVersion, v)
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
 	}
 	for _, v := range ro {
-		s.AddKnownTypes(cloudingressv1alpha1.GroupVersion, v)
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
 	}
 
 	testClient := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(ro...).WithObjects(cr...).Build()
@@ -1193,10 +1193,10 @@ func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType
 func setupLocalV1alpha1Scheme(cr []client.Object, ro []runtime.Object) *runtime.Scheme {
 	s := scheme.Scheme
 	for _, v := range cr {
-		s.AddKnownTypes(cloudingressv1alpha1.GroupVersion, v)
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
 	}
 	for _, v := range ro {
-		s.AddKnownTypes(cloudingressv1alpha1.GroupVersion, v)
+		s.AddKnownTypes(cloudingressv1alpha1.SchemeGroupVersion, v)
 	}
 
 	return s
