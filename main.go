@@ -123,6 +123,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup Global Variables
+	cli := mgr.GetClient()
+	if err := baseutils.SetClusterVersion(cli); err != nil {
+		setupLog.Error(err, "")
+		os.Exit(1)
+	}
+
 	// setup apischemecontroller with mgr
 	if err = (&apischemecontroller.APISchemeReconciler{
 		Client: mgr.GetClient(),
