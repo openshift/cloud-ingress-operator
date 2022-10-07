@@ -210,17 +210,16 @@ func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 		return err
 	}
 
-	newNLBs, err := ac.createNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0])
+	tags := ac.GetTags(infrastructureName)
+
+	newNLBs, err := ac.createNetworkLoadBalancer(extNLBName, "internet-facing", subnetIDs[0], tags)
 	if err != nil {
 		return err
 	}
 	if len(newNLBs) != 1 {
 		return fmt.Errorf("more than one NLB, or no new NLB detected (expected 1, got %d)", len(newNLBs))
 	}
-	err = ac.addTagsForNLB(newNLBs[0].loadBalancerArn, infrastructureName)
-	if err != nil {
-		return err
-	}
+
 	// attempt to use existing TargetGroup
 	targetGroupName := fmt.Sprintf("%s-aext", infrastructureName)
 	targetGroupARN, err := ac.getTargetGroupArn(targetGroupName)
@@ -1015,7 +1014,7 @@ func (ac *Client) deleteExternalLoadBalancer(extLoadBalancerArn string) error {
 }
 
 // createNetworkLoadBalancer should only return one new NLB at a time
-func (ac *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]loadBalancerV2, error) {
+func (ac *Client) createNetworkLoadBalancer(lbName, scheme, subnet string, tags []*elbv2.Tag) ([]loadBalancerV2, error) {
 	i := &elbv2.CreateLoadBalancerInput{
 		Name:   aws.String(lbName),
 		Scheme: aws.String(scheme),
@@ -1023,6 +1022,7 @@ func (ac *Client) createNetworkLoadBalancer(lbName, scheme, subnet string) ([]lo
 			aws.String(subnet),
 		},
 		Type: aws.String("network"),
+		Tags: tags,
 	}
 
 	result, err := ac.elbv2Client.CreateLoadBalancer(i)
@@ -1067,31 +1067,6 @@ func (ac *Client) createListenerForNLB(targetGroupArn, loadBalancerArn string) e
 	return nil
 }
 
-// addTagsForNLB creates needed tags for an NLB
-func (ac *Client) addTagsForNLB(resourceARN string, clusterName string) error {
-	i := &elbv2.AddTagsInput{
-		ResourceArns: []*string{
-			aws.String(resourceARN), // ext nlb resources arn
-		},
-		Tags: []*elbv2.Tag{
-			{
-				Key:   aws.String("kubernetes.io/cluster/" + clusterName),
-				Value: aws.String("owned"),
-			},
-			{
-				Key:   aws.String("Name"),
-				Value: aws.String(clusterName + "-ext"), //in form of samn-test-qb58m-ext
-			},
-		},
-	}
-
-	_, err := ac.elbv2Client.AddTags(i)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // getTargetGroupArn by passing in targetGroup Name
 func (ac *Client) getTargetGroupArn(targetGroupName string) (string, error) {
 	i := &elbv2.DescribeTargetGroupsInput{
@@ -1105,4 +1080,22 @@ func (ac *Client) getTargetGroupArn(targetGroupName string) (string, error) {
 		return "", err
 	}
 	return aws.StringValue(result.TargetGroups[0].TargetGroupArn), nil
+}
+
+func (ac *Client) GetTags(clusterName string) []*elbv2.Tag {
+	tags := []*elbv2.Tag{
+		{
+			Key:   aws.String("kubernetes.io/cluster/" + clusterName),
+			Value: aws.String("owned"),
+		},
+		{
+			Key:   aws.String("Name"),
+			Value: aws.String(clusterName + "-ext"), //in form of samn-test-qb58m-ext
+		},
+		{
+			Key:   aws.String("red-hat-managed"),
+			Value: aws.String("true"),
+		},
+	}
+	return tags
 }

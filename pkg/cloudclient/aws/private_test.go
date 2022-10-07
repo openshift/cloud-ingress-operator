@@ -867,7 +867,15 @@ func TestCreateNetworkLoadBalancer(t *testing.T) {
 		client := &Client{
 			elbv2Client: mockCreateLoadBalancer{Resp: test.Resp, ErrResp: test.ErrResp},
 		}
-		resp, err := client.createNetworkLoadBalancer(test.LbName, test.Scheme, test.Subnet)
+
+		tag := elbv2.Tag{
+			Key:   aws.String("red-hat-managed"),
+			Value: aws.String("true"),
+		}
+
+		tags := []*elbv2.Tag{&tag}
+
+		resp, err := client.createNetworkLoadBalancer(test.LbName, test.Scheme, test.Subnet, tags)
 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
 			t.Fatalf("Test return mismatch. Expect error? %t: Return %+v", test.ErrorExpected, err)
 		}
