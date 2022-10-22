@@ -5,7 +5,7 @@ package utils
 import (
 	"context"
 
-	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	machineapi "github.com/openshift/api/machine/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

@@ -3,14 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
-	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"reflect"
 	"testing"
-
-	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -18,31 +12,69 @@ import (
 	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/route53/route53iface"
+	machineapi "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
+	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
+
+func TestAWSProviderDecode(t *testing.T) {
+	tests := []struct {
+		m machineapi.Machine
+	}{
+		{
+			m: testutils.CreateMachineObjPre411("master-0", "decode", "master", testutils.DefaultRegionName, testutils.DefaultAzName),
+		},
+		{
+			m: testutils.CreateMachineObj411("master-0", "decode", "master", testutils.DefaultRegionName, testutils.DefaultAzName),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+
+			objs := []runtime.Object{&test.m}
+			mocks := testutils.NewTestMock(t, objs)
+			machineInfo := types.NamespacedName{
+				Name:      test.m.GetName(),
+				Namespace: test.m.GetNamespace(),
+			}
+			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &test.m)
+			if err != nil {
+				t.Fatalf("Couldn't reload machine %s: %v", test.m.GetName(), err)
+			}
+
+			provSpec, err := getAWSDecodedProviderSpec(test.m, mocks.Scheme)
+			assert.NoError(t, err)
+			assert.Equal(t, *provSpec.AMI.ID, testutils.DefaultAMIID)
+		})
+	}
+}
 
 func TestUpdateAWSLBList(t *testing.T) {
 	clustername := "lbupdatetest"
-	sampleMachine := testutils.CreateMachineObj("master-0", clustername, "master", testutils.DefaultRegionName, testutils.DefaultAzName)
+	sampleMachine := testutils.CreateMachineObjPre411("master-0", clustername, "master", testutils.DefaultRegionName, testutils.DefaultAzName)
 	objs := []runtime.Object{&sampleMachine}
 	mocks := testutils.NewTestMock(t, objs)
 
-	oldLBList := []awsproviderapi.LoadBalancerReference{
+	oldLBList := []machineapi.LoadBalancerReference{
 		{
 			// <clustername>-<id>-ext
 			Name: fmt.Sprintf("%s-%s-ext", clustername, "12345"),
-			Type: awsproviderapi.NetworkLoadBalancerType,
+			Type: machineapi.NetworkLoadBalancerType,
 		},
 		{
 			// <clustername>-<id>-int
 			Name: fmt.Sprintf("%s-%s-int", clustername, "12345"),
-			Type: awsproviderapi.NetworkLoadBalancerType,
+			Type: machineapi.NetworkLoadBalancerType,
 		},
 	}
-	newLBList := []awsproviderapi.LoadBalancerReference{
+	newLBList := []machineapi.LoadBalancerReference{
 		{
 			// Just something random!
 			Name: fmt.Sprintf("%s-%s-test", clustername, "12345"),
-			Type: awsproviderapi.NetworkLoadBalancerType,
+			Type: machineapi.NetworkLoadBalancerType,
 		},
 	}
 	// quickly make sure the test is going to measure an actual change
@@ -50,16 +82,10 @@ func TestUpdateAWSLBList(t *testing.T) {
 		t.Fatalf("Initial test conditions are unexpected. Old LB list should be 2 (got %d), New LB list should be 1 (got %d)", len(oldLBList), len(newLBList))
 	}
 	// decode spec
-	codec, err := awsproviderapi.NewCodec()
-	if err != nil {
-		t.Fatalf("Can't create decoder codec for AWS Provider API %v", err)
-	}
-	awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
-	err = codec.DecodeProviderSpec(&sampleMachine.Spec.ProviderSpec, awsconfig)
+	awsconfig, err := getAWSDecodedProviderSpec(sampleMachine, mocks.FakeKubeClient.Scheme())
 	if err != nil {
 		t.Fatalf("Can't decode sample Machine ProviderSpec %v", err)
 	}
-
 	err = updateAWSLBList(mocks.FakeKubeClient, oldLBList, newLBList, sampleMachine, awsconfig)
 	if err != nil {
 		t.Fatalf("Couldn't update AWS LoadBalancer List: %v", err)
@@ -76,7 +102,7 @@ func TestUpdateAWSLBList(t *testing.T) {
 		t.Fatalf("Couldn't reload the test machine: %v", err)
 	}
 
-	err = codec.DecodeProviderSpec(&sampleMachine.Spec.ProviderSpec, awsconfig)
+	awsconfig, err = getAWSDecodedProviderSpec(sampleMachine, mocks.Scheme)
 	if err != nil {
 		t.Fatalf("Can't decode sample Machine ProviderSpec %v", err)
 	}
@@ -139,7 +165,11 @@ func TestRemoveAWSELB(t *testing.T) {
 			}
 			newMachines = append(newMachines, machine)
 
-			l, lbNames, lbTypes, err := testutils.ValidateMachineLB(&machine)
+			awsconfig, err := getAWSDecodedProviderSpec(machine, mocks.Scheme)
+			if err != nil {
+				t.Fatalf("could not decode provider spec: %v", err)
+			}
+			l, lbNames, lbTypes, err := testutils.ValidateMachineLB(awsconfig)
 			if err != nil {
 				t.Fatalf("Couldn't lookup the LB info: %v", err)
 			}
@@ -150,7 +180,7 @@ func TestRemoveAWSELB(t *testing.T) {
 			if !test.skipPreCheck {
 				found := false
 				for i := 0; i < l; i++ {
-					if lbNames[i] == test.nameToRemove && lbTypes[i] == awsproviderapi.NetworkLoadBalancerType {
+					if lbNames[i] == test.nameToRemove && lbTypes[i] == machineapi.NetworkLoadBalancerType {
 						found = true
 						break
 					}
@@ -186,7 +216,11 @@ func TestRemoveAWSELB(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Couldn't reload the test machine (named %s): %v", machineInfo.Name, err)
 			}
-			l, lbNames, _, err := testutils.ValidateMachineLB(&machine)
+			awsconfig, err := getAWSDecodedProviderSpec(machine, mocks.Scheme)
+			if err != nil {
+				t.Fatalf("could not decode provider spec: %v", err)
+			}
+			l, lbNames, _, err := testutils.ValidateMachineLB(awsconfig)
 			if err != nil {
 				t.Fatalf("Couldn't load the LB info for %s: %v", machineInfo.Name, err)
 			}
@@ -200,27 +234,6 @@ func TestRemoveAWSELB(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestAWSProviderDecode(t *testing.T) {
-	machine := testutils.CreateMachineObj("master-0", "decode", "master", testutils.DefaultRegionName, testutils.DefaultAzName)
-
-	objs := []runtime.Object{&machine}
-	mocks := testutils.NewTestMock(t, objs)
-	machineInfo := types.NamespacedName{
-		Name:      machine.GetName(),
-		Namespace: machine.GetNamespace(),
-	}
-	err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
-	if err != nil {
-		t.Fatalf("Couldn't reload machine %s: %v", machine.GetName(), err)
-	}
-
-	_, err = getAWSDecodedProviderSpec(machine)
-	if err != nil {
-		t.Fatalf("Failed to decode machine %s: %v", machine.GetName(), err)
-	}
-
 }
 
 type mockDescribeELBv2LoadBalancers struct {
