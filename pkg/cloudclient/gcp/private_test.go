@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	machineapi "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -116,27 +117,42 @@ func TestGetClusterRegion(t *testing.T) {
 }
 
 func TestGCPProviderDecodeEncode(t *testing.T) {
-	machine := testutils.CreateGCPMachineObj("master-0", "decode", "master", "us-east1", "us-east1-b")
-	objs := []runtime.Object{&machine}
-	mocks := testutils.NewTestMock(t, objs)
-	machineInfo := types.NamespacedName{
-		Name:      machine.GetName(),
-		Namespace: machine.GetNamespace(),
+	tests := []struct {
+		m machineapi.Machine
+	}{
+		{
+			m: testutils.CreateGCPMachineObjPre411("master-0", "decode", "master", "us-east1", "us-east1-b"),
+		},
+		{
+			m: testutils.CreateGCPMachineObj411("master-0", "decode", "master", "us-east1", "us-east1-b"),
+		},
 	}
 
-	err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &machine)
-	if err != nil {
-		t.Fatalf("Couldn't reload machine %s: %v", machine.GetName(), err)
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			objs := []runtime.Object{&test.m}
+			mocks := testutils.NewTestMock(t, objs)
+			machineInfo := types.NamespacedName{
+				Name:      test.m.GetName(),
+				Namespace: test.m.GetNamespace(),
+			}
+
+			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &test.m)
+			if err != nil {
+				t.Fatalf("Couldn't reload machine %s: %v", test.m.GetName(), err)
+			}
+
+			decodedSpec, err := getGCPDecodedProviderSpec(test.m, mocks.Scheme)
+			if err != nil {
+				t.Fatalf("Failed to decode machine %s: %v", test.m.GetName(), err)
+			}
+
+			_, err = encodeProviderSpec(decodedSpec, mocks.Scheme)
+
+			if err != nil {
+				t.Fatalf("Failed to encode ProviderSpec for machine %s: %v", test.m.GetName(), err)
+			}
+		})
 	}
 
-	decodedSpec, err := getGCPDecodedProviderSpec(machine)
-	if err != nil {
-		t.Fatalf("Failed to decode machine %s: %v", machine.GetName(), err)
-	}
-
-	_, err = encodeProviderSpec(decodedSpec)
-
-	if err != nil {
-		t.Fatalf("Failed to encode ProviderSpec for machine %s: %v", machine.GetName(), err)
-	}
 }

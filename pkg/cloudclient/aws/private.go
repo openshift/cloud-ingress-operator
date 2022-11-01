@@ -3,6 +3,7 @@ package aws
 // "Private" or non-interface conforming methods
 
 import (
+	"bytes"
 	"context"
 	goError "errors"
 	"fmt"
@@ -13,11 +14,13 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	machineapi "github.com/openshift/api/machine/v1beta1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/cloud-ingress-operator/config"
@@ -67,13 +70,13 @@ type installConfig struct {
 // objects in a cluster
 func removeAWSLBFromMasterMachines(kclient k8s.Client, elbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
-		providerSpecDecoded, err := getAWSDecodedProviderSpec(machine)
+		providerSpecDecoded, err := getAWSDecodedProviderSpec(machine, kclient.Scheme())
 		if err != nil {
 			log.Error(err, "Error retrieving decoded ProviderSpec for machine", "machine", machine.Name)
 			return err
 		}
 		lbList := providerSpecDecoded.LoadBalancers
-		newLBList := []awsproviderapi.LoadBalancerReference{}
+		newLBList := []machineapi.LoadBalancerReference{}
 		for _, lb := range lbList {
 			if lb.Name != elbName {
 				log.Info("Machine's LB does not match LB to remove", "Machine LB", lb.Name, "LB to remove", elbName)
@@ -93,17 +96,14 @@ func removeAWSLBFromMasterMachines(kclient k8s.Client, elbName string, masterNod
 // getAWSDecodedProviderSpec casts the spec.providerSpec of an OpenShift machine
 // object to an AWSMachineProviderConfig object, which is required to read and
 // interact with fields in a machine's providerSpec
-func getAWSDecodedProviderSpec(machine machineapi.Machine) (*awsproviderapi.AWSMachineProviderConfig, error) {
-	awsCodec, err := awsproviderapi.NewCodec()
-	if err != nil {
-		log.Error(err, "Error creating AWSProviderConfigCodec")
-		return nil, err
-	}
+func getAWSDecodedProviderSpec(machine machineapi.Machine, r *runtime.Scheme) (*machineapi.AWSMachineProviderConfig, error) {
+	decoder := serializer.NewCodecFactory(r).UniversalDecoder()
 	providerSpecEncoded := machine.Spec.ProviderSpec
-	providerSpecDecoded := &awsproviderapi.AWSMachineProviderConfig{}
-	err = awsCodec.DecodeProviderSpec(&providerSpecEncoded, providerSpecDecoded)
+	providerSpecDecoded := &machineapi.AWSMachineProviderConfig{}
+
+	_, _, err := decoder.Decode(providerSpecEncoded.Value.Raw, nil, providerSpecDecoded)
 	if err != nil {
-		log.Error(err, "Error decoding provider spec for machine", "machine", machine.Name)
+		log.Error(err, "unable to decode AWS Machine Provider Spec")
 		return nil, err
 	}
 	return providerSpecDecoded, nil
@@ -114,21 +114,17 @@ func getAWSDecodedProviderSpec(machine machineapi.Machine) (*awsproviderapi.AWSM
 // the old and new lists are not equal. this function requires the decoded
 // ProviderSpec (as an AWSMachineProviderConfig object) that the
 // getAWSDecodedProviderSpec function will provide
-func updateAWSLBList(kclient k8s.Client, oldLBList []awsproviderapi.LoadBalancerReference, newLBList []awsproviderapi.LoadBalancerReference, machineToPatch machineapi.Machine, providerSpecDecoded *awsproviderapi.AWSMachineProviderConfig) error {
+func updateAWSLBList(kclient k8s.Client, oldLBList []machineapi.LoadBalancerReference, newLBList []machineapi.LoadBalancerReference, machineToPatch machineapi.Machine, providerSpecDecoded *machineapi.AWSMachineProviderConfig) error {
 	baseToPatch := k8s.MergeFrom(machineToPatch.DeepCopy())
-	awsCodec, err := awsproviderapi.NewCodec()
-	if err != nil {
-		log.Error(err, "Error creating AWSProviderConfigCodec")
-		return err
-	}
 	if !reflect.DeepEqual(oldLBList, newLBList) {
 		providerSpecDecoded.LoadBalancers = newLBList
-		newProviderSpecEncoded, err := awsCodec.EncodeProviderSpec(providerSpecDecoded)
+
+		rawEncodedSpec, err := encodeAWSMachineProviderSpec(providerSpecDecoded, kclient.Scheme())
 		if err != nil {
 			log.Error(err, "Error encoding provider spec for machine", "machine", machineToPatch.Name)
 			return err
 		}
-		machineToPatch.Spec.ProviderSpec = *newProviderSpecEncoded
+		machineToPatch.Spec.ProviderSpec.Value = rawEncodedSpec
 		machineObj := machineToPatch.DeepCopy()
 		if err := kclient.Patch(context.Background(), machineObj, baseToPatch); err != nil {
 			log.Error(err, "Failed to update LBs in machine's providerSpec", "machine", machineToPatch.Name)
@@ -278,16 +274,8 @@ func getMasterNodeSubnets(kclient k8s.Client) (map[string]string, error) {
 		return subnets, fmt.Errorf("Did not find any master Machine objects")
 	}
 
-	// get the AZ from a Master object's providerSpec.
-	codec, err := awsproviderapi.NewCodec()
-
-	if err != nil {
-		return subnets, err
-	}
-
 	// Obtain the availability zone
-	awsconfig := &awsproviderapi.AWSMachineProviderConfig{}
-	err = codec.DecodeProviderSpec(&machineList.Items[0].Spec.ProviderSpec, awsconfig)
+	awsconfig, err := getAWSDecodedProviderSpec(machineList.Items[0], kclient.Scheme())
 	if err != nil {
 		return subnets, err
 	}
@@ -1098,4 +1086,16 @@ func (ac *Client) GetTags(clusterName string) []*elbv2.Tag {
 		},
 	}
 	return tags
+}
+
+func encodeAWSMachineProviderSpec(awsProviderSpec *machineapi.AWSMachineProviderConfig, scheme *runtime.Scheme) (*runtime.RawExtension, error) {
+	serializer := jsonserializer.NewSerializer(jsonserializer.DefaultMetaFactory, scheme, scheme, false)
+	var buffer bytes.Buffer
+	err := serializer.Encode(awsProviderSpec, &buffer)
+	if err != nil {
+		return nil, err
+	}
+	return &runtime.RawExtension{
+		Raw: buffer.Bytes(),
+	}, nil
 }

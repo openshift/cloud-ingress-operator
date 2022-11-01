@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"net/http"
 	"reflect"
 
@@ -14,9 +15,8 @@ import (
 	"google.golang.org/api/googleapi"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machineapi "github.com/openshift/api/machine/v1beta1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
-	machineapi "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -304,7 +304,7 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 
 func removeGCPLBFromMasterMachines(kclient k8s.Client, lbName string, masterNodes *machineapi.MachineList) error {
 	for _, machine := range masterNodes.Items {
-		providerSpecDecoded, err := getGCPDecodedProviderSpec(machine)
+		providerSpecDecoded, err := getGCPDecodedProviderSpec(machine, kclient.Scheme())
 		if err != nil {
 			log.Error(err, "Error retrieving decoded ProviderSpec for machine", "machine", machine.Name)
 			return err
@@ -326,46 +326,36 @@ func removeGCPLBFromMasterMachines(kclient k8s.Client, lbName string, masterNode
 	return nil
 }
 
-func getGCPDecodedProviderSpec(machine machineapi.Machine) (*gcpproviderapi.GCPMachineProviderSpec, error) {
-	s := runtime.NewScheme()
-	err := gcpproviderapi.SchemeBuilder.AddToScheme(s)
+func getGCPDecodedProviderSpec(machine machineapi.Machine, r *runtime.Scheme) (*machineapi.GCPMachineProviderSpec, error) {
+	decoder := serializer.NewCodecFactory(r).UniversalDecoder()
+	providerSpecEncoded := machine.Spec.ProviderSpec
+	providerSpecDecoded := &machineapi.GCPMachineProviderSpec{}
+
+	_, _, err := decoder.Decode(providerSpecEncoded.Value.Raw, nil, providerSpecDecoded)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to register gcpproviderapi types to scheme: %v", err)
+		log.Error(err, "unable to decode GCP machine provider spec")
+		return nil, err
 	}
-	codecFactory := serializer.NewCodecFactory(s)
-	decoder := codecFactory.UniversalDecoder(gcpproviderapi.SchemeGroupVersion)
-	obj, gvk, err := decoder.Decode(machine.Spec.ProviderSpec.Value.Raw, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("Could not decode GCP ProviderSpec: %v", err)
-	}
-	spec, ok := obj.(*gcpproviderapi.GCPMachineProviderSpec)
-	if !ok {
-		return nil, fmt.Errorf("Unexpected object: %#v", gvk)
-	}
-	return spec, nil
+	return providerSpecDecoded, nil
 }
 
-func encodeProviderSpec(in runtime.Object) (*runtime.RawExtension, error) {
-	var buf bytes.Buffer
-	s := runtime.NewScheme()
-	err := gcpproviderapi.SchemeBuilder.AddToScheme(s)
+func encodeProviderSpec(gcpProviderSpec *machineapi.GCPMachineProviderSpec, scheme *runtime.Scheme) (*runtime.RawExtension, error) {
+	serializer := jsonserializer.NewSerializer(jsonserializer.DefaultMetaFactory, scheme, scheme, false)
+	var buffer bytes.Buffer
+	err := serializer.Encode(gcpProviderSpec, &buffer)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to register gcpproviderapi types to scheme: %v", err)
+		return nil, err
 	}
-	codecFactory := serializer.NewCodecFactory(s)
-	serializerInfo := codecFactory.SupportedMediaTypes()
-	encoder := codecFactory.EncoderForVersion(serializerInfo[0].Serializer, gcpproviderapi.SchemeGroupVersion)
-	if err := encoder.Encode(in, &buf); err != nil {
-		return nil, fmt.Errorf("Encoding ProviderSpec failed: %v", err)
-	}
-	return &runtime.RawExtension{Raw: buf.Bytes()}, nil
+	return &runtime.RawExtension{
+		Raw: buffer.Bytes(),
+	}, nil
 }
 
-func updateGCPLBList(kclient k8s.Client, oldLBList []string, newLBList []string, machineToPatch machineapi.Machine, providerSpecDecoded *gcpproviderapi.GCPMachineProviderSpec) error {
+func updateGCPLBList(kclient k8s.Client, oldLBList []string, newLBList []string, machineToPatch machineapi.Machine, providerSpecDecoded *machineapi.GCPMachineProviderSpec) error {
 	baseToPatch := k8s.MergeFrom(machineToPatch.DeepCopy())
 	if !reflect.DeepEqual(oldLBList, newLBList) {
 		providerSpecDecoded.TargetPools = newLBList
-		newProviderSpecEncoded, err := encodeProviderSpec(providerSpecDecoded)
+		newProviderSpecEncoded, err := encodeProviderSpec(providerSpecDecoded, kclient.Scheme())
 		if err != nil {
 			log.Error(err, "Error encoding provider spec for machine", "machine", machineToPatch.Name)
 			return err
