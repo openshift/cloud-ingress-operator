@@ -228,6 +228,19 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return reconcile.Result{Requeue: true, RequeueAfter: shortwait * time.Second}, nil
 	}
 
+	// Set external traffic policy if it's not properly set
+	if found.Spec.ExternalTrafficPolicy != corev1.ServiceExternalTrafficPolicyTypeLocal {
+		found.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		err = r.Client.Update(context.TODO(), found)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s ExternalTrafficPolicy", found.GetNamespace(), found.GetName()))
+			return reconcile.Result{}, err
+		}
+		// let's re-queue just in case
+		reqLogger.Info("Requeuing after svc update")
+		return reconcile.Result{Requeue: true, RequeueAfter: shortwait * time.Second}, nil
+	}
+
 	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
 		found.Annotations[elbAnnotationKey] != elbAnnotationValue {
 		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationKey, elbAnnotationValue)
@@ -328,6 +341,7 @@ func (r *APISchemeReconciler) newServiceFor(instance *cloudingressv1alpha1.APISc
 			Selector:                 selector,
 			Type:                     corev1.ServiceTypeLoadBalancer,
 			LoadBalancerSourceRanges: instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks,
+			ExternalTrafficPolicy:    corev1.ServiceExternalTrafficPolicyTypeLocal,
 		},
 	}
 }
