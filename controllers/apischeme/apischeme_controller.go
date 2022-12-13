@@ -92,7 +92,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 	// Fetch the APIScheme instance
 	instance := &cloudingressv1alpha1.APIScheme{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -132,7 +132,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// Request object is alive, so ensure it has the DNS finalizer.
 		if !controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			controllerutil.AddFinalizer(instance, reconcileFinalizerDNS)
-			if err = r.Client.Update(context.TODO(), instance); err != nil {
+			if err = r.Client.Update(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
@@ -140,7 +140,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// Request object is being deleted.
 		if controllerutil.ContainsFinalizer(instance, reconcileFinalizerDNS) {
 			found := &corev1.Service{}
-			if err = r.Client.Get(context.TODO(), serviceNamespacedName, found); err != nil {
+			if err = r.Client.Get(ctx, serviceNamespacedName, found); err != nil {
 				if errors.IsNotFound(err) {
 					// Service was not found!
 					//
@@ -160,7 +160,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 			}
 
 			if found != nil {
-				err = cloudClient.DeleteAdminAPIDNS(context.TODO(), r.Client, instance, found)
+				err = cloudClient.DeleteAdminAPIDNS(ctx, r.Client, instance, found)
 				switch err := err.(type) {
 				case nil:
 					// all good
@@ -179,7 +179,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 			// Remove the DNS finalizer and update the request object.
 			controllerutil.RemoveFinalizer(instance, reconcileFinalizerDNS)
-			if err = r.Client.Update(context.TODO(), instance); err != nil {
+			if err = r.Client.Update(ctx, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 
@@ -194,13 +194,13 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 	// Does the Service exist already?
 	found := &corev1.Service{}
-	err = r.Client.Get(context.TODO(), serviceNamespacedName, found)
+	err = r.Client.Get(ctx, serviceNamespacedName, found)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// need to create it
 			dep := r.newServiceFor(instance)
 			reqLogger.Info("Service not found. Creating", "service", dep)
-			err = r.Client.Create(context.TODO(), dep)
+			err = r.Client.Create(ctx, dep)
 			if err != nil {
 				reqLogger.Error(err, "Failure to create new Service")
 				return reconcile.Result{}, err
@@ -218,7 +218,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		reqLogger.Info(fmt.Sprintf("Mismatch svc %s != %s\n", found.Spec.LoadBalancerSourceRanges, instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
 		reqLogger.Info(fmt.Sprintf("Mismatch between %s/service/%s LoadBalancerSourceRanges and AllowedCIDRBlocks. Updating...", found.GetNamespace(), found.GetName()))
 		found.Spec.LoadBalancerSourceRanges = instance.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
-		err = r.Client.Update(context.TODO(), found)
+		err = r.Client.Update(ctx, found)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s LoadBalancerSourceRanges", found.GetNamespace(), found.GetName()))
 			return reconcile.Result{}, err
@@ -231,7 +231,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	// Set external traffic policy if it's not properly set
 	if found.Spec.ExternalTrafficPolicy != corev1.ServiceExternalTrafficPolicyTypeLocal {
 		found.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
-		err = r.Client.Update(context.TODO(), found)
+		err = r.Client.Update(ctx, found)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to update the %s/service/%s ExternalTrafficPolicy", found.GetNamespace(), found.GetName()))
 			return reconcile.Result{}, err
@@ -244,7 +244,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
 		found.Annotations[elbAnnotationKey] != elbAnnotationValue {
 		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationKey, elbAnnotationValue)
-		err = r.Client.Update(context.TODO(), found)
+		err = r.Client.Update(ctx, found)
 		if err != nil {
 			reqLogger.Error(err, "Error updating service annotation")
 			return reconcile.Result{}, err
@@ -252,7 +252,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationValue))
 	}
 
-	err = cloudClient.EnsureAdminAPIDNS(context.TODO(), r.Client, instance, found)
+	err = cloudClient.EnsureAdminAPIDNS(ctx, r.Client, instance, found)
 	// Check for error types that this operator knows about
 	switch err := err.(type) {
 	case nil:
@@ -272,7 +272,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// To recover from this case we will need to delete the lb service.
 		// It will be recreated  at the next reconcile.
 		reqLogger.Info(fmt.Sprintf("Forwarding rule was deleted on cloud provider, deleting service %s/service/%s to force recreation", found.GetNamespace(), found.GetName()))
-		deleteSvcErr := r.Client.Delete(context.TODO(), found)
+		deleteSvcErr := r.Client.Delete(ctx, found)
 		if deleteSvcErr != nil {
 			if instance.DeletionTimestamp.IsZero() {
 				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service. It could already be deleted. Waiting %d seconds to complete possible deletion.", found.GetNamespace(), found.GetName(), longwait))
@@ -294,7 +294,7 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 
 			// To recover from this case we will need to delete the service. It will be recreated  at the next reconcile
 			reqLogger.Info(fmt.Sprintf("LoadBalancer was deleted, deleting service %s/service/%s to recover", found.GetNamespace(), found.GetName()))
-			err := r.Client.Delete(context.TODO(), found)
+			err := r.Client.Delete(ctx, found)
 			if err != nil {
 				reqLogger.Error(err, fmt.Sprintf("Failed to delete the %s/service/%s service, it could already be deleted. Waiting to complete possible deletion.", found.GetNamespace(), found.GetName()))
 			}
