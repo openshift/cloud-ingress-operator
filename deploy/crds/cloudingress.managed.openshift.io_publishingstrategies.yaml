@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.10.0
   creationTimestamp: null
   name: publishingstrategies.cloudingress.managed.openshift.io
 spec:
@@ -55,6 +55,7 @@ spec:
                             secret name must be unique.
                           type: string
                       type: object
+                      x-kubernetes-map-type: atomic
                     default:
                       description: Default defines default value of ingress when cluster
                         installs
@@ -112,6 +113,7 @@ spec:
                             only "value". The requirements are ANDed.
                           type: object
                       type: object
+                      x-kubernetes-map-type: atomic
                     type:
                       description: Type indicates the type of Load Balancer to use
                       enum:
@@ -146,9 +148,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
