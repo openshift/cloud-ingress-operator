@@ -69,7 +69,7 @@ const (
 )
 
 // Test entrypoint. osde2e runs this as a test suite on test pod.
-func $REPLACE_FUNC(t *testing.T) {
+func Test$REPLACE_FUNC(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	suiteConfig, reporterConfig := GinkgoConfiguration()

@@ -17,7 +17,7 @@ const (
 )
 
 // Test entrypoint. osde2e runs this as a test suite on test pod.
-func CloudIngressOperator(t *testing.T) {
+func TestCloudIngressOperator(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	suiteConfig, reporterConfig := GinkgoConfiguration()
