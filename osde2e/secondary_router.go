@@ -153,7 +153,7 @@ func addAppIngress(ctx context.Context, h *helper.H, appIngressToAppend clouding
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})
@@ -174,7 +174,7 @@ func removeAppIngress(ctx context.Context, h *helper.H, index int) {
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})

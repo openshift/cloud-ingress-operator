@@ -54,7 +54,7 @@ func updateDnsName(ctx context.Context, h *helper.H, newName string) {
 	AppIngress := PublishingStrategyInstance.Spec.ApplicationIngress
 
 	for i, v := range AppIngress {
-		if v.Default == true {
+		if v.Default {
 			AppIngress[i].DNSName = newName
 		}
 	}
@@ -65,7 +65,7 @@ func updateDnsName(ctx context.Context, h *helper.H, newName string) {
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})

@@ -40,7 +40,7 @@ var _ = ginkgo.Describe("[Suite: informing] "+TestPrefix, label.Informing, func(
 
 			ingress, _ := getingressController(ctx, h, "default")
 			expectedExpressions := []metav1.LabelSelectorRequirement{
-				{"foo", metav1.LabelSelectorOperator("In"), []string{"bar"}},
+				{Key: "foo", Operator: metav1.LabelSelectorOperator("In"), Values: []string{"bar"}},
 			}
 			for j := range ingress.Spec.RouteSelector.MatchExpressions {
 				Expect(
@@ -69,7 +69,7 @@ func updateMatchLabels(ctx context.Context, h *helper.H, tier string, routeS str
 	}
 	// Find the default router and update its scheme
 	for i, v := range AppIngress {
-		if v.Default == true {
+		if v.Default {
 			AppIngress[i].RouteSelector.MatchLabels = temp
 		}
 	}
@@ -80,7 +80,7 @@ func updateMatchLabels(ctx context.Context, h *helper.H, tier string, routeS str
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})
@@ -95,9 +95,9 @@ func updateMatchExpressions(ctx context.Context, h *helper.H, key string, operat
 	// Find the default router and update its scheme
 	tempVal := []string{values}
 	tempOp := metav1.LabelSelectorOperator(operator)
-	temp := metav1.LabelSelectorRequirement{key, tempOp, tempVal}
+	temp := metav1.LabelSelectorRequirement{Key: key, Operator: tempOp, Values: tempVal}
 	for i, v := range AppIngress {
-		if v.Default == true {
+		if v.Default {
 			AppIngress[i].RouteSelector.MatchExpressions = []metav1.LabelSelectorRequirement{temp}
 		}
 	}
@@ -106,7 +106,7 @@ func updateMatchExpressions(ctx context.Context, h *helper.H, key string, operat
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})
@@ -120,7 +120,7 @@ func resetRouteSelector(ctx context.Context, h *helper.H) {
 	AppIngress := PublishingStrategyInstance.Spec.ApplicationIngress
 	// Find the default router and update its scheme
 	for i, v := range AppIngress {
-		if v.Default == true {
+		if v.Default {
 			AppIngress[i].RouteSelector.MatchExpressions = append(AppIngress[i].RouteSelector.MatchExpressions[:i], AppIngress[i].RouteSelector.MatchExpressions[i+1:]...)
 			delete(AppIngress[i].RouteSelector.MatchLabels, "tier")
 		}
@@ -130,7 +130,7 @@ func resetRouteSelector(ctx context.Context, h *helper.H) {
 	Expect(err).NotTo(HaveOccurred())
 
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})

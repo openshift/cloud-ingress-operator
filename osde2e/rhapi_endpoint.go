@@ -47,7 +47,7 @@ func testHostnameResolves(h *helper.H) {
 	hostnameResolvePollDuration := 15 * time.Minute
 	ginkgo.Context("rh-api-test", func() {
 		util.GinkgoIt("hostname should resolve", func(ctx context.Context) {
-			wait.PollImmediate(30*time.Second, hostnameResolvePollDuration, func() (bool, error) {
+			err = wait.PollImmediate(30*time.Second, hostnameResolvePollDuration, func() (bool, error) {
 				getOpts := metav1.GetOptions{}
 				apiserver, err := h.Cfg().ConfigV1().APIServers().Get(ctx, "cluster", getOpts)
 				if err != nil {
@@ -107,7 +107,7 @@ func testCIDRBlockUpdates(h *helper.H) {
 			Expect(err).NotTo(HaveOccurred())
 
 			// //Update the APIScheme
-			APISchemeRawData, err = h.Dynamic().Resource(schema.GroupVersionResource{
+			_, err = h.Dynamic().Resource(schema.GroupVersionResource{
 				Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "apischemes",
 			}).Namespace(OperatorNamespace).Update(ctx, APISchemeRawData, metav1.UpdateOptions{})
 			Expect(err).NotTo(HaveOccurred())

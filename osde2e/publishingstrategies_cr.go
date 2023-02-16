@@ -70,7 +70,7 @@ func addPublishingstrategy(ctx context.Context, h *helper.H, publishingstrategy 
 	if err != nil {
 		return err
 	}
-	unstructuredObj := unstructured.Unstructured{obj}
+	unstructuredObj := unstructured.Unstructured{Object: obj}
 	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).

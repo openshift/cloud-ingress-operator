@@ -61,12 +61,13 @@ var _ = ginkgo.Describe("[Suite: informing] "+TestPrefix, label.Informing, func(
 				newAnnotations := updateAnnotation(ctx, h, ingressControllerName, "Owner", "cloud-ingress-operator")
 				apps2Ingress = newAnnotations
 				// 3. Delete secondaryIngress in publishingstrategy
-				removeIngressController(ctx, h, ingressControllerName)
+				err = removeIngressController(ctx, h, ingressControllerName)
 				Expect(err).NotTo(HaveOccurred())
 				// check that the ingresscontroller app-e2e-apps was deleted
 				ingressControllerExists(ctx, h, ingressControllerName, true)
 				apps2Ingress = updateAnnotation(ctx, h, ingressControllerName, "Owner", "cloud-ingress-operator")
-				removeIngressController(ctx, h, ingressControllerName)
+				err = removeIngressController(ctx, h, ingressControllerName)
+				Expect(err).NotTo(HaveOccurred())
 				ingressControllerExists(ctx, h, ingressControllerName, false)
 			},
 			(10 * time.Minute).Seconds(),
@@ -118,7 +119,7 @@ func updateAnnotation(
 		ingresscontroller.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&ingressController)
 		Expect(err).NotTo(HaveOccurred())
 
-		ingresscontroller, err = h.Dynamic().
+		_, err = h.Dynamic().
 			Resource(schema.GroupVersionResource{Group: "operator.openshift.io", Version: "v1", Resource: "ingresscontrollers"}).
 			Namespace("openshift-ingress-operator").
 			Update(ctx, ingresscontroller, metav1.UpdateOptions{})
@@ -132,22 +133,17 @@ func updateAnnotation(
 		ingresscontroller.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&ingressController)
 		Expect(err).NotTo(HaveOccurred())
 
-		ingresscontroller, err = h.Dynamic().
+		_, err = h.Dynamic().
 			Resource(schema.GroupVersionResource{Group: "operator.openshift.io", Version: "v1", Resource: "ingresscontrollers"}).
 			Namespace("openshift-ingress-operator").
 			Update(ctx, ingresscontroller, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred())
-		updatePublishingStrategy(ctx, h, ingressController, name)
+		updatePublishingStrategy(ctx, h, name)
 	}
 	return ingressController
 }
 
-func updatePublishingStrategy(
-	ctx context.Context,
-	h *helper.H,
-	ingressController operatorv1.IngressController,
-	name string,
-) {
+func updatePublishingStrategy(ctx context.Context, h *helper.H, name string) {
 	var err error
 	PublishingStrategyInstance, ps := getPublishingStrategy(ctx, h)
 	var AppIngress cloudingressv1alpha1.ApplicationIngress
@@ -161,7 +157,7 @@ func updatePublishingStrategy(
 	ps.Object, err = runtime.DefaultUnstructuredConverter.ToUnstructured(&PublishingStrategyInstance)
 	Expect(err).NotTo(HaveOccurred())
 	// Update the publishingstrategy
-	ps, err = h.Dynamic().
+	_, err = h.Dynamic().
 		Resource(schema.GroupVersionResource{Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "publishingstrategies"}).
 		Namespace(OperatorNamespace).
 		Update(ctx, ps, metav1.UpdateOptions{})

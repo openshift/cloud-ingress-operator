@@ -46,7 +46,7 @@ var _ = ginkgo.Describe("[Suite: operators] "+TestPrefix, label.Operators, func(
 			impersonateDedicatedAdmin(h, user)
 
 			defer func() {
-				apiSchemeCleanup(ctx, h, "apischeme-osde2e-test")
+				_ = apiSchemeCleanup(ctx, h, "apischeme-osde2e-test")
 			}()
 			defer func() {
 				h.Impersonate(rest.ImpersonationConfig{})
@@ -64,7 +64,9 @@ var _ = ginkgo.Describe("[Suite: operators] "+TestPrefix, label.Operators, func(
 
 		util.GinkgoIt("cluster admin should be allowed to manage apischemes CR", func(ctx context.Context) {
 			as := createApischeme("apischeme-cr-test")
-			defer apiSchemeCleanup(ctx, h, "apischeme-cr-test")
+			defer func() {
+				_ = apiSchemeCleanup(ctx, h, "apischeme-cr-test")
+			}()
 			err := addApischeme(ctx, h, as)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -96,7 +98,7 @@ func addApischeme(ctx context.Context, h *helper.H, apischeme cloudingress.APISc
 	if err != nil {
 		return err
 	}
-	unstructuredObj := unstructured.Unstructured{obj}
+	unstructuredObj := unstructured.Unstructured{Object: obj}
 	_, err = h.Dynamic().Resource(schema.GroupVersionResource{
 		Group: "cloudingress.managed.openshift.io", Version: "v1alpha1", Resource: "apischemes",
 	}).Namespace(OperatorNamespace).Create(ctx, &unstructuredObj, metav1.CreateOptions{})
