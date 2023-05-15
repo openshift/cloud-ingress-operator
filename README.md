@@ -19,6 +19,17 @@ The operator does not manage any kind of VPC peering or VPN connectivity into th
 
 As mentioned above, the operator is controlled through custom Kubernetes resources, `APIScheme` and `PublishingStrategy`. They are documented below:
 
+### `PublishingStrategy.applicationIngress` Deprecation 
+Managing cluster ingress controllers (`applicationIngress`) through the Cloud Ingress Operator is being deprecated in epic [SDE-1768](https://issues.redhat.com/browse/SDE-1768). 
+
+If the feature label is present (`legacy-ingress-support: false`) on the `PublishingStrategy` resource, `applicationIngress` resources are either not reconciled at all, or only reconcile the default ingress controller, depending on the OCP version of the cluster.
+
+If the cluster's OCP version is `4.13.0` or greater and the feature label is present, we do not reconcile any `IngressController` resources through this operator. Upgrading from `4.12->4.13` with this feature label enabled will remove the `Owner: cloud-ingress-operator` annotation from the default ingress controller.  
+
+If the cluster's OCP version is less than `4.13.0` or greater and the feature label is present, the **default** ingress controller will still exist in `PublishingStrategy.applicationIngress`, but no additional `apps2` ingress controller will be allowed to be created in `applicationIngress`, or reconciled by the Cloud Ingress Operator. 
+
+The only exception to this is if the customer has an existing `apps2` installation. They will be able to update and delete this as normal until they migrate to using natively managed second ingress controllers.
+
 ### APIScheme Custom Resource
 
 The APIScheme resource instructs the operator to create the admin API endpoint. The specification of the resource is explained below:
