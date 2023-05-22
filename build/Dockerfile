@@ -8,7 +8,7 @@ COPY . .
 RUN make go-build
 
 ####
-FROM registry.access.redhat.com/ubi8/ubi-micro:8.7-6
+FROM registry.access.redhat.com/ubi8/ubi-micro:8.8-1
 
 ENV USER_UID=1001 \
     USER_NAME=cloud-ingress-operator
