@@ -143,6 +143,8 @@ objects:
           mediatype: ''
         publisher: Red Hat
         sourceType: grpc
+        grpcPodConfig:
+          securityContextConfig: restricted
     - apiVersion: operators.coreos.com/v1
       kind: OperatorGroup
       metadata:
