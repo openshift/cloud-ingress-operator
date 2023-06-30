@@ -105,173 +105,185 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	// In case of failure, clusterBaseDomain is an empty string.
 	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.Client)
 
-	// Run the ingresscontroller related steps only when the version is less than 4.13
-	if !baseutils.IsVersionHigherThan("4.13") {
-		// Get all IngressControllers on cluster with an annotation that indicates cloud-ingress-operator owns it
-		ingressControllerList := &ingresscontroller.IngressControllerList{}
-		listOptions := []client.ListOption{
-			client.InNamespace("openshift-ingress-operator"),
-		}
-		err = r.Client.List(context.TODO(), ingressControllerList, listOptions...)
-		if err != nil {
-			log.Error(err, "Cannot get list of ingresscontroller")
-			return reconcile.Result{}, err
-		}
+	// Get all IngressControllers on cluster with an annotation that indicates cloud-ingress-operator owns it
+	ingressControllerList := &ingresscontroller.IngressControllerList{}
+	listOptions := []client.ListOption{
+		client.InNamespace("openshift-ingress-operator"),
+	}
+	err = r.Client.List(context.TODO(), ingressControllerList, listOptions...)
+	if err != nil {
+		log.Error(err, "Cannot get list of ingresscontroller")
+		return reconcile.Result{}, err
+	}
 
-		ownedIngressControllers := getIngressWithCloudIngressOpreatorOwnerAnnotation(*ingressControllerList)
+	ownedIngressControllers := getIngressWithCloudIngressOpreatorOwnerAnnotation(*ingressControllerList)
 
-		/* To ensure that the set of all IngressControllers owned by cloud-ingress-operator
-		match the list of ApplicationIngresses in the PublishingStrategy, a map is created to
-		tie IngressControllers existing on cluster with the owner annotation
-		to the ApplicationIngresses existing in the PublishingStrategy CR. If an IngressController CR
-		owned by cloud-ingress-operator exists on cluster but an associated ApplicationIngress does not exist in
-		the PublishingStrategy CR (likely removed from the list of ApplicationIngress),
-		that IngressController CR should be deleted.
-		As each ApplicationIngress is processed, and the corresponding IngressController CR is confirmed to exist,
-		that entry in the map will be turned `true`. When all ApplicationIngresses have been processed, any remaining
-		IngressController CRs in the map with the value `false` will be deleted.
-		*/
-		ownedIngressExistingMap := make(map[string]bool, 1)
-		for _, ownedIngress := range ownedIngressControllers.Items {
-			// Initalize them all to false as they have not been verified against ApplicationIngress list
-			ownedIngressExistingMap[ownedIngress.Name] = false
-		}
+	/* To ensure that the set of all IngressControllers owned by cloud-ingress-operator
+	match the list of ApplicationIngresses in the PublishingStrategy, a map is created to
+	tie IngressControllers existing on cluster with the owner annotation
+	to the ApplicationIngresses existing in the PublishingStrategy CR. If an IngressController CR
+	owned by cloud-ingress-operator exists on cluster but an associated ApplicationIngress does not exist in
+	the PublishingStrategy CR (likely removed from the list of ApplicationIngress),
+	that IngressController CR should be deleted.
+	As each ApplicationIngress is processed, and the corresponding IngressController CR is confirmed to exist,
+	that entry in the map will be turned `true`. When all ApplicationIngresses have been processed, any remaining
+	IngressController CRs in the map with the value `false` will be deleted.
+	*/
+	ownedIngressExistingMap := make(map[string]bool, 1)
+	for _, ownedIngress := range ownedIngressControllers.Items {
+		// Initalize them all to false as
+		ownedIngressExistingMap[ownedIngress.Name] = false
+	}
 
-		/* Each ApplicationIngress defines a desired spec for an IngressController
-		// The following loop goes through each ApplicationIngress defined in the
-		PublishingStrategy CR. For each ApplicationIngress, a desired IngressController spec
-		is generated using the definition in the PublishingStrategy. In an IngressController
-		there are some fields that are immutable, and some that are. For the immutable fields
-		the IngressController must be deleted and recreated with the desired spec fields.
-		For the mutable fields, a patch to the object will suffice.
-		First, a check is done to see if the desired IngressController exists. If it doesn't,
-		then its created. If the IngressController does exist, the immutable fields are check.
-		If any immutable field differs between the desired and the generated spec, the IngressController
-		is deleted and should be created the next reconcile.
-		Once the immuatble fields are checked, then then mutable fields are. If any of the mutable fields
-		differ, the IngressController is patched.
-		The default IngressController is special. When its first created, the spec is not filled out.
-		Instead, the relavent fields are set in the status. For each of the spec checks, the status
-		will also be checked if the ApplicationIngress references the default IngressController
-		*/
-		for _, ingressDefinition := range instance.Spec.ApplicationIngress {
-
-			// Set the IngressController CRs name based on the DNSName
-			ingressName := getIngressName(ingressDefinition.DNSName)
-
-			if ingressDefinition.Default {
-				// The default IngressController should be named "default" which is expected by cluster-ingress-operator
-				ingressName = "default"
-
-				// Safety check, to ensure that the default ingress controller DNS name matches the cluster's base domain
-				// This protects against malformed publishing strategies
-				if !strings.HasSuffix(ingressDefinition.DNSName, clusterBaseDomain) {
-					return reconcile.Result{}, fmt.Errorf("default ingress DNS doesn't match cluster's base domain: got %v, expected to end in %v", ingressDefinition.DNSName, clusterBaseDomain)
-				}
-			}
-
-			reqLogger.Info(fmt.Sprintf("Checking ApplicationIngress for %s IngressController CR", ingressName))
-
-			/* Each ApplicationIngress refers to an IngressController CR. Here, the namespaced name
-			is built based on that reference so that an attempt can be made to GET the IngressController
-			This verifies that the IngressController exists and uses that for other checks, or triggers a creation
-			if it doesn't. getIngressName is a function which returns the name of an IngressController CR given its
-			DNS uri. It's used here to properly get the name to build a namespaced name.
-			*/
-			namespacedName := types.NamespacedName{Name: ingressName, Namespace: ingressControllerNamespace}
-
-			// Generate the desired IngressController spec based on the ApplicationIngress definition.
-			// This generated spec will be compared against the actual spec as desrcibed above
-			desiredIngressController := generateIngressController(ingressDefinition)
-
-			cloudPlatform, err := baseutils.GetPlatformType(r.Client)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			isAWS := *cloudPlatform == "AWS"
-			// Add ProviderParameters if the cloud is AWS to ensure LB type matches
-			if isAWS {
-
-				// Default to Classic LB to match default IngressController behavior
-				if ingressDefinition.Type == "" {
-					ingressDefinition.Type = "Classic"
-				}
-
-				desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
-					Type: ingresscontroller.AWSLoadBalancerProvider,
-					AWS: &ingresscontroller.AWSLoadBalancerParameters{
-						Type: ingresscontroller.AWSLoadBalancerType(ingressDefinition.Type),
-					},
-				}
-
-				// For Classic LB in v4.11+, set the ELB idle connection timeout on the IngressController
-				if ingressDefinition.Type == "Classic" && baseutils.IsVersionHigherThan("4.11") {
-					desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.ClassicLoadBalancerParameters = &ingresscontroller.AWSClassicLoadBalancerParameters{
-						ConnectionIdleTimeout: IngressControllerELBIdleTimeout,
-					}
-				}
-			}
-
-			// Attempt to find the IngressController referenced by the ApplicationIngress
-			// by doing a GET of the namespaced name object build above against the k8s api.
-			ingressController := &ingresscontroller.IngressController{}
-			err = r.Client.Get(context.TODO(), namespacedName, ingressController)
-			if err != nil {
-				// Attempt to create the CR if not found
-				if k8serr.IsNotFound(err) {
-					reqLogger.Info(fmt.Sprintf("ApplicationIngress %s not found, attempting to create", ingressName))
-					err = r.Client.Create(context.TODO(), desiredIngressController)
-					if err != nil {
-						return reconcile.Result{}, err
-					}
-					// If the CR was created, requeue PublishingStrategy
-					return reconcile.Result{Requeue: true}, nil
-				}
-				return reconcile.Result{}, err
-			}
-
-			// Mark the IngressControllers as existing
-			ownedIngressExistingMap[ingressController.Name] = true
-
-			// When an ingresscontroller is being deleted, it takes time as it needs to delete several
-			// services (ie the load balancer service has finalizers for the cloud provider resource cleanup)
-			if !ingressController.DeletionTimestamp.IsZero() {
-				return r.ensureIngressController(reqLogger, ingressController, desiredIngressController)
-			}
-
-			// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
-			if isAWS {
-				reqLogger.Info("Cluster is AWS, checking load balancers")
-				result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, ingressDefinition)
-				if err != nil || result.Requeue {
-					return result, err
-				}
-
-			}
-
-			result, err := r.ensureStaticSpec(reqLogger, ingressController, desiredIngressController)
-			if err != nil || result.Requeue {
-				return result, err
-			}
-
-			result, err = r.ensurePatchableSpec(reqLogger, ingressController, desiredIngressController)
-			if err != nil || result.Requeue {
-				return result, err
-			}
-		}
-
-		result, err := r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
+	// New native ingress managed feature, remove all cloud ingress annotations from items in cluster if >4.13 and feature flag is enabled.
+	if baseutils.HasUserManagedIngressFeature(instance.GetLabels()) {
+		reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator owner annotations and finalizers")
+		result, err := r.ensureOwnedByClusterIngressOperator(reqLogger, ownedIngressExistingMap)
 		if err != nil || result.Requeue {
 			return result, err
 		}
 
-		result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
+		// We have removed the annotations, don't do any more work if we are below version 4.13
+		if !baseutils.IsVersionHigherThan("4.13") {
+			reqLogger.Info("Exiting, version 4.13 or greater and using new native ingress feature")
+			return reconcile.Result{}, nil
+		}
+	}
+
+	/* Each ApplicationIngress defines a desired spec for an IngressController
+	// The following loop goes through each ApplicationIngress defined in the
+	PublishingStrategy CR. For each ApplicationIngress, a desired IngressController spec
+	is generated using the definition in the PublishingStrategy. In an IngressController
+	there are some fields that are immutable, and some that are. For the immutable fields
+	the IngressController must be deleted and recreated with the desired spec fields.
+	For the mutable fields, a patch to the object will suffice.
+	First, a check is done to see if the desired IngressController exists. If it doesn't,
+	then its created. If the IngressController does exist, the immutable fields are check.
+	If any immutable field differs between the desired and the generated spec, the IngressController
+	is deleted and should be created the next reconcile.
+	Once the immuatble fields are checked, then then mutable fields are. If any of the mutable fields
+	differ, the IngressController is patched.
+	The default IngressController is special. When its first created, the spec is not filled out.
+	Instead, the relavent fields are set in the status. For each of the spec checks, the status
+	will also be checked if the ApplicationIngress references the default IngressController
+	*/
+	for _, ingressDefinition := range instance.Spec.ApplicationIngress {
+
+		// Set the IngressController CRs name based on the DNSName
+		ingressName := getIngressName(ingressDefinition.DNSName)
+
+		if ingressDefinition.Default {
+			// The default IngressController should be named "default" which is expected by cluster-ingress-operator
+			ingressName = "default"
+
+			// Safety check, to ensure that the default ingress controller DNS name matches the cluster's base domain
+			// This protects against malformed publishing strategies
+			if !strings.HasSuffix(ingressDefinition.DNSName, clusterBaseDomain) {
+				return reconcile.Result{}, fmt.Errorf("default ingress DNS doesn't match cluster's base domain: got %v, expected to end in %v", ingressDefinition.DNSName, clusterBaseDomain)
+			}
+		}
+
+		reqLogger.Info(fmt.Sprintf("Checking ApplicationIngress for %s IngressController CR", ingressName))
+
+		/* Each ApplicationIngress refers to an IngressController CR. Here, the namespaced name
+		is built based on that reference so that an attempt can be made to GET the IngressController
+		This verifies that the IngressController exists and uses that for other checks, or triggers a creation
+		if it doesn't. getIngressName is a function which returns the name of an IngressController CR given its
+		DNS uri. It's used here to properly get the name to build a namespaced name.
+		*/
+		namespacedName := types.NamespacedName{Name: ingressName, Namespace: ingressControllerNamespace}
+
+		// Generate the desired IngressController spec based on the ApplicationIngress definition.
+		// This generated spec will be compared against the actual spec as desrcibed above
+		desiredIngressController := generateIngressController(ingressDefinition)
+
+		cloudPlatform, err := baseutils.GetPlatformType(r.Client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		isAWS := *cloudPlatform == "AWS"
+		// Add ProviderParameters if the cloud is AWS to ensure LB type matches
+		if isAWS {
+
+			// Default to Classic LB to match default IngressController behavior
+			if ingressDefinition.Type == "" {
+				ingressDefinition.Type = "Classic"
+			}
+
+			desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters = &ingresscontroller.ProviderLoadBalancerParameters{
+				Type: ingresscontroller.AWSLoadBalancerProvider,
+				AWS: &ingresscontroller.AWSLoadBalancerParameters{
+					Type: ingresscontroller.AWSLoadBalancerType(ingressDefinition.Type),
+				},
+			}
+
+			// For Classic LB in v4.11+, set the ELB idle connection timeout on the IngressController
+			if ingressDefinition.Type == "Classic" && baseutils.IsVersionHigherThan("4.11") {
+				desiredIngressController.Spec.EndpointPublishingStrategy.LoadBalancer.ProviderParameters.AWS.ClassicLoadBalancerParameters = &ingresscontroller.AWSClassicLoadBalancerParameters{
+					ConnectionIdleTimeout: IngressControllerELBIdleTimeout,
+				}
+			}
+		}
+
+		// Attempt to find the IngressController referenced by the ApplicationIngress
+		// by doing a GET of the namespaced name object build above against the k8s api.
+		ingressController := &ingresscontroller.IngressController{}
+		err = r.Client.Get(context.TODO(), namespacedName, ingressController)
+		if err != nil {
+			// Attempt to create the CR if not found
+			if k8serr.IsNotFound(err) {
+				reqLogger.Info(fmt.Sprintf("ApplicationIngress %s not found, attempting to create", ingressName))
+				err = r.Client.Create(context.TODO(), desiredIngressController)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				// If the CR was created, requeue PublishingStrategy
+				return reconcile.Result{Requeue: true}, nil
+			}
+			return reconcile.Result{}, err
+		}
+
+		// Mark the IngressControllers as existing
+		ownedIngressExistingMap[ingressController.Name] = true
+
+		// When an ingresscontroller is being deleted, it takes time as it needs to delete several
+		// services (ie the load balancer service has finalizers for the cloud provider resource cleanup)
+		if !ingressController.DeletionTimestamp.IsZero() {
+			return r.ensureIngressController(reqLogger, ingressController, desiredIngressController)
+		}
+
+		// For AWS, ensure the LB type matches between the IngressController and PublishingStrategy
+		if isAWS {
+			reqLogger.Info("Cluster is AWS, checking load balancers")
+			result, err := r.ensureAWSLoadBalancerType(reqLogger, ingressController, ingressDefinition)
+			if err != nil || result.Requeue {
+				return result, err
+			}
+
+		}
+
+		result, err := r.ensureStaticSpec(reqLogger, ingressController, desiredIngressController)
+		if err != nil || result.Requeue {
+			return result, err
+		}
+
+		result, err = r.ensurePatchableSpec(reqLogger, ingressController, desiredIngressController)
 		if err != nil || result.Requeue {
 			return result, err
 		}
 	}
 
-	result, err := r.ensureAliasScope(reqLogger, instance, clusterBaseDomain)
+	result, err := r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
+	result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
+	result, err = r.ensureAliasScope(reqLogger, instance, clusterBaseDomain)
 	if err != nil || result.Requeue {
 		return result, err
 	}
@@ -343,7 +355,11 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *ingressc
 	}
 }
 
-/* Compares the static spec fields of the desired Spec against the existing IngressController's status.
+// func getLegacyIngressLabel
+
+/*
+	Compares the static spec fields of the desired Spec against the existing IngressController's status.
+
 Both the Domain and EndpointPublishingStrategy fields in the IngressController spec are static. This means
 that editing them will have no effect. Instead, the CR must be fully deleted and recreated with the desired
 Domain and EndpointPublishingStrategy filled in. The default IngressController does not have those spec fields
@@ -443,7 +459,9 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1al
 
 }
 
-/* Compares the patchable desired Spec against the existing IngressController's status.
+/*
+	Compares the patchable desired Spec against the existing IngressController's status.
+
 The only patchable field that the ApplicationIngress controlls thats also stored in the IngressController's
 status is the RouteSelector. The default IngressController does not have those spec fields
 filled in at all when fisrt created. Instead, the default CRs status holds the correct values. This function
@@ -465,7 +483,9 @@ func validatePatchableStatus(ingressController ingresscontroller.IngressControll
 	return true, ""
 }
 
-/* Compares the patchable desired Spec against the existing IngressController's spec.
+/*
+	Compares the patchable desired Spec against the existing IngressController's spec.
+
 Both the DefaultCertificate and the RouteSelector fields in the IngressController spec are patchable.
 The function returns false if a field doesn't match and which field specifically should be changed.
 */
@@ -655,12 +675,50 @@ func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger
 	return result, err
 }
 
-func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
-	// No action if the version is prior 4.10
-	if !baseutils.IsVersionHigherThan("4.10") {
-		return reconcile.Result{}, nil
+// Replace cloud ingress operator finalizers and ownership references with the ones assumed by the cluster
+// ingress operator.
+// Also assume that we return the 'auto-delete-lb' annotation to the cluster ingress operator, too
+func (r *PublishingStrategyReconciler) ensureOwnedByClusterIngressOperator(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	reqLogger.Info("Cluster using native OCP ingress management, remvoing cloud-ingress-operator ownership of IngressControllers")
+
+	for ingress := range ownedIngressExistingMap {
+		// For versions <4.13, we will keep supporting the default ingress using the cloud-ingress-operator
+		if !baseutils.IsVersionHigherThan("4.13") && ingress == "default" {
+			reqLogger.Info("Cluster version less than 4.13, keeping default ingress controller owned by cloud ingress operator")
+			continue
+		}
+
+		// Get managed IngressController CRs
+		ingressController := &ingresscontroller.IngressController{}
+		namespacedName := types.NamespacedName{Name: ingress, Namespace: ingressControllerNamespace}
+		if err := r.Client.Get(context.TODO(), namespacedName, ingressController); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// Check if the annotation exists, return if so
+		// Generate Annotation and apply to object
+		baseToPatch := client.MergeFrom(ingressController.DeepCopy())
+		annotations := map[string]string{
+			"Owner":                             "cluster-ingress-operator",
+			IngressControllerDeleteLBAnnotation: "true",
+		}
+		ingressController.Annotations = annotations
+		ingressController.Finalizers = []string{ClusterIngressFinalizer}
+		// Patch
+		reqLogger.Info(fmt.Sprintf("IngressController CR of %s is being disowned by cloud-ingress-operator", ingress))
+		reqLogger.Info(fmt.Sprintf("IngressController CR of %s is being given cluster ingress finalizer", ingress))
+		delete(ownedIngressExistingMap, ingress)
+		if err := r.Client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
+	return reconcile.Result{}, nil
+}
+
+func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	// No action if the version is prior 4.10
+	// No action if using new Hive ingress feature
 	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
 		if inPublishingStrategy {
 
