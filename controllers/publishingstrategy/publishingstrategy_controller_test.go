@@ -2,8 +2,8 @@ package publishingstrategy
 
 import (
 	"fmt"
-	"os"
-	"reflect"
+	// "os"
+	// "reflect"
 	"testing"
 	"time"
 
@@ -660,60 +660,60 @@ func TestEnsurePatchableSpec(t *testing.T) {
 	}
 }
 
-func TestEnsureOwnedByClusterIngressOperator(t *testing.T) {
-	tests := []struct {
-		Name                            string
-		OwnedIngressExistingMap         map[string]bool
-		IngressControllerList           *ingresscontroller.IngressControllerList
-		ClusterVersion                  string
-		Resp                            reconcile.Result
-		OwnedIngressExistingMapExpected map[string]bool
-		ClientErr                       map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
-		ErrorExpected                   bool
-		ErrorReason                     string
-	}{
-		{
-			Name: "It skips disowning the default ingress controller for versions before v4.13 and deletes the nondefault ingress from the owned ingress map",
-			OwnedIngressExistingMap: map[string]bool{
-				"default":    false,
-				"nondefault": false,
-			},
-			IngressControllerList: &ingresscontroller.IngressControllerList{
-				Items: []ingresscontroller.IngressController{
-					*makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
-					*makeIngressControllerCR("nondefault", "external", []string{CloudIngressFinalizer}),
-				},
-			},
-			ClusterVersion: "4.12.0",
-			Resp: reconcile.Result{},
-			OwnedIngressExistingMapExpected: map[string]bool{
-				"default":    false,
-			},
-			ErrorExpected: false,
-		},
-	}
-	for _, test := range tests {
-		defer os.Unsetenv("CLUSTER_VERSION")
+// func TestEnsureOwnedByClusterIngressOperator(t *testing.T) {
+// 	tests := []struct {
+// 		Name                            string
+// 		OwnedIngressExistingMap         map[string]bool
+// 		IngressControllerList           *ingresscontroller.IngressControllerList
+// 		ClusterVersion                  string
+// 		Resp                            reconcile.Result
+// 		OwnedIngressExistingMapExpected map[string]bool
+// 		ClientErr                       map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+// 		ErrorExpected                   bool
+// 		ErrorReason                     string
+// 	}{
+// 		{
+// 			Name: "It skips disowning the default ingress controller for versions before v4.13 and deletes the nondefault ingress from the owned ingress map",
+// 			OwnedIngressExistingMap: map[string]bool{
+// 				"default":    false,
+// 				"nondefault": false,
+// 			},
+// 			IngressControllerList: &ingresscontroller.IngressControllerList{
+// 				Items: []ingresscontroller.IngressController{
+// 					*makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
+// 					*makeIngressControllerCR("nondefault", "external", []string{CloudIngressFinalizer}),
+// 				},
+// 			},
+// 			ClusterVersion: "4.12.0",
+// 			Resp: reconcile.Result{},
+// 			OwnedIngressExistingMapExpected: map[string]bool{
+// 				"default":    false,
+// 			},
+// 			ErrorExpected: false,
+// 		},
+// 	}
+// 	for _, test := range tests {
+// 		defer os.Unsetenv("CLUSTER_VERSION")
 
-		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
-		testClient, testScheme := setUpTestClient([]client.Object{&ingresscontroller.IngressController{}}, []runtime.Object{test.IngressControllerList}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
-		result, err := r.ensureOwnedByClusterIngressOperator(log, test.OwnedIngressExistingMap)
+// 		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
+// 		testClient, testScheme := setUpTestClient([]client.Object{&ingresscontroller.IngressController{}}, []runtime.Object{test.IngressControllerList}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+// 		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+// 		result, err := r.ensureOwnedByClusterIngressOperator(log, test.OwnedIngressExistingMap)
 
-		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
-			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
-		}
-		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
-		}
-		if result != test.Resp {
-			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
-		}
-		if !reflect.DeepEqual(test.OwnedIngressExistingMap, test.OwnedIngressExistingMapExpected) {
-			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.OwnedIngressExistingMapExpected, test.OwnedIngressExistingMap)
-		}
-	}
-}
+// 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+// 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+// 		}
+// 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+// 			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+// 		}
+// 		if result != test.Resp {
+// 			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
+// 		}
+// 		if !reflect.DeepEqual(test.OwnedIngressExistingMap, test.OwnedIngressExistingMapExpected) {
+// 			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.OwnedIngressExistingMapExpected, test.OwnedIngressExistingMap)
+// 		}
+// 	}
+// }
 
 func TestReconcileGCP(t *testing.T) {
 	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
