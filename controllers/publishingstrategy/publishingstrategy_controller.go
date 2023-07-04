@@ -147,6 +147,7 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 			return result, err
 		}
 
+		// We have removed the annotations, don't do any more work if we are below version 4.13
 		if baseutils.IsVersionHigherThan("4.13") {
 			reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress")
 			result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
@@ -708,17 +709,18 @@ func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger
 // ingress operator.
 // Also assume that we return the 'auto-delete-lb' annotation to the cluster ingress operator, too
 func (r *PublishingStrategyReconciler) ensureDefaultICOwnedByClusterIngressOperator(reqLogger logr.Logger) (result reconcile.Result, err error) {
-	reqLogger.Info("Cluster using native OCP ingress management, remvoing cloud-ingress-operator ownership of default IngressController")
+	if !baseutils.IsVersionHigherThan("4.13") {
+		err := errors.New("Cannot disown default ingress controller for versions <4.13")
+		return reconcile.Result{}, err
+	}
 
-	// Get managed IngressController CRs
+	reqLogger.Info("Cluster using native OCP ingress management, remvoing cloud-ingress-operator ownership of default IngressController")
 	ingressController := &ingresscontroller.IngressController{}
 	namespacedName := types.NamespacedName{Name: "default", Namespace: ingressControllerNamespace}
 	if err := r.Client.Get(context.TODO(), namespacedName, ingressController); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Check if the annotation exists, return if so
-	// Generate Annotation and apply to object
 	baseToPatch := client.MergeFrom(ingressController.DeepCopy())
 	annotations := map[string]string{
 		"Owner":                             "cluster-ingress-operator",
@@ -726,7 +728,7 @@ func (r *PublishingStrategyReconciler) ensureDefaultICOwnedByClusterIngressOpera
 	}
 	ingressController.Annotations = annotations
 	ingressController.Finalizers = []string{ClusterIngressFinalizer}
-	// Patch
+
 	reqLogger.Info("IngressController default is being disowned by cloud-ingress-operator")
 	reqLogger.Info("IngressController default is being given cluster ingress finalizer")
 	if err := r.Client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {

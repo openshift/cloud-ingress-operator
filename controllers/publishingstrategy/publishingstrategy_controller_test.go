@@ -2,8 +2,8 @@ package publishingstrategy
 
 import (
 	"fmt"
-	// "os"
-	// "reflect"
+	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -660,60 +660,79 @@ func TestEnsurePatchableSpec(t *testing.T) {
 	}
 }
 
-// func TestEnsureOwnedByClusterIngressOperator(t *testing.T) {
-// 	tests := []struct {
-// 		Name                            string
-// 		OwnedIngressExistingMap         map[string]bool
-// 		IngressControllerList           *ingresscontroller.IngressControllerList
-// 		ClusterVersion                  string
-// 		Resp                            reconcile.Result
-// 		OwnedIngressExistingMapExpected map[string]bool
-// 		ClientErr                       map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
-// 		ErrorExpected                   bool
-// 		ErrorReason                     string
-// 	}{
-// 		{
-// 			Name: "It skips disowning the default ingress controller for versions before v4.13 and deletes the nondefault ingress from the owned ingress map",
-// 			OwnedIngressExistingMap: map[string]bool{
-// 				"default":    false,
-// 				"nondefault": false,
-// 			},
-// 			IngressControllerList: &ingresscontroller.IngressControllerList{
-// 				Items: []ingresscontroller.IngressController{
-// 					*makeIngressControllerCR("default", "external", []string{CloudIngressFinalizer}),
-// 					*makeIngressControllerCR("nondefault", "external", []string{CloudIngressFinalizer}),
-// 				},
-// 			},
-// 			ClusterVersion: "4.12.0",
-// 			Resp: reconcile.Result{},
-// 			OwnedIngressExistingMapExpected: map[string]bool{
-// 				"default":    false,
-// 			},
-// 			ErrorExpected: false,
-// 		},
-// 	}
-// 	for _, test := range tests {
-// 		defer os.Unsetenv("CLUSTER_VERSION")
+func TestEnsureDefaultICOwnedByClusterIngressOperator(t *testing.T) {
+	tests := []struct {
+		Name                string
+		ExpectedFinalizers  []string
+		ExpectedAnnotations map[string]string
+		Resp                reconcile.Result
+		ClusterVersion      string
+		ClientErr           map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected       bool
+		ErrorReason         string
+	}{
+		{
+			Name:               "It disowns the default ingress controller",
+			ExpectedFinalizers: []string{ClusterIngressFinalizer},
+			ExpectedAnnotations: map[string]string{
+				"Owner":                             "cluster-ingress-operator",
+				IngressControllerDeleteLBAnnotation: "true",
+			},
+			ClusterVersion: "4.13.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  false,
+		},
+		{
+			Name:               "Does not disown the default ingress controller if v<4.13",
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+		{
+			Name:               "Returns the client error if we cannot get the ingress controller",
+			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+		{
+			Name:               "Returns the client error if we cannot patch the ingress controller",
+			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+	}
+	for _, test := range tests {
+		defer os.Unsetenv("CLUSTER_VERSION")
 
-// 		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
-// 		testClient, testScheme := setUpTestClient([]client.Object{&ingresscontroller.IngressController{}}, []runtime.Object{test.IngressControllerList}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
-// 		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
-// 		result, err := r.ensureOwnedByClusterIngressOperator(log, test.OwnedIngressExistingMap)
+		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
+		ic := makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer})
 
-// 		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
-// 			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
-// 		}
-// 		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
-// 			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
-// 		}
-// 		if result != test.Resp {
-// 			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
-// 		}
-// 		if !reflect.DeepEqual(test.OwnedIngressExistingMap, test.OwnedIngressExistingMapExpected) {
-// 			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.OwnedIngressExistingMapExpected, test.OwnedIngressExistingMap)
-// 		}
-// 	}
-// }
+		testClient, testScheme := setUpTestClient([]client.Object{ic}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(log)
+		// Reset the IC to the patched version post function call
+		_ = r.Client.Get(context.TODO(), types.NamespacedName{Name: "default", Namespace: ingressControllerNamespace}, ic)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
+		}
+
+		if test.ExpectedAnnotations != nil && !reflect.DeepEqual(ic.Annotations, test.ExpectedAnnotations) {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.ExpectedAnnotations, ic.Annotations)
+		}
+		if test.ExpectedFinalizers != nil && !reflect.DeepEqual(ic.Finalizers, test.ExpectedFinalizers) {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.ExpectedFinalizers, ic.Finalizers)
+		}
+	}
+}
 
 func TestReconcileGCP(t *testing.T) {
 	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
