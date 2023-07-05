@@ -142,7 +142,7 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress")
 		// TODO if request contains 'new' apps2 that does not already exist
 		// error
-		result, err := r.ensureNoNewSecondIngressCreated(reqLogger, instance, ownedIngressExistingMap)
+		result, err := ensureNoNewSecondIngressCreated(reqLogger, instance.Spec.ApplicationIngress, ownedIngressExistingMap)
 		if err != nil || result.Requeue {
 			return result, err
 		}
@@ -420,11 +420,11 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	return true
 }
 
-func (r *PublishingStrategyReconciler) ensureNoNewSecondIngressCreated(reqLogger logr.Logger, ps *v1alpha1.PublishingStrategy, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+func ensureNoNewSecondIngressCreated(reqLogger logr.Logger, ai []v1alpha1.ApplicationIngress, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
 	// if entry exists in desired application ingress, but NOT in owned ingress, and is not default
 	// conclude that the user is trying to create a new 'apps2' ingress
 	// send error
-	for _, ingressDefinition := range ps.Spec.ApplicationIngress {
+	for _, ingressDefinition := range ai {
 		if ingressDefinition.Default {
 			continue
 		}
