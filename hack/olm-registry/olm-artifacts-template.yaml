@@ -428,3 +428,30 @@ objects:
         name: cloud-ingress-operator
         namespace: openshift-ingress-operator
         apiGroup: rbac.authorization.k8s.io
+- apiVersion: hive.openshift.io/v1
+  kind: SelectorSyncSet
+  metadata:
+    annotations:
+      component-display-name: ${DISPLAY_NAME}
+      component-name: ${REPO_NAME}
+      telemeter-query: csv_succeeded{_id="$CLUSTER_ID",name=~"${REPO_NAME}.*",exported_namespace=~"openshift-.*",namespace="openshift-operator-lifecycle-manager"} == 1
+    labels:
+      managed.openshift.io/gitHash: ${IMAGE_TAG}
+      managed.openshift.io/gitRepoName: ${REPO_NAME}
+      managed.openshift.io/osd: 'true'
+    name: cloud-ingress-operator-feature-labeller
+  spec:
+    clusterDeploymentSelector:
+      matchLabels:
+        api.openshift.com/managed: 'true'
+      matchExpressions:
+      - key: ext-managed.openshift.io/legacy-ingress-support
+        operator: In
+        values:
+          - "false"
+    resourceApplyMode: Sync
+    # https://gitlab.cee.redhat.com/service/uhc-clusters-service/tree/master/pkg/osd/ingress_service.go
+    # Where the name 'publishingstrategy' is defined
+    patch: >
+      {"kind": "PublishingStrategy", "apiVersion": "cloudingress.managed.openshift.io/v1alpha1", "metadata": {"name": "publishingstrategy", "labels": {"ext-managed.openshift.io/legacy-ingress-support": "false"}}}
+    patchType: merge

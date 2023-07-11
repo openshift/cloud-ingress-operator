@@ -18,6 +18,7 @@ package publishingstrategy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -27,10 +28,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
-	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
-	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
+	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 )
 
 const (
@@ -100,6 +102,10 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		return reconcile.Result{}, err
 	}
 
+	// Retrieve the cluster base domain. Discard the error since it's just for logging messages.
+	// In case of failure, clusterBaseDomain is an empty string.
+	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.Client)
+
 	// Get all IngressControllers on cluster with an annotation that indicates cloud-ingress-operator owns it
 	ingressControllerList := &ingresscontroller.IngressControllerList{}
 	listOptions := []client.ListOption{
@@ -110,10 +116,6 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		log.Error(err, "Cannot get list of ingresscontroller")
 		return reconcile.Result{}, err
 	}
-
-	// Retrieve the cluster base domain. Discard the error since it's just for logging messages.
-	// In case of failure, clusterBaseDomain is an empty string.
-	clusterBaseDomain, _ := baseutils.GetClusterBaseDomain(r.Client)
 
 	ownedIngressControllers := getIngressWithCloudIngressOpreatorOwnerAnnotation(*ingressControllerList)
 
@@ -132,6 +134,25 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	for _, ownedIngress := range ownedIngressControllers.Items {
 		// Initalize them all to false as they have not been verified against ApplicationIngress list
 		ownedIngressExistingMap[ownedIngress.Name] = false
+	}
+
+	// New native ingress managed feature, remove all cloud ingress annotations from items in cluster if >4.13 and feature flag is enabled.
+	if baseutils.HasUserManagedIngressFeature(instance.GetLabels()) {
+		result, err := ensureNoNewSecondIngressCreated(reqLogger, instance.Spec.ApplicationIngress, ownedIngressExistingMap)
+		if err != nil || result.Requeue {
+			return result, err
+		}
+
+		// We have removed the annotations, don't do any more work if we are below version 4.13
+		if baseutils.IsVersionHigherThan("4.13") {
+			reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
+			result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
+			if err != nil || result.Requeue {
+				return result, err
+			}
+			reqLogger.Info("Exiting, version 4.13 or greater and using new native ingress feature")
+			return reconcile.Result{}, nil
+		}
 	}
 
 	/* Each ApplicationIngress defines a desired spec for an IngressController
@@ -339,7 +360,9 @@ func generateIngressController(appIngress v1alpha1.ApplicationIngress) *ingressc
 	}
 }
 
-/* Compares the static spec fields of the desired Spec against the existing IngressController's status.
+/*
+	Compares the static spec fields of the desired Spec against the existing IngressController's status.
+
 Both the Domain and EndpointPublishingStrategy fields in the IngressController spec are static. This means
 that editing them will have no effect. Instead, the CR must be fully deleted and recreated with the desired
 Domain and EndpointPublishingStrategy filled in. The default IngressController does not have those spec fields
@@ -391,6 +414,30 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 	return true
 }
 
+/*
+	If entry exists in desired application ingress,
+    but NOT in owned ingress, and is not default,
+	conclude that the user is trying to create a new 'apps2' ingress.
+	Throw an error.
+ */
+func ensureNoNewSecondIngressCreated(reqLogger logr.Logger, ai []v1alpha1.ApplicationIngress, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	for _, ingressDefinition := range ai {
+		if ingressDefinition.Default {
+			continue
+		}
+
+		_, existsOnCluster := ownedIngressExistingMap[getIngressName(ingressDefinition.DNSName)]
+
+		if !existsOnCluster {
+			err := errors.New("Reconciling second ingress controllers using PublishingStrategy is no longer supported. If you have existing second ingress controllers, these can still be updated and deleted as normal. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
+			reqLogger.Error(err, fmt.Sprintf("Request to create second ingress %s denied, as customer using new native OCP ingress feature. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.", getIngressName(ingressDefinition.DNSName)))
+			return reconcile.Result{}, err
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
+
 func (r *PublishingStrategyReconciler) ensureAWSLoadBalancerType(reqLogger logr.Logger, ic *ingresscontroller.IngressController, ai v1alpha1.ApplicationIngress) (result reconcile.Result, err error) {
 
 	if !validateAWSLoadBalancerType(*ic, ai) {
@@ -439,7 +486,9 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1al
 
 }
 
-/* Compares the patchable desired Spec against the existing IngressController's status.
+/*
+	Compares the patchable desired Spec against the existing IngressController's status.
+
 The only patchable field that the ApplicationIngress controlls thats also stored in the IngressController's
 status is the RouteSelector. The default IngressController does not have those spec fields
 filled in at all when fisrt created. Instead, the default CRs status holds the correct values. This function
@@ -461,7 +510,9 @@ func validatePatchableStatus(ingressController ingresscontroller.IngressControll
 	return true, ""
 }
 
-/* Compares the patchable desired Spec against the existing IngressController's spec.
+/*
+	Compares the patchable desired Spec against the existing IngressController's spec.
+
 Both the DefaultCertificate and the RouteSelector fields in the IngressController spec are patchable.
 The function returns false if a field doesn't match and which field specifically should be changed.
 */
@@ -651,12 +702,42 @@ func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger
 	return result, err
 }
 
-func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
-	// No action if the version is prior 4.10
-	if !baseutils.IsVersionHigherThan("4.10") {
-		return reconcile.Result{}, nil
+// Replace cloud ingress operator finalizers and ownership references with the ones assumed by the cluster
+// ingress operator.
+// Also assume that we return the 'auto-delete-lb' annotation to the cluster ingress operator, too
+func (r *PublishingStrategyReconciler) ensureDefaultICOwnedByClusterIngressOperator(reqLogger logr.Logger) (result reconcile.Result, err error) {
+	if !baseutils.IsVersionHigherThan("4.13") {
+		err := errors.New("Cannot disown default ingress controller for versions <4.13")
+		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info("Cluster using native OCP ingress management, remvoing cloud-ingress-operator ownership of default IngressController")
+	ingressController := &ingresscontroller.IngressController{}
+	namespacedName := types.NamespacedName{Name: "default", Namespace: ingressControllerNamespace}
+	if err := r.Client.Get(context.TODO(), namespacedName, ingressController); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	baseToPatch := client.MergeFrom(ingressController.DeepCopy())
+	annotations := map[string]string{
+		"Owner":                             "cluster-ingress-operator",
+		IngressControllerDeleteLBAnnotation: "true",
+	}
+	ingressController.Annotations = annotations
+	ingressController.Finalizers = []string{ClusterIngressFinalizer}
+
+	reqLogger.Info("IngressController default is being disowned by cloud-ingress-operator")
+	reqLogger.Info("IngressController default is being given cluster ingress finalizer")
+	if err := r.Client.Patch(context.TODO(), ingressController, baseToPatch); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.Logger, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
+	// No action if the version is prior 4.10
+	// No action if using new Hive ingress feature
 	for ingress, inPublishingStrategy := range ownedIngressExistingMap {
 		if inPublishingStrategy {
 

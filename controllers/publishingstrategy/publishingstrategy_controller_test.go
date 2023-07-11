@@ -1,15 +1,17 @@
 package publishingstrategy
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"reflect"
 	"testing"
 	"time"
-
-	"context"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
+	"github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -462,6 +464,92 @@ func TestEnsureIngressController(t *testing.T) {
 
 }
 
+func TestEnsureNoNewSecondIngressCreated(t *testing.T) {
+	tests := []struct {
+		Name                    string
+		ApplicationIngresses    []cloudingressv1alpha1.ApplicationIngress
+		OwnedIngressExistingMap map[string]bool
+		Resp                    reconcile.Result
+		ErrorExpected           bool
+	}{
+		{
+			Name: "it blocks the creation of a new non-default application ingress",
+			ApplicationIngresses: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "my.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+				{
+					Default:       false,
+					DNSName:       "my2.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+			OwnedIngressExistingMap: map[string]bool{
+				"default": false,
+			},
+			Resp:          reconcile.Result{},
+			ErrorExpected: true,
+		},
+		{
+			Name: "it allows deletion of existing apps2 ingresses",
+			ApplicationIngresses: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "my.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+			OwnedIngressExistingMap: map[string]bool{
+				"default": false,
+				"my2":     false,
+			},
+			Resp:          reconcile.Result{},
+			ErrorExpected: false,
+		},
+		{
+			Name: "allows for creating a new default ingress",
+			ApplicationIngresses: []cloudingressv1alpha1.ApplicationIngress{
+				{
+					Default:       true,
+					DNSName:       "my.unit.test",
+					Listening:     "external",
+					Certificate:   corev1.SecretReference{Name: "test-cert-bundle-secret", Namespace: "openshift-ingress-operator"},
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				},
+			},
+			OwnedIngressExistingMap: map[string]bool{},
+			Resp:                    reconcile.Result{},
+			ErrorExpected:           false,
+		},
+		{
+			Name:                 "allows for deleting a default ingress",
+			ApplicationIngresses: []cloudingressv1alpha1.ApplicationIngress{},
+			OwnedIngressExistingMap: map[string]bool{
+				"default": false,
+			},
+			Resp:          reconcile.Result{},
+			ErrorExpected: false,
+		},
+	}
+	for _, test := range tests {
+		result, err := ensureNoNewSecondIngressCreated(log, test.ApplicationIngresses, test.OwnedIngressExistingMap)
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
 func TestDeleteUnpublishedIngressControllers(t *testing.T) {
 	tests := []struct {
 		Name              string
@@ -658,6 +746,80 @@ func TestEnsurePatchableSpec(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultICOwnedByClusterIngressOperator(t *testing.T) {
+	tests := []struct {
+		Name                string
+		ExpectedFinalizers  []string
+		ExpectedAnnotations map[string]string
+		Resp                reconcile.Result
+		ClusterVersion      string
+		ClientErr           map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ErrorExpected       bool
+		ErrorReason         string
+	}{
+		{
+			Name:               "It disowns the default ingress controller",
+			ExpectedFinalizers: []string{ClusterIngressFinalizer},
+			ExpectedAnnotations: map[string]string{
+				"Owner":                             "cluster-ingress-operator",
+				IngressControllerDeleteLBAnnotation: "true",
+			},
+			ClusterVersion: "4.13.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  false,
+		},
+		{
+			Name:           "Does not disown the default ingress controller if v<4.13",
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+		{
+			Name:           "Returns the client error if we cannot get the ingress controller",
+			ClientErr:      map[string]string{"on": "Get", "type": "InternalError"},
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+		{
+			Name:           "Returns the client error if we cannot patch the ingress controller",
+			ClientErr:      map[string]string{"on": "Patch", "type": "InternalError"},
+			ClusterVersion: "4.12.0",
+			Resp:           reconcile.Result{},
+			ErrorExpected:  true,
+		},
+	}
+	for _, test := range tests {
+		defer os.Unsetenv("CLUSTER_VERSION")
+
+		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
+		ic := makeIngressControllerCR("default", "external", []string{ClusterIngressFinalizer})
+
+		testClient, testScheme := setUpTestClient([]client.Object{ic}, []runtime.Object{}, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"])
+		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(log)
+		// Reset the IC to the patched version post function call
+		_ = r.Client.Get(context.TODO(), types.NamespacedName{Name: "default", Namespace: ingressControllerNamespace}, ic)
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Expected Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.Resp, result)
+		}
+
+		if test.ExpectedAnnotations != nil && !reflect.DeepEqual(ic.Annotations, test.ExpectedAnnotations) {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.ExpectedAnnotations, ic.Annotations)
+		}
+		if test.ExpectedFinalizers != nil && !reflect.DeepEqual(ic.Finalizers, test.ExpectedFinalizers) {
+			t.Fatalf("Test [%v] FAILED. Expected Response %v. Got %v", test.Name, test.ExpectedFinalizers, ic.Finalizers)
+		}
+	}
+}
+
 func TestReconcileGCP(t *testing.T) {
 	defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -788,6 +950,120 @@ func TestReconcileGCP(t *testing.T) {
 
 		// Create the client with the scheme and objects, then wrap it in our custom client
 		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(test.ClientObj...).Build()
+		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
+
+		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
+		result, err := r.Reconcile(context.TODO(), reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      "publishingstrategy",
+				Namespace: "openshift-cloud-ingress-operator",
+			},
+		})
+
+		if err == nil && test.ErrorExpected || err != nil && !test.ErrorExpected {
+			t.Fatalf("Test [%v] return mismatch. Expect error? %t: Return %+v", test.Name, test.ErrorExpected, err)
+		}
+		if err != nil && test.ErrorExpected && test.ErrorReason != fmt.Sprint(k8serr.ReasonForError(err)) {
+			t.Fatalf("Test [%v] FAILED. Excepted Error %v. Got %v", test.Name, test.ErrorReason, k8serr.ReasonForError(err))
+		}
+		if result != test.Resp {
+			t.Fatalf("Test [%v] FAILED. Excepted Response %v. Got %v", test.Name, test.Resp, result)
+		}
+	}
+}
+
+func TestReconcileUserManagedIngressFeature(t *testing.T) {
+	tests := []struct {
+		Name             string
+		Resp             reconcile.Result
+		MakeClientObject func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object
+		RuntimeObj       []runtime.Object
+		ClientErr        map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
+		ClusterVersion   string
+		ErrorExpected    bool
+		ErrorReason      string
+	}{
+		{
+			Name: "Ensure it returns an error if user is trying to add additional non-default application ingress",
+			Resp: reconcile.Result{},
+			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
+				ps.SetLabels(map[string]string{
+					utils.ClusterLegacyIngressLabel: "false",
+				})
+				ps.Spec.ApplicationIngress = append(ps.Spec.ApplicationIngress, cloudingressv1alpha1.ApplicationIngress{
+					Default:       false,
+					DNSName:       "my2.unit.test",
+					Listening:     "internal",
+					RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+				})
+				return []client.Object{ps, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})}
+			},
+			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
+			ErrorExpected: true,
+		},
+		{
+			Name: "Returns an error if v>4.13 and we cannot disown default ingress",
+			Resp: reconcile.Result{},
+			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
+				ps.SetLabels(map[string]string{
+					utils.ClusterLegacyIngressLabel: "false",
+				})
+				return []client.Object{ps, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})}
+			},
+			RuntimeObj:     []runtime.Object{&ingresscontroller.IngressControllerList{}},
+			ClientErr:      map[string]string{"on": "Patch", "type": "InternalError"},
+			ClusterVersion: "4.13.1",
+			ErrorExpected:  true,
+			ErrorReason:    "InternalError",
+		},
+		{
+			Name: "Returns nil and exits if v>4.13 and successfully disowned ingress",
+			Resp: reconcile.Result{},
+			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
+				ps.SetLabels(map[string]string{
+					utils.ClusterLegacyIngressLabel: "false",
+				})
+				return []client.Object{ps, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})}
+			},
+			RuntimeObj:     []runtime.Object{&ingresscontroller.IngressControllerList{}},
+			ClusterVersion: "4.13.1",
+			ErrorExpected:  false,
+		},
+	}
+
+	for _, test := range tests {
+		defaultPublishingStrategy := &cloudingressv1alpha1.PublishingStrategy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "publishingstrategy",
+				Namespace: "openshift-cloud-ingress-operator",
+			},
+			Spec: cloudingressv1alpha1.PublishingStrategySpec{
+				DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
+				ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
+					{
+						Default:       true,
+						DNSName:       "my.unit.test",
+						Listening:     "internal",
+						RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
+					},
+				},
+			},
+		}
+		defer os.Unsetenv("CLUSTER_VERSION")
+
+		os.Setenv("CLUSTER_VERSION", test.ClusterVersion)
+
+		// Create infrastructure object
+		infraObj := testutils.CreateInfraObject("basename", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
+		// Register all local CRDs with the scheme
+		clientObj := test.MakeClientObject(defaultPublishingStrategy)
+		testScheme := setupLocalV1alpha1Scheme(clientObj, test.RuntimeObj)
+		// Add the infra object to the scheme and the runtime objects
+		testScheme.AddKnownTypes(schema.GroupVersion{Group: "config.openshift.io", Version: "v1"}, infraObj)
+		test.RuntimeObj = append(test.RuntimeObj, infraObj)
+
+		// Create the client with the scheme and objects, then wrap it in our custom client
+		fakeClient := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(test.RuntimeObj...).WithObjects(clientObj...).Build()
 		testClient := &customClient{fakeClient, test.ClientErr["on"], test.ClientErr["type"], test.ClientErr["target"]}
 
 		r := &PublishingStrategyReconciler{Client: testClient, Scheme: testScheme}
