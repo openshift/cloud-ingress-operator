@@ -449,9 +449,14 @@ objects:
         operator: In
         values:
           - "false"
-    resourceApplyMode: Sync
     # https://gitlab.cee.redhat.com/service/uhc-clusters-service/tree/master/pkg/osd/ingress_service.go
     # Where the name 'publishingstrategy' is defined
-    patch: >
-      {"kind": "PublishingStrategy", "apiVersion": "cloudingress.managed.openshift.io/v1alpha1", "metadata": {"name": "publishingstrategy", "labels": {"ext-managed.openshift.io/legacy-ingress-support": "false"}}}
-    patchType: merge
+    patches:
+    - apiVersion: cloudingress.managed.openshift.io/v1alpha1
+      kind: PublishingStrategy
+      name: publishingstrategy
+      namespace: openshift-cloud-ingress-operator
+      patch: >
+        {"metadata": {"labels": {"ext-managed.openshift.io/legacy-ingress-support": "false"}}}
+      patchType: merge
+    resourceApplyMode: Sync
