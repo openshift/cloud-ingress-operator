@@ -449,6 +449,14 @@ objects:
         operator: In
         values:
           - "false"
+      - key: api.openshift.com/sts
+        operator: NotIn
+        values:
+        - "true"
+      - key: api.openshift.com/private-link
+        operator: NotIn
+        values:
+        - "true"
     # https://gitlab.cee.redhat.com/service/uhc-clusters-service/tree/master/pkg/osd/ingress_service.go
     # Where the name 'publishingstrategy' is defined
     patches:
