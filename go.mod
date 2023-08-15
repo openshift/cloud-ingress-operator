@@ -12,6 +12,7 @@ require (
 	github.com/openshift/api v0.0.0-20220826140015-b21e86c742e7
 	github.com/openshift/cluster-api-provider-gcp v0.0.0
 	github.com/openshift/operator-custom-metrics v0.5.0
+	github.com/openshift/osde2e-common v0.0.0-20230815125409-0e35771a6861
 	github.com/operator-framework/operator-lib v0.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.55.0
@@ -28,11 +29,20 @@ require (
 )
 
 require (
+	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
+	github.com/golang/glog v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
+	github.com/gorilla/css v1.0.0 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.18 // indirect
+	github.com/moby/spdystream v0.2.0 // indirect
+	github.com/openshift-online/ocm-sdk-go v0.1.344 // indirect
 	golang.org/x/tools v0.9.1 // indirect
+	sigs.k8s.io/e2e-framework v0.2.0 // indirect
 )
 
 require (
