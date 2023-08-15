@@ -36,12 +36,10 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	aapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -71,10 +69,6 @@ func init() {
 	utilruntime.Must(amapiv1.Install(scheme))
 	utilruntime.Must(ingresscontroller.AddToScheme(scheme))
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
-	utilruntime.Must(aapi.AddToScheme(scheme))
-	scheme.AddKnownTypes(awsproviderapi.SchemeGroupVersion,
-		&awsproviderapi.AWSMachineProviderConfig{},
-	)
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -216,7 +210,7 @@ func getWatchNamespace() (string, error) {
 	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
 	// which specifies the Namespace to watch.
 	// An empty value means the operator is running with cluster scope.
-	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
+	watchNamespaceEnvVar := "WATCH_NAMESPACE"
 
 	ns, found := os.LookupEnv(watchNamespaceEnvVar)
 	if !found {

@@ -16,19 +16,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
-	awsprovider "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const masterMachineLabel string = "machine.openshift.io/cluster-api-machine-role"
 
-const DefaultRegionName string = "us-east-1"
-const DefaultAzName string = "us-east-1a"
-const DefaultAPIEndpoint string = "https://api.unit.test:6443"
-const DefaultClusterDomain string = "unit.test"
-const DefaultAMIID string = "ami-123456"
+const (
+	DefaultRegionName    string = "us-east-1"
+	DefaultAzName        string = "us-east-1a"
+	DefaultAPIEndpoint   string = "https://api.unit.test:6443"
+	DefaultClusterDomain string = "unit.test"
+	DefaultAMIID         string = "ami-123456"
+)
 
 // ClusterTokenId represents the part of identifiers which is varied by the installer, eg
 // clustername-clustertokenid, as in load balancer names: foo-12345-us-east-1a
@@ -107,9 +107,6 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	if err := ingresscontroller.AddToScheme(s); err != nil {
 		t.Fatalf("Unable to add route scheme: (%v)", err)
 	}
-	s.AddKnownTypes(awsproviderapi.SchemeGroupVersion,
-		&awsproviderapi.AWSMachineProviderConfig{},
-	)
 	ret := &Mocks{
 		FakeKubeClient: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(localObjs...).Build(),
 		MockCtrl:       mockctrl,
@@ -160,38 +157,38 @@ func CreateMachineObjectList(name []string, clusterid, role, region, zone string
 // AWSMachineProviderConfig with a GVK from pre-4.11
 func CreateMachineObjPre411(name, clusterid, role, region, zone string) machineapi.Machine {
 	ami := string(DefaultAMIID)
-	provider := &awsprovider.AWSMachineProviderConfig{
+	provider := &machineapi.AWSMachineProviderConfig{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "awsproviderconfig.openshift.io/v1beta1",
+			APIVersion: "machineapiconfig.openshift.io/v1beta1",
 			Kind:       "AWSMachineProviderConfig",
 		},
 		InstanceType:       "small",
-		BlockDevices:       []awsprovider.BlockDeviceMappingSpec{},
-		AMI:                awsprovider.AWSResourceReference{ID: &ami},
-		Tags:               []awsprovider.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
-		IAMInstanceProfile: &awsprovider.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
+		BlockDevices:       []machineapi.BlockDeviceMappingSpec{},
+		AMI:                machineapi.AWSResourceReference{ID: &ami},
+		Tags:               []machineapi.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
+		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
-		Placement:          awsprovider.Placement{Region: region, AvailabilityZone: zone},
-		LoadBalancers: []awsprovider.LoadBalancerReference{
+		Placement:          machineapi.Placement{Region: region, AvailabilityZone: zone},
+		LoadBalancers: []machineapi.LoadBalancerReference{
 			{
 				// <clustername>-<id>-ext
 				Name: fmt.Sprintf("%s-%s-ext", clusterid, ClusterTokenId),
-				Type: awsprovider.NetworkLoadBalancerType,
+				Type: machineapi.NetworkLoadBalancerType,
 			},
 			{
 				// <clustername>-<id>-int
 				Name: fmt.Sprintf("%s-%s-int", clusterid, ClusterTokenId),
-				Type: awsprovider.NetworkLoadBalancerType,
+				Type: machineapi.NetworkLoadBalancerType,
 			},
 		},
-		SecurityGroups: []awsprovider.AWSResourceReference{{
-			Filters: []awsprovider.Filter{{
+		SecurityGroups: []machineapi.AWSResourceReference{{
+			Filters: []machineapi.Filter{{
 				Name:   "tag:Name",
 				Values: []string{fmt.Sprintf("%s-%s-sg", clusterid, role)},
 			}},
 		}},
 	}
-	provider.Subnet.Filters = []awsprovider.Filter{{
+	provider.Subnet.Filters = []machineapi.Filter{{
 		Name: "tag:Name",
 		Values: []string{
 			fmt.Sprintf("%s-private-%s", clusterid, zone),
@@ -279,7 +276,7 @@ func CreateMachineObj411(name, clusterid, role, region, zone string) machineapi.
 }
 
 // CreateGCPMachineObjPre411 makes a single AWS-style machinev1beta1.Machine object with a
-//// AWSMachineProviderConfig with a GVK from pre-4.11
+// // AWSMachineProviderConfig with a GVK from pre-4.11
 func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machineapi.Machine {
 	projectID := "o-1234567"
 	provider := &gcpproviderapi.GCPMachineProviderSpec{
@@ -320,7 +317,7 @@ func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machi
 }
 
 // CreateGCPMachineObj411 makes a single AWS-style machinev1beta1.Machine object with a
-//// AWSMachineProviderConfig with a GVK from 4.11+
+// // AWSMachineProviderConfig with a GVK from 4.11+
 func CreateGCPMachineObj411(name, clusterid, role, region, zone string) machineapi.Machine {
 	projectID := "o-1234567"
 	provider := &machineapi.GCPMachineProviderSpec{
