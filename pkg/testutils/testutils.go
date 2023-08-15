@@ -166,7 +166,7 @@ func CreateMachineObjPre411(name, clusterid, role, region, zone string) machinea
 		BlockDevices:       []machineapi.BlockDeviceMappingSpec{},
 		AMI:                machineapi.AWSResourceReference{ID: &ami},
 		Tags:               []machineapi.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
-		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
+		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.String(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
 		Placement:          machineapi.Placement{Region: region, AvailabilityZone: zone},
 		LoadBalancers: []machineapi.LoadBalancerReference{
@@ -208,7 +208,7 @@ func CreateMachineObjPre411(name, clusterid, role, region, zone string) machinea
 				Value: &runtime.RawExtension{Object: provider},
 			},
 			// not exactly the same as AWS
-			ProviderID: pointer.StringPtr(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
+			ProviderID: pointer.String(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
 		},
 	}
 	return ret
@@ -227,7 +227,7 @@ func CreateMachineObj411(name, clusterid, role, region, zone string) machineapi.
 		BlockDevices:       []machineapi.BlockDeviceMappingSpec{},
 		AMI:                machineapi.AWSResourceReference{ID: &ami},
 		Tags:               []machineapi.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
-		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
+		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.String(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
 		Placement:          machineapi.Placement{Region: region, AvailabilityZone: zone},
 		LoadBalancers: []machineapi.LoadBalancerReference{
@@ -269,7 +269,7 @@ func CreateMachineObj411(name, clusterid, role, region, zone string) machineapi.
 				Value: &runtime.RawExtension{Object: provider},
 			},
 			// not exactly the same as AWS
-			ProviderID: pointer.StringPtr(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
+			ProviderID: pointer.String(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
 		},
 	}
 	return ret
@@ -310,7 +310,7 @@ func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machi
 			ProviderSpec: machineapi.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
-			ProviderID: pointer.StringPtr(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
+			ProviderID: pointer.String(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
 		},
 	}
 	return ret
@@ -351,7 +351,7 @@ func CreateGCPMachineObj411(name, clusterid, role, region, zone string) machinea
 			ProviderSpec: machineapi.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
-			ProviderID: pointer.StringPtr(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
+			ProviderID: pointer.String(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
 		},
 	}
 	return ret

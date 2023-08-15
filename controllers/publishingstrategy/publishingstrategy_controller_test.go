@@ -1516,7 +1516,7 @@ func (c *customClient) Patch(ctx context.Context, obj client.Object, patch clien
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
-func (c *customClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+func (c *customClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	if c.errorOn == "Get" {
 		t := fmt.Sprintf("%T", obj)
 		if c.errorTarget == "" || c.errorTarget == t {
