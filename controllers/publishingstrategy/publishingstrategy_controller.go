@@ -136,23 +136,20 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		ownedIngressExistingMap[ownedIngress.Name] = false
 	}
 
+	result, err := ensureNoNewSecondIngressCreated(reqLogger, instance.Spec.ApplicationIngress, ownedIngressExistingMap)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
 	// New native ingress managed feature, remove all cloud ingress annotations from items in cluster if >4.13 and feature flag is enabled.
-	if baseutils.HasUserManagedIngressFeature(instance.GetLabels()) {
-		result, err := ensureNoNewSecondIngressCreated(reqLogger, instance.Spec.ApplicationIngress, ownedIngressExistingMap)
+	if baseutils.HasUserManagedIngressFeature(instance.GetLabels()) && baseutils.IsVersionHigherThan("4.13") {
+		reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
+		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
 		if err != nil || result.Requeue {
 			return result, err
 		}
-
-		// We have removed the annotations, don't do any more work if we are below version 4.13
-		if baseutils.IsVersionHigherThan("4.13") {
-			reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
-			result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
-			if err != nil || result.Requeue {
-				return result, err
-			}
-			reqLogger.Info("Exiting, version 4.13 or greater and using new native ingress feature")
-			return reconcile.Result{}, nil
-		}
+		reqLogger.Info("Exiting, version 4.13 or greater and using new native ingress feature")
+		return reconcile.Result{}, nil
 	}
 
 	/* Each ApplicationIngress defines a desired spec for an IngressController
@@ -278,7 +275,7 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		}
 	}
 
-	result, err := r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
+	result, err = r.ensureAnnotationsDefined(reqLogger, ownedIngressExistingMap)
 	if err != nil || result.Requeue {
 		return result, err
 	}
