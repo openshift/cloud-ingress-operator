@@ -142,16 +142,6 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	}
 
 	// New native ingress managed feature, remove all cloud ingress annotations from items in cluster if >4.13 and feature flag is enabled.
-	if baseutils.HasUserManagedIngressFeature(instance.GetLabels()) && baseutils.IsVersionHigherThan("4.13") {
-		reqLogger.Info("Using new OCP native ingress feature, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
-		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
-		if err != nil || result.Requeue {
-			return result, err
-		}
-		reqLogger.Info("Exiting, version 4.13 or greater and using new native ingress feature")
-		return reconcile.Result{}, nil
-	}
-
 	/* Each ApplicationIngress defines a desired spec for an IngressController
 	// The following loop goes through each ApplicationIngress defined in the
 	PublishingStrategy CR. For each ApplicationIngress, a desired IngressController spec
@@ -279,6 +269,19 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	if err != nil || result.Requeue {
 		return result, err
 	}
+
+	// If the OCM API sends an empty applicationIngress array, and we are on a version greater than 4.13, assume that
+	// we want to 'disown' the native ingress controller. Any remaining ingresses will be deleted as per usual.
+	if baseutils.IsVersionHigherThan("4.13") && !ownedIngressExistingMap["default"] {
+		reqLogger.Info("applicationIngress is empty, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
+		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
+		if err != nil || result.Requeue {
+			return result, err
+		}
+
+		return result, nil
+	}
+
 
 	result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
 	if err != nil || result.Requeue {
