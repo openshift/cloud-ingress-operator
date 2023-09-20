@@ -11,7 +11,6 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
-	"github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -987,9 +986,6 @@ func TestReconcileUserManagedIngressFeature(t *testing.T) {
 			Name: "Ensure it returns an error if user is trying to add additional non-default application ingress",
 			Resp: reconcile.Result{},
 			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
-				ps.SetLabels(map[string]string{
-					utils.ClusterLegacyIngressLabel: "false",
-				})
 				ps.Spec.ApplicationIngress = append(ps.Spec.ApplicationIngress, cloudingressv1alpha1.ApplicationIngress{
 					Default:       false,
 					DNSName:       "my2.unit.test",
@@ -1005,9 +1001,6 @@ func TestReconcileUserManagedIngressFeature(t *testing.T) {
 			Name: "Returns an error if v>4.13 and we cannot disown default ingress",
 			Resp: reconcile.Result{},
 			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
-				ps.SetLabels(map[string]string{
-					utils.ClusterLegacyIngressLabel: "false",
-				})
 				return []client.Object{ps, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})}
 			},
 			RuntimeObj:     []runtime.Object{&ingresscontroller.IngressControllerList{}},
@@ -1020,9 +1013,6 @@ func TestReconcileUserManagedIngressFeature(t *testing.T) {
 			Name: "Returns nil and exits if v>4.13 and successfully disowned ingress",
 			Resp: reconcile.Result{},
 			MakeClientObject: func(ps *cloudingressv1alpha1.PublishingStrategy) []client.Object {
-				ps.SetLabels(map[string]string{
-					utils.ClusterLegacyIngressLabel: "false",
-				})
 				return []client.Object{ps, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})}
 			},
 			RuntimeObj:     []runtime.Object{&ingresscontroller.IngressControllerList{}},
@@ -1039,14 +1029,7 @@ func TestReconcileUserManagedIngressFeature(t *testing.T) {
 			},
 			Spec: cloudingressv1alpha1.PublishingStrategySpec{
 				DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
-				ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{
-					{
-						Default:       true,
-						DNSName:       "my.unit.test",
-						Listening:     "internal",
-						RouteSelector: metav1.LabelSelector{MatchLabels: map[string]string{}},
-					},
-				},
+				ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{},
 			},
 		}
 		defer os.Unsetenv("CLUSTER_VERSION")
