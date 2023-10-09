@@ -21,11 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
-	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
-	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
-	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
-	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,19 +29,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
+	localctlutils "github.com/openshift/cloud-ingress-operator/pkg/controllerutils"
+	cioerrors "github.com/openshift/cloud-ingress-operator/pkg/errors"
+	"github.com/openshift/cloud-ingress-operator/pkg/localmetrics"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 )
 
 const (
-	reconcileFinalizerDNS = "dns.cloudingress.managed.openshift.io"
-	elbAnnotationKey      = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
-	elbAnnotationValue    = "1800"
-	longwait              = 60
-	shortwait             = 10
+	reconcileFinalizerDNS         = "dns.cloudingress.managed.openshift.io"
+	elbAnnotationIdleTimeoutKey   = "service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout"
+	elbAnnotationIdleTimeoutValue = "1800"
+	elbAnnotationResourceTagKey   = "service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags"
+	elbAnnotationResourceTagValue = "red-hat-managed=true"
+	longwait                      = 60
+	shortwait                     = 10
 )
 
 var (
@@ -241,15 +245,27 @@ func (r *APISchemeReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return reconcile.Result{Requeue: true, RequeueAfter: shortwait * time.Second}, nil
 	}
 
-	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationKey) ||
-		found.Annotations[elbAnnotationKey] != elbAnnotationValue {
-		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationKey, elbAnnotationValue)
+	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationIdleTimeoutKey) ||
+		found.Annotations[elbAnnotationIdleTimeoutKey] != elbAnnotationIdleTimeoutValue {
+		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationIdleTimeoutKey, elbAnnotationIdleTimeoutValue)
 		err = r.Client.Update(ctx, found)
 		if err != nil {
 			reqLogger.Error(err, "Error updating service annotation")
 			return reconcile.Result{}, err
 		}
-		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationValue))
+		reqLogger.Info(fmt.Sprintf("Updated %s svc idle timeout to %s", found.Name, elbAnnotationIdleTimeoutValue))
+	}
+
+	// Add the annotation to the svc to make sure the ELB has the tag for owner reference
+	if !metav1.HasAnnotation(found.ObjectMeta, elbAnnotationResourceTagKey) ||
+		found.Annotations[elbAnnotationResourceTagKey] != elbAnnotationResourceTagValue {
+		metav1.SetMetaDataAnnotation(&found.ObjectMeta, elbAnnotationResourceTagKey, elbAnnotationResourceTagValue)
+		err = r.Client.Update(ctx, found)
+		if err != nil {
+			reqLogger.Error(err, "Error updating service annotation to set the tag for the security group")
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info(fmt.Sprintf("Updated %s svc with annotation %s = %s", found.Name, elbAnnotationResourceTagKey, elbAnnotationResourceTagValue))
 	}
 
 	err = cloudClient.EnsureAdminAPIDNS(ctx, r.Client, instance, found)
@@ -318,7 +334,8 @@ func (r *APISchemeReconciler) newServiceFor(instance *cloudingressv1alpha1.APISc
 		"app":       "openshift-kube-apiserver",
 	}
 	annotations := map[string]string{
-		elbAnnotationKey: elbAnnotationValue,
+		elbAnnotationIdleTimeoutKey: elbAnnotationIdleTimeoutValue,
+		elbAnnotationResourceTagKey: elbAnnotationResourceTagValue,
 	}
 	// Note: This owner reference should nbnot be expected to work
 	//ref := metav1.NewControllerRef(instance, instance.GetObjectKind().GroupVersionKind())
