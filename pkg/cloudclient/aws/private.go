@@ -259,11 +259,11 @@ func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 
 // getMasterNodeSubnets returns all the subnets for Machines with 'master' label.
 // return structure:
-// {
-//   public => subnetname,
-//   private => subnetname,
-// }
 //
+//	{
+//	  public => subnetname,
+//	  private => subnetname,
+//	}
 func getMasterNodeSubnets(kclient k8s.Client) (map[string]string, error) {
 	subnets := make(map[string]string)
 	machineList, err := baseutils.GetMasterMachines(kclient)
@@ -452,7 +452,7 @@ func isSubnetPublic(rt []*ec2.RouteTable, subnetID string) (bool, error) {
 	return false, nil
 }
 
-//getClusterRegion returns the installed cluster's AWS region
+// getClusterRegion returns the installed cluster's AWS region
 func getClusterRegion(kclient k8s.Client) (string, error) {
 	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {

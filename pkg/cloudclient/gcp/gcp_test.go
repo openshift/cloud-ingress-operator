@@ -19,7 +19,7 @@ func TestNewClient(t *testing.T) {
 		"client_id": "123-abc.apps.googleusercontent.com",
 		"auth_uri": "https://accounts.google.com/o/oauth2/auth",
 		"token_uri": "http://localhost:8080/token"
-	  }`
+	  }` //#nosec G101 -- This is a false positive
 
 	infra := testutils.CreateGCPInfraObject("sut", testutils.DefaultAPIEndpoint, testutils.DefaultAPIEndpoint, testutils.DefaultRegionName)
 

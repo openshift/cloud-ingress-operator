@@ -33,7 +33,7 @@ func TestAWSProviderDecode(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-
+			test := test
 			objs := []runtime.Object{&test.m}
 			mocks := testutils.NewTestMock(t, objs)
 			machineInfo := types.NamespacedName{

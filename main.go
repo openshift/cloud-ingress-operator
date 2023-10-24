@@ -114,10 +114,12 @@ func main() {
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "cloud-ingress-operator-lock")
-	if err != nil {
-		setupLog.Error(err, "failed to setup leader lock")
-		os.Exit(1)
+	if enableLeaderElection {
+		err = leader.Become(ctx, "cloud-ingress-operator-lock")
+		if err != nil {
+			setupLog.Error(err, "failed to setup leader lock")
+			os.Exit(1)
+		}
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
