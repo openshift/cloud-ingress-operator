@@ -24,8 +24,6 @@ import (
 	"os"
 	"strings"
 
-	configv1 "github.com/openshift/api/config/v1"
-	amapiv1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/cloudclient"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
@@ -33,20 +31,18 @@ import (
 	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	osdmetrics "github.com/openshift/operator-custom-metrics/pkg/metrics"
 	"github.com/operator-framework/operator-lib/leader"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
-
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	aapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	configv1 "github.com/openshift/api/config/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	apiv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
 	publishingstrategycontroller "github.com/openshift/cloud-ingress-operator/controllers/publishingstrategy"
@@ -68,12 +64,10 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(configv1.Install(scheme))
-	utilruntime.Must(amapiv1.Install(scheme))
+	utilruntime.Must(machinev1beta1.Install(scheme))
 	utilruntime.Must(ingresscontroller.AddToScheme(scheme))
-	utilruntime.Must(monitoringv1.AddToScheme(scheme))
-	utilruntime.Must(aapi.AddToScheme(scheme))
-	scheme.AddKnownTypes(awsproviderapi.SchemeGroupVersion,
-		&awsproviderapi.AWSMachineProviderConfig{},
+	scheme.AddKnownTypes(machinev1beta1.SchemeGroupVersion,
+		&machinev1beta1.AWSMachineProviderConfig{},
 	)
 	//+kubebuilder:scaffold:scheme
 }
