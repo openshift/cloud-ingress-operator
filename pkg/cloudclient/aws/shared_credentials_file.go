@@ -2,10 +2,10 @@ package aws
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -41,16 +41,15 @@ func SharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
 
 	f, err := os.CreateTemp("", "aws-shared-credentials")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create file for shared credentials")
+		return "", fmt.Errorf("failed to create file for shared credentials: %v", err)
 	}
 	defer f.Close()
 
 	if _, err := f.Write(data); err != nil {
-		return "", errors.Wrapf(err, "failed to write credentials to %s", f.Name())
+		return "", fmt.Errorf("failed to write credentials to %s: %v", f.Name(), err)
 	}
 
 	return f.Name(), nil
-
 }
 
 func newConfigForStaticCreds(accessKey string, accessSecret string) []byte {

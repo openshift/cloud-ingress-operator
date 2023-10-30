@@ -1029,7 +1029,7 @@ func TestReconcileUserManagedIngressFeature(t *testing.T) {
 			},
 			Spec: cloudingressv1alpha1.PublishingStrategySpec{
 				DefaultAPIServerIngress: cloudingressv1alpha1.DefaultAPIServerIngress{Listening: cloudingressv1alpha1.External},
-				ApplicationIngress: []cloudingressv1alpha1.ApplicationIngress{},
+				ApplicationIngress:      []cloudingressv1alpha1.ApplicationIngress{},
 			},
 		}
 		defer os.Unsetenv("CLUSTER_VERSION")
@@ -1434,7 +1434,7 @@ func makeIngressControllerCR(name, lbScope string, finalizers []string, override
 	}
 }
 
-//setUpTestClient builds and returns a fakeclient for testing
+// setUpTestClient builds and returns a fakeclient for testing
 func setUpTestClient(cr []client.Object, ro []runtime.Object, errorOn, errorType, errorTarget string) (*customClient, *runtime.Scheme) {
 	s := scheme.Scheme
 	for _, v := range cr {
@@ -1499,7 +1499,7 @@ func (c *customClient) Patch(ctx context.Context, obj client.Object, patch clien
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
-func (c *customClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+func (c *customClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	if c.errorOn == "Get" {
 		t := fmt.Sprintf("%T", obj)
 		if c.errorTarget == "" || c.errorTarget == t {

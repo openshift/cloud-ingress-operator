@@ -9,15 +9,12 @@ import (
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/pkg/ingresscontroller"
 
-	machineapi "github.com/openshift/api/machine/v1beta1"
-	gcpproviderapi "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/pointer"
-	awsprovider "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
-	awsproviderapi "sigs.k8s.io/cluster-api-provider-aws/pkg/apis/awsproviderconfig/v1beta1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -95,10 +92,10 @@ pullSecret: ""
 func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	mockctrl := gomock.NewController(t)
 	s := scheme.Scheme
-	if err := configv1.AddToScheme(s); err != nil {
+	if err := configv1.Install(s); err != nil {
 		t.Fatalf("Couldn't add configv1 scheme: (%v)", err)
 	}
-	if err := machineapi.AddToScheme(s); err != nil {
+	if err := machinev1beta1.Install(s); err != nil {
 		t.Fatalf("Couldn't add machine scheme: (%v)", err)
 	}
 	if err := cloudingressv1alpha1.SchemeBuilder.AddToScheme(s); err != nil {
@@ -107,8 +104,8 @@ func NewTestMock(t *testing.T, localObjs []runtime.Object) *Mocks {
 	if err := ingresscontroller.AddToScheme(s); err != nil {
 		t.Fatalf("Unable to add route scheme: (%v)", err)
 	}
-	s.AddKnownTypes(awsproviderapi.SchemeGroupVersion,
-		&awsproviderapi.AWSMachineProviderConfig{},
+	s.AddKnownTypes(machinev1beta1.SchemeGroupVersion,
+		&machinev1beta1.AWSMachineProviderConfig{},
 	)
 	ret := &Mocks{
 		FakeKubeClient: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(localObjs...).Build(),
@@ -145,12 +142,12 @@ func CreateAPIServerObject(clustername, clusterdomain string) *configv1.APIServe
 }
 
 // CreateMachineObjectList makes a MachineList from the slice of names, and returns also a slice of Machine objects for convenience
-func CreateMachineObjectList(name []string, clusterid, role, region, zone string) (*machineapi.MachineList, []machineapi.Machine) {
-	machines := make([]machineapi.Machine, 0)
+func CreateMachineObjectList(name []string, clusterid, role, region, zone string) (*machinev1beta1.MachineList, []machinev1beta1.Machine) {
+	machines := make([]machinev1beta1.Machine, 0)
 	for _, n := range name {
 		machines = append(machines, CreateMachineObjPre411(n, clusterid, role, region, zone))
 	}
-	ret := &machineapi.MachineList{
+	ret := &machinev1beta1.MachineList{
 		Items: machines,
 	}
 	return ret, machines
@@ -158,40 +155,40 @@ func CreateMachineObjectList(name []string, clusterid, role, region, zone string
 
 // CreateMachineObjPre411 makes a single AWS-style machinev1beta1.Machine object with a
 // AWSMachineProviderConfig with a GVK from pre-4.11
-func CreateMachineObjPre411(name, clusterid, role, region, zone string) machineapi.Machine {
+func CreateMachineObjPre411(name, clusterid, role, region, zone string) machinev1beta1.Machine {
 	ami := string(DefaultAMIID)
-	provider := &awsprovider.AWSMachineProviderConfig{
+	provider := &machinev1beta1.AWSMachineProviderConfig{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "awsproviderconfig.openshift.io/v1beta1",
+			APIVersion: "machine.openshift.io/v1beta1",
 			Kind:       "AWSMachineProviderConfig",
 		},
 		InstanceType:       "small",
-		BlockDevices:       []awsprovider.BlockDeviceMappingSpec{},
-		AMI:                awsprovider.AWSResourceReference{ID: &ami},
-		Tags:               []awsprovider.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
-		IAMInstanceProfile: &awsprovider.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
+		BlockDevices:       []machinev1beta1.BlockDeviceMappingSpec{},
+		AMI:                machinev1beta1.AWSResourceReference{ID: &ami},
+		Tags:               []machinev1beta1.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
+		IAMInstanceProfile: &machinev1beta1.AWSResourceReference{ID: ptr.To(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
-		Placement:          awsprovider.Placement{Region: region, AvailabilityZone: zone},
-		LoadBalancers: []awsprovider.LoadBalancerReference{
+		Placement:          machinev1beta1.Placement{Region: region, AvailabilityZone: zone},
+		LoadBalancers: []machinev1beta1.LoadBalancerReference{
 			{
 				// <clustername>-<id>-ext
 				Name: fmt.Sprintf("%s-%s-ext", clusterid, ClusterTokenId),
-				Type: awsprovider.NetworkLoadBalancerType,
+				Type: machinev1beta1.NetworkLoadBalancerType,
 			},
 			{
 				// <clustername>-<id>-int
 				Name: fmt.Sprintf("%s-%s-int", clusterid, ClusterTokenId),
-				Type: awsprovider.NetworkLoadBalancerType,
+				Type: machinev1beta1.NetworkLoadBalancerType,
 			},
 		},
-		SecurityGroups: []awsprovider.AWSResourceReference{{
-			Filters: []awsprovider.Filter{{
+		SecurityGroups: []machinev1beta1.AWSResourceReference{{
+			Filters: []machinev1beta1.Filter{{
 				Name:   "tag:Name",
 				Values: []string{fmt.Sprintf("%s-%s-sg", clusterid, role)},
 			}},
 		}},
 	}
-	provider.Subnet.Filters = []awsprovider.Filter{{
+	provider.Subnet.Filters = []machinev1beta1.Filter{{
 		Name: "tag:Name",
 		Values: []string{
 			fmt.Sprintf("%s-private-%s", clusterid, zone),
@@ -200,18 +197,18 @@ func CreateMachineObjPre411(name, clusterid, role, region, zone string) machinea
 	}}
 	labels := make(map[string]string)
 	labels[masterMachineLabel] = role
-	ret := machineapi.Machine{
+	ret := machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "openshift-machine-api",
 			Labels:    labels,
 		},
-		Spec: machineapi.MachineSpec{
-			ProviderSpec: machineapi.ProviderSpec{
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
 			// not exactly the same as AWS
-			ProviderID: pointer.StringPtr(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
+			ProviderID: ptr.To(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
 		},
 	}
 	return ret
@@ -219,40 +216,40 @@ func CreateMachineObjPre411(name, clusterid, role, region, zone string) machinea
 
 // CreateMachineObj411 makes a single AWS-style machinev1beta1.Machine object with a
 // AWSMachineProviderConfig with a GVK from 4.11+
-func CreateMachineObj411(name, clusterid, role, region, zone string) machineapi.Machine {
+func CreateMachineObj411(name, clusterid, role, region, zone string) machinev1beta1.Machine {
 	ami := "ami-123456"
-	provider := &machineapi.AWSMachineProviderConfig{
+	provider := &machinev1beta1.AWSMachineProviderConfig{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "machine.openshift.io/v1beta1",
 			Kind:       "AWSMachineProviderConfig",
 		},
 		InstanceType:       "small",
-		BlockDevices:       []machineapi.BlockDeviceMappingSpec{},
-		AMI:                machineapi.AWSResourceReference{ID: &ami},
-		Tags:               []machineapi.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
-		IAMInstanceProfile: &machineapi.AWSResourceReference{ID: pointer.StringPtr(fmt.Sprintf("%s-%s-profile", clusterid, role))},
+		BlockDevices:       []machinev1beta1.BlockDeviceMappingSpec{},
+		AMI:                machinev1beta1.AWSResourceReference{ID: &ami},
+		Tags:               []machinev1beta1.TagSpecification{{Name: fmt.Sprintf("kubernetes.io/cluster/%s", clusterid), Value: "owned"}},
+		IAMInstanceProfile: &machinev1beta1.AWSResourceReference{ID: ptr.To(fmt.Sprintf("%s-%s-profile", clusterid, role))},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "aws-cloud-credentials"},
-		Placement:          machineapi.Placement{Region: region, AvailabilityZone: zone},
-		LoadBalancers: []machineapi.LoadBalancerReference{
+		Placement:          machinev1beta1.Placement{Region: region, AvailabilityZone: zone},
+		LoadBalancers: []machinev1beta1.LoadBalancerReference{
 			{
 				// <clustername>-<id>-ext
 				Name: fmt.Sprintf("%s-%s-ext", clusterid, ClusterTokenId),
-				Type: machineapi.NetworkLoadBalancerType,
+				Type: machinev1beta1.NetworkLoadBalancerType,
 			},
 			{
 				// <clustername>-<id>-int
 				Name: fmt.Sprintf("%s-%s-int", clusterid, ClusterTokenId),
-				Type: machineapi.NetworkLoadBalancerType,
+				Type: machinev1beta1.NetworkLoadBalancerType,
 			},
 		},
-		SecurityGroups: []machineapi.AWSResourceReference{{
-			Filters: []machineapi.Filter{{
+		SecurityGroups: []machinev1beta1.AWSResourceReference{{
+			Filters: []machinev1beta1.Filter{{
 				Name:   "tag:Name",
 				Values: []string{fmt.Sprintf("%s-%s-sg", clusterid, role)},
 			}},
 		}},
 	}
-	provider.Subnet.Filters = []machineapi.Filter{{
+	provider.Subnet.Filters = []machinev1beta1.Filter{{
 		Name: "tag:Name",
 		Values: []string{
 			fmt.Sprintf("%s-private-%s", clusterid, zone),
@@ -261,39 +258,39 @@ func CreateMachineObj411(name, clusterid, role, region, zone string) machineapi.
 	}}
 	labels := make(map[string]string)
 	labels[masterMachineLabel] = role
-	ret := machineapi.Machine{
+	ret := machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "openshift-machine-api",
 			Labels:    labels,
 		},
-		Spec: machineapi.MachineSpec{
-			ProviderSpec: machineapi.ProviderSpec{
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
 			// not exactly the same as AWS
-			ProviderID: pointer.StringPtr(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
+			ProviderID: ptr.To(fmt.Sprintf("aws:///%s/i-%s", zone, name)),
 		},
 	}
 	return ret
 }
 
 // CreateGCPMachineObjPre411 makes a single AWS-style machinev1beta1.Machine object with a
-//// AWSMachineProviderConfig with a GVK from pre-4.11
-func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machineapi.Machine {
+// GCPMachineProviderConfig with a GVK from pre-4.11
+func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machinev1beta1.Machine {
 	projectID := "o-1234567"
-	provider := &gcpproviderapi.GCPMachineProviderSpec{
+	provider := &machinev1beta1.GCPMachineProviderSpec{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "gcpprovider.openshift.io/v1beta1",
 			Kind:       "GCPMachineProviderSpec",
 		},
 		CanIPForward:       false,
 		DeletionProtection: false,
-		Metadata:           []*gcpproviderapi.GCPMetadata{},
-		NetworkInterfaces:  []*gcpproviderapi.GCPNetworkInterface{},
+		Metadata:           []*machinev1beta1.GCPMetadata{},
+		NetworkInterfaces:  []*machinev1beta1.GCPNetworkInterface{},
 		MachineType:        "custom-1-2345",
-		Disks:              []*gcpproviderapi.GCPDisk{},
-		ServiceAccounts:    []gcpproviderapi.GCPServiceAccount{},
+		Disks:              []*machinev1beta1.GCPDisk{},
+		ServiceAccounts:    []machinev1beta1.GCPServiceAccount{},
 		Tags:               []string{clusterid + "-master"},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "gcp-cloud-credentials"},
 		Region:             region,
@@ -303,38 +300,38 @@ func CreateGCPMachineObjPre411(name, clusterid, role, region, zone string) machi
 	}
 	labels := make(map[string]string)
 	labels[masterMachineLabel] = role
-	ret := machineapi.Machine{
+	ret := machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "openshift-machine-api",
 			Labels:    labels,
 		},
-		Spec: machineapi.MachineSpec{
-			ProviderSpec: machineapi.ProviderSpec{
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
-			ProviderID: pointer.StringPtr(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
+			ProviderID: ptr.To(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
 		},
 	}
 	return ret
 }
 
 // CreateGCPMachineObj411 makes a single AWS-style machinev1beta1.Machine object with a
-//// AWSMachineProviderConfig with a GVK from 4.11+
-func CreateGCPMachineObj411(name, clusterid, role, region, zone string) machineapi.Machine {
+// GCPMachineProviderConfig with a GVK from 4.11+
+func CreateGCPMachineObj411(name, clusterid, role, region, zone string) machinev1beta1.Machine {
 	projectID := "o-1234567"
-	provider := &machineapi.GCPMachineProviderSpec{
+	provider := &machinev1beta1.GCPMachineProviderSpec{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "machine.openshift.io/v1beta1",
 			Kind:       "GCPMachineProviderSpec",
 		},
 		CanIPForward:       false,
 		DeletionProtection: false,
-		Metadata:           []*machineapi.GCPMetadata{},
-		NetworkInterfaces:  []*machineapi.GCPNetworkInterface{},
+		Metadata:           []*machinev1beta1.GCPMetadata{},
+		NetworkInterfaces:  []*machinev1beta1.GCPNetworkInterface{},
 		MachineType:        "custom-1-2345",
-		Disks:              []*machineapi.GCPDisk{},
-		ServiceAccounts:    []machineapi.GCPServiceAccount{},
+		Disks:              []*machinev1beta1.GCPDisk{},
+		ServiceAccounts:    []machinev1beta1.GCPServiceAccount{},
 		Tags:               []string{clusterid + "-master"},
 		UserDataSecret:     &corev1.LocalObjectReference{Name: "gcp-cloud-credentials"},
 		Region:             region,
@@ -344,29 +341,29 @@ func CreateGCPMachineObj411(name, clusterid, role, region, zone string) machinea
 	}
 	labels := make(map[string]string)
 	labels[masterMachineLabel] = role
-	ret := machineapi.Machine{
+	ret := machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "openshift-machine-api",
 			Labels:    labels,
 		},
-		Spec: machineapi.MachineSpec{
-			ProviderSpec: machineapi.ProviderSpec{
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: &runtime.RawExtension{Object: provider},
 			},
-			ProviderID: pointer.StringPtr(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
+			ProviderID: ptr.To(fmt.Sprintf("gce:///%s/%s/%s", projectID, zone, name)),
 		},
 	}
 	return ret
 }
 
 // CreateGCPMachineObjectList makes a MachineList from the slice of names, and returns also a slice of Machine objects for convenience
-func CreateGCPMachineObjectList(name []string, clusterid, role, region, zone string) (*machineapi.MachineList, []machineapi.Machine) {
-	machines := make([]machineapi.Machine, 0)
+func CreateGCPMachineObjectList(name []string, clusterid, role, region, zone string) (*machinev1beta1.MachineList, []machinev1beta1.Machine) {
+	machines := make([]machinev1beta1.Machine, 0)
 	for _, n := range name {
 		machines = append(machines, CreateGCPMachineObjPre411(n, clusterid, role, region, zone))
 	}
-	ret := &machineapi.MachineList{
+	ret := &machinev1beta1.MachineList{
 		Items: machines,
 	}
 	return ret, machines
@@ -485,9 +482,9 @@ func CreateAPISchemeObject(dnsname string, enabled bool, cidrs []string) *cloudi
 
 // ValidateMachineLB returns length, names and types (slices) and any error if one
 // The purpose is to have an easy way to condense 12+ lines of code
-func ValidateMachineLB(spec *machineapi.AWSMachineProviderConfig) (int, []string, []machineapi.AWSLoadBalancerType, error) {
+func ValidateMachineLB(spec *machinev1beta1.AWSMachineProviderConfig) (int, []string, []machinev1beta1.AWSLoadBalancerType, error) {
 	names := make([]string, 0)
-	lbTypes := make([]machineapi.AWSLoadBalancerType, 0)
+	lbTypes := make([]machinev1beta1.AWSLoadBalancerType, 0)
 	l := 0
 	for _, lb := range spec.LoadBalancers {
 		names = append(names, lb.Name)
