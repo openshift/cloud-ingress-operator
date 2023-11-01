@@ -270,8 +270,14 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		return result, err
 	}
 
+	result, err = r.ensureAliasScope(reqLogger, instance, clusterBaseDomain)
+	if err != nil || result.Requeue {
+		return result, err
+	}
+
 	// If the OCM API sends an empty applicationIngress array, and we are on a version greater than 4.13, assume that
 	// we want to 'disown' the native ingress controller. Any remaining ingresses will be deleted as per usual.
+	// We also ensure that the scope of the default API server ingress matches the scope of the publishing strategy CR.
 	if baseutils.IsVersionHigherThan("4.13") && !ownedIngressExistingMap["default"] {
 		reqLogger.Info("applicationIngress is empty, removing cloud-ingress-operator ownership over default ingress. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
 		result, err := r.ensureDefaultICOwnedByClusterIngressOperator(reqLogger)
@@ -282,17 +288,10 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 		return result, nil
 	}
 
-
 	result, err = r.deleteUnpublishedIngressControllers(ownedIngressExistingMap)
 	if err != nil || result.Requeue {
 		return result, err
 	}
-
-	result, err = r.ensureAliasScope(reqLogger, instance, clusterBaseDomain)
-	if err != nil || result.Requeue {
-		return result, err
-	}
-
 	return reconcile.Result{}, nil
 }
 
@@ -774,6 +773,7 @@ func (r *PublishingStrategyReconciler) ensureAnnotationsDefined(reqLogger logr.L
 
 // ensureAliasScope updates the loadbalancer to match the scope of the ingress in the publishingstrategy
 func (r *PublishingStrategyReconciler) ensureAliasScope(reqLogger logr.Logger, instance *v1alpha1.PublishingStrategy, clusterBaseDomain string) (result reconcile.Result, err error) {
+
 	cloudPlatform, err := baseutils.GetPlatformType(r.Client)
 	if err != nil {
 		log.Error(err, "Failed to create a Cloud Client")
