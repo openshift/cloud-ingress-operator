@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	apiv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
@@ -66,6 +67,7 @@ func init() {
 	utilruntime.Must(configv1.Install(scheme))
 	utilruntime.Must(machinev1beta1.Install(scheme))
 	utilruntime.Must(ingresscontroller.AddToScheme(scheme))
+	utilruntime.Must(machinev1.AddToScheme(scheme))
 	scheme.AddKnownTypes(machinev1beta1.SchemeGroupVersion,
 		&machinev1beta1.AWSMachineProviderConfig{},
 	)
@@ -109,15 +111,18 @@ func main() {
 	if strings.Contains(watchNamespace, ",") {
 		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
 		options.Namespace = ""
+		// nolint:golint,all
 		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
 	}
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "cloud-ingress-operator-lock")
-	if err != nil {
-		setupLog.Error(err, "failed to setup leader lock")
-		os.Exit(1)
+	if options.LeaderElection {
+		err = leader.Become(ctx, "cloud-ingress-operator-lock")
+		if err != nil {
+			setupLog.Error(err, "failed to setup leader lock")
+			os.Exit(1)
+		}
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {

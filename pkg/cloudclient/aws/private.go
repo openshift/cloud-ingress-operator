@@ -14,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -259,11 +260,11 @@ func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 
 // getMasterNodeSubnets returns all the subnets for Machines with 'master' label.
 // return structure:
-// {
-//   public => subnetname,
-//   private => subnetname,
-// }
 //
+//	{
+//	  public => subnetname,
+//	  private => subnetname,
+//	}
 func getMasterNodeSubnets(kclient k8s.Client) (map[string]string, error) {
 	subnets := make(map[string]string)
 	machineList, err := baseutils.GetMasterMachines(kclient)
@@ -452,7 +453,7 @@ func isSubnetPublic(rt []*ec2.RouteTable, subnetID string) (bool, error) {
 	return false, nil
 }
 
-//getClusterRegion returns the installed cluster's AWS region
+// getClusterRegion returns the installed cluster's AWS region
 func getClusterRegion(kclient k8s.Client) (string, error) {
 	infra, err := baseutils.GetInfrastructureObject(kclient)
 	if err != nil {
@@ -840,9 +841,22 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 	if err != nil {
 		return "", "", err
 	}
+
+	// Detect if this is a CPMS active/inactive cluster and choose the right strategy:
+	// 1. Remove the CPMS if needed
+	// 2. Remove the LBs
+	// 3. Readd the CPMS if needed
 	masterList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
 		return "", "", err
+	}
+	cpms, err := baseutils.GetControlPlaneMachineSet(kclient)
+	if err != nil {
+		return "", "", err
+	}
+	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
+	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
+		baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
 	}
 	var intDNSName, intHostedZoneID, lbName string
 	for _, networkLoadBalancer := range nlbs {
@@ -852,7 +866,7 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 			if err != nil {
 				return "", "", err
 			}
-			err = removeAWSLBFromMasterMachines(kclient, lbName, masterList)
+			err = removalClosure(lbName)
 			if err != nil {
 				return "", "", err
 			}
@@ -1098,4 +1112,53 @@ func encodeAWSMachineProviderSpec(awsProviderSpec *machinev1beta1.AWSMachineProv
 	return &runtime.RawExtension{
 		Raw: buffer.Bytes(),
 	}, nil
+}
+
+// This code should run on non-CPMS clusters
+func removeLoadBalancerMachineSet(ctx context.Context, kclient k8s.Client, lbName string, masterList *machinev1beta1.MachineList) error {
+	err := removeAWSLBFromMasterMachines(kclient, lbName, masterList)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName string, cpms *machinev1.ControlPlaneMachineSet) error {
+	rawExtension := cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value
+	spec, err := baseutils.ConvertFromRawExtension[machinev1beta1.AWSMachineProviderConfig](rawExtension)
+	if err != nil {
+		return err
+	}
+	var remainingLoadBalancers []machinev1beta1.LoadBalancerReference
+	for _, lb := range spec.LoadBalancers {
+		if lb.Name == lbName {
+			log.Info("Removing loadbalancer %s from CPMs\n", lbName)
+		} else {
+			log.Info("Keeping loadbalancer %s from CPMs\n", lb.Name)
+			remainingLoadBalancers = append(remainingLoadBalancers, lb)
+		}
+	}
+	spec.LoadBalancers = remainingLoadBalancers
+	extension, err := baseutils.ConvertToRawBytes(spec)
+	if err != nil {
+		return err
+	}
+	cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value.Raw = extension
+	err = kclient.Update(ctx, cpms)
+	if err != nil {
+		return fmt.Errorf("could not update CPMS: %v", err)
+	}
+	return nil
+}
+
+func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterList *machinev1beta1.MachineList, cpms *machinev1.ControlPlaneMachineSet) func(string) error {
+	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateActive {
+		return func(lbName string) error {
+			return removeLoadBalancerCPMS(ctx, kclient, lbName, cpms)
+		}
+	} else {
+		return func(lbName string) error {
+			return removeLoadBalancerMachineSet(ctx, kclient, lbName, masterList)
+		}
+	}
 }

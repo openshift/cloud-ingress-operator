@@ -6,17 +6,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"net/http"
 	"reflect"
+
+	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 
 	"google.golang.org/api/compute/v1"
 	gdnsv1 "google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1"
 	machineapi "github.com/openshift/api/machine/v1beta1"
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
+	baseutils "github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -273,6 +276,22 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 		return "", err
 	}
 
+	// Detect if this is a CPMS active/inactive cluster and choose the right strategy:
+	// 1. Remove the CPMS if needed
+	// 2. Remove the LBs
+	// 3. Readd the CPMS if needed
+	masterList, err := baseutils.GetMasterMachines(kclient)
+	if err != nil {
+		return "", "", err
+	}
+	cpms, err := baseutils.GetControlPlaneMachineSet(kclient)
+	if err != nil {
+		return "", "", err
+	}
+	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
+	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
+		baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
+	}
 	extNLBName := gc.clusterName + "-api"
 	intLBName := gc.clusterName + "-api-internal"
 	var intIPAddress, lbName string
@@ -287,7 +306,7 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 			if err != nil {
 				return "", fmt.Errorf("Failed to delete ForwardingRule for external load balancer %v: %v", lb.Name, err)
 			}
-			err = removeGCPLBFromMasterMachines(kclient, lbName, gc.masterList)
+			err = removalClosure(lbName)
 			if err != nil {
 				return "", err
 			}
@@ -506,4 +525,44 @@ func getClusterDNS(kclient k8s.Client) (*configv1.DNS, error) {
 	}
 
 	return dns, nil
+}
+
+func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName string, cpms *machinev1.ControlPlaneMachineSet) error {
+	rawExtension := cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value
+	spec, err := baseutils.ConvertFromRawExtension[machineapi.GCPMachineProviderSpec](rawExtension)
+	if err != nil {
+		return err
+	}
+	var remainingLoadBalancers []string
+	for _, lb := range spec.TargetPools {
+		if lb == lbName {
+			log.Info("Removing loadbalancer %s from CPMs\n", lbName)
+		} else {
+			log.Info("Keeping loadbalancer %s from CPMs\n", lb)
+			remainingLoadBalancers = append(remainingLoadBalancers, lb)
+		}
+	}
+	spec.TargetPools = remainingLoadBalancers
+	extension, err := baseutils.ConvertToRawBytes(spec)
+	if err != nil {
+		return err
+	}
+	cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value.Raw = extension
+	err = kclient.Update(ctx, cpms)
+	if err != nil {
+		return fmt.Errorf("could not update CPMS: %v", err)
+	}
+	return nil
+}
+
+func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterList *machinev1beta1.MachineList, cpms *machinev1.ControlPlaneMachineSet) func(string) error {
+	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateActive {
+		return func(lbName string) error {
+			return removeLoadBalancerCPMS(ctx, kclient, lbName, cpms)
+		}
+	} else {
+		return func(lbName string) error {
+			return removeGCPLBFromMasterMachines(kclient, lbName, masterList)
+		}
+	}
 }
