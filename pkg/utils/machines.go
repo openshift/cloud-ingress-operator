@@ -88,6 +88,7 @@ func RemoveCPMSAndAwaitMachineRemoval(ctx context.Context, kclient client.Client
 	log.Info("Removing INACTIVE CPMS to allow machine modifications")
 	err := kclient.Delete(ctx, cpms)
 	if err != nil {
+		log.Error(err, "Removing CPMS failed")
 		return err
 	}
 	// This must run async, if this blocks the cluster will break itself,
@@ -99,26 +100,31 @@ func RemoveCPMSAndAwaitMachineRemoval(ctx context.Context, kclient client.Client
 		masterList, err := GetMasterMachines(kclient)
 		if err != nil {
 			log.Error(err, "Could not get master machines")
+			return
 		}
 		log.Info("Waiting for master machines to be removed and recreate CPMS at the end.")
 		scheme := runtime.NewScheme()
 		err = machinev1.AddToScheme(scheme)
 		if err != nil {
 			log.Error(err, "Could not add machinev1 api to scheme")
+			return
 		}
 		err = machineapi.AddToScheme(scheme)
 		if err != nil {
 			log.Error(err, "Could not add machinev1beta1 api to scheme")
+			return
 		}
 		watchClient, err := client.NewWithWatch(config.GetConfigOrDie(), client.Options{
 			Scheme: scheme,
 		})
 		if err != nil {
 			log.Error(err, "Could not create watcher client")
+			return
 		}
 		watcher, err := watchClient.Watch(ctx, masterList)
 		if err != nil {
 			log.Error(err, "Could not create watch")
+			return
 		}
 		removedMachines := 0
 		totalMachines := len(masterList.Items)
@@ -143,42 +149,5 @@ func RemoveCPMSAndAwaitMachineRemoval(ctx context.Context, kclient client.Client
 			log.Error(err, "Could not recreate CPMS")
 		}
 	}()
-	err = removalClosure()
-	if err != nil {
-		return err
-	}
-
-	scheme := runtime.NewScheme()
-	err = machinev1.AddToScheme(scheme)
-	if err != nil {
-		return err
-	}
-	err = machineapi.AddToScheme(scheme)
-	if err != nil {
-		return err
-	}
-	watchClient, err := client.NewWithWatch(config.GetConfigOrDie(), client.Options{
-		Scheme: scheme,
-	})
-	if err != nil {
-		return err
-	}
-	watcher, err := watchClient.Watch(ctx, masterNodes)
-	if err != nil {
-		return err
-	}
-	removedMachines := 0
-	totalMachines := len(masterNodes.Items)
-	for event := range watcher.ResultChan() {
-		switch event.Type {
-		case watch.Deleted:
-			removedMachines += 1
-			if removedMachines == totalMachines {
-				// TODO: With Luck this is good enough, as all new machines should be 'good' for the CPMS?
-				log.Info("All master machines have been removed now.")
-				watcher.Stop()
-			}
-		}
-	}
 	return nil
 }

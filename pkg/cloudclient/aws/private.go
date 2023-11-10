@@ -856,7 +856,11 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 	}
 	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
 	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
-		baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
+		err := baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
+		if err != nil {
+			log.Error(err, "Failed removing CPMS")
+			return "", "", err
+		}
 	}
 	var intDNSName, intHostedZoneID, lbName string
 	for _, networkLoadBalancer := range nlbs {

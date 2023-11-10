@@ -282,15 +282,19 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 	// 3. Readd the CPMS if needed
 	masterList, err := baseutils.GetMasterMachines(kclient)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	cpms, err := baseutils.GetControlPlaneMachineSet(kclient)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
 	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
-		baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
+		err := baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
+		if err != nil {
+			log.Error(err, "Failed removing CPMS")
+			return "", err
+		}
 	}
 	extNLBName := gc.clusterName + "-api"
 	intLBName := gc.clusterName + "-api-internal"
@@ -555,7 +559,7 @@ func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName stri
 	return nil
 }
 
-func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterList *machinev1beta1.MachineList, cpms *machinev1.ControlPlaneMachineSet) func(string) error {
+func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterList *machineapi.MachineList, cpms *machinev1.ControlPlaneMachineSet) func(string) error {
 	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateActive {
 		return func(lbName string) error {
 			return removeLoadBalancerCPMS(ctx, kclient, lbName, cpms)
