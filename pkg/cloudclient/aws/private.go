@@ -855,13 +855,6 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 		return "", "", err
 	}
 	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
-	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
-		err := baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
-		if err != nil {
-			log.Error(err, "Failed removing CPMS")
-			return "", "", err
-		}
-	}
 	var intDNSName, intHostedZoneID, lbName string
 	for _, networkLoadBalancer := range nlbs {
 		if networkLoadBalancer.scheme == "internet-facing" {
@@ -1136,9 +1129,9 @@ func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName stri
 	var remainingLoadBalancers []machinev1beta1.LoadBalancerReference
 	for _, lb := range spec.LoadBalancers {
 		if lb.Name == lbName {
-			log.Info("Removing loadbalancer %s from CPMs\n", lbName)
+			log.Info("Removing loadbalancer %s from CPMs", "load-balancer-name", lbName)
 		} else {
-			log.Info("Keeping loadbalancer %s from CPMs\n", lb.Name)
+			log.Info("Keeping loadbalancer %s from CPMs", "load-balancer-name", lb.Name)
 			remainingLoadBalancers = append(remainingLoadBalancers, lb)
 		}
 	}

@@ -289,13 +289,6 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 		return "", err
 	}
 	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
-	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateInactive {
-		err := baseutils.RemoveCPMSAndAwaitMachineRemoval(ctx, kclient, cpms)
-		if err != nil {
-			log.Error(err, "Failed removing CPMS")
-			return "", err
-		}
-	}
 	extNLBName := gc.clusterName + "-api"
 	intLBName := gc.clusterName + "-api-internal"
 	var intIPAddress, lbName string
@@ -540,9 +533,9 @@ func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName stri
 	var remainingLoadBalancers []string
 	for _, lb := range spec.TargetPools {
 		if lb == lbName {
-			log.Info("Removing loadbalancer %s from CPMs\n", lbName)
+			log.Info("Removing loadbalancer from CPMs", "load-balancer-name", lbName)
 		} else {
-			log.Info("Keeping loadbalancer %s from CPMs\n", lb)
+			log.Info("Keeping loadbalancer in CPMs", "load-balancer-name", lbName)
 			remainingLoadBalancers = append(remainingLoadBalancers, lb)
 		}
 	}
