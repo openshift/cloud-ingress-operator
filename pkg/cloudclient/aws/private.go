@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v2"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
@@ -850,9 +851,18 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 	if err != nil {
 		return "", "", err
 	}
-	cpms, err := baseutils.GetControlPlaneMachineSet(kclient)
+	var cpms *machinev1.ControlPlaneMachineSet
+	cpms, err = baseutils.GetControlPlaneMachineSet(kclient)
 	if err != nil {
-		return "", "", err
+		if !k8serrors.IsNotFound(err) {
+			return "", "", err
+		}
+		// If there is no CPMS we handle it as an inactive one.
+		cpms = &machinev1.ControlPlaneMachineSet{
+			Spec: machinev1.ControlPlaneMachineSetSpec{
+				State: machinev1.ControlPlaneMachineSetStateInactive,
+			},
+		}
 	}
 	removalClosure := getLoadBalancerRemovalFunc(ctx, kclient, masterList, cpms)
 	var intDNSName, intHostedZoneID, lbName string
@@ -1121,6 +1131,7 @@ func removeLoadBalancerMachineSet(ctx context.Context, kclient k8s.Client, lbNam
 }
 
 func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName string, cpms *machinev1.ControlPlaneMachineSet) error {
+	cpmsPatch := k8s.MergeFrom(cpms.DeepCopy())
 	rawExtension := cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value
 	spec, err := baseutils.ConvertFromRawExtension[machinev1beta1.AWSMachineProviderConfig](rawExtension)
 	if err != nil {
@@ -1141,7 +1152,7 @@ func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName stri
 		return err
 	}
 	cpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value.Raw = extension
-	err = kclient.Update(ctx, cpms)
+	err = kclient.Patch(ctx, cpms, cpmsPatch)
 	if err != nil {
 		return fmt.Errorf("could not update CPMS: %v", err)
 	}
@@ -1151,7 +1162,56 @@ func removeLoadBalancerCPMS(ctx context.Context, kclient k8s.Client, lbName stri
 func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterList *machinev1beta1.MachineList, cpms *machinev1.ControlPlaneMachineSet) func(string) error {
 	if cpms.Spec.State == machinev1.ControlPlaneMachineSetStateActive {
 		return func(lbName string) error {
-			return removeLoadBalancerCPMS(ctx, kclient, lbName, cpms)
+			log.Info("Removing active CPMS")
+			err := baseutils.DeleteCPMS(ctx, kclient, cpms)
+			if err != nil {
+				log.Error(err, "failed to delete CPMS")
+				return err
+			}
+			// It seems this has to actually do both - the machine api is not
+			// able to remove machines that still reference a LB that does not
+			// exist:
+			// E1117 14:42:49.349992       1 controller.go:255] fbergman-14568-tn7t8-master-0: failed to delete machine: fbergman-14568-tn7t8-master-0: reconciler failed to Delete machine: failed to updated update load balancers: LoadBalancerNotFound: Load balancers '[fbergman-14568-tn7t8-ext]' not found
+			log.Info("Updating controlplane machines")
+			err = removeLoadBalancerMachineSet(ctx, kclient, lbName, masterList)
+			if err != nil {
+				log.Error(err, "failed to remove load balancer from machines")
+				return err
+			}
+			go func() {
+				maxRetries := 5
+				for {
+					time.Sleep(60 * time.Second)
+					log.Info("Retrieve cpms again")
+					cpms, err := baseutils.GetControlPlaneMachineSet(kclient)
+					if err != nil {
+						log.Error(err, "could not get updated CPMS")
+					}
+					log.Info("Removing LB from cpms")
+					err = removeLoadBalancerCPMS(ctx, kclient, lbName, cpms)
+					if err != nil {
+						log.Error(err, "failed to update CPMS")
+					}
+					log.Info("Retrieve cpms again")
+					cpms, err = baseutils.GetControlPlaneMachineSet(kclient)
+					if err != nil {
+						log.Error(err, "Could not retrieve CPMS")
+					}
+					err = baseutils.SetCPMSActive(context.Background(), kclient, cpms)
+					if err != nil {
+						log.Error(err, "Could not set CPMS active")
+					} else {
+						break
+					}
+					if maxRetries == 0 {
+						log.Info("Could not set CPMS back to active after 5 attempts")
+						break
+					}
+					maxRetries = maxRetries - 1
+				}
+			}()
+			// Don't fail the following steps - setting CPMS back to active will be tried again
+			return nil
 		}
 	} else {
 		return func(lbName string) error {

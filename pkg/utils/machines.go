@@ -9,21 +9,14 @@ import (
 
 	machinev1 "github.com/openshift/api/machine/v1"
 	machineapi "github.com/openshift/api/machine/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
 	masterMachineLabel  string = "machine.openshift.io/cluster-api-machine-role"
 	machineApiNamespace string = "openshift-machine-api"
 	cpmsName            string = "cluster"
-)
-
-var (
-	log = logf.Log.WithName("baseutils")
 )
 
 // GetMasterMachines returns a MachineList object whose .Items can be iterated
@@ -41,6 +34,7 @@ func GetMasterMachines(kclient client.Client) (*machineapi.MachineList, error) {
 	return machineList, nil
 }
 
+// GetControlPlaneMachineSet returns an OSD cluster's CPMS.
 func GetControlPlaneMachineSet(kclient client.Client) (*machinev1.ControlPlaneMachineSet, error) {
 	cpms := &machinev1.ControlPlaneMachineSet{}
 	key := client.ObjectKey{
@@ -49,12 +43,23 @@ func GetControlPlaneMachineSet(kclient client.Client) (*machinev1.ControlPlaneMa
 	}
 	err := kclient.Get(context.TODO(), key, cpms)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil // Nothing to do
-		}
 		return nil, fmt.Errorf("failed to get controlplanemachineset: %w", err)
 	}
 	return cpms, nil
+}
+
+// DeleteCPMS will remove the CPMS of the cluster - in OSD this will trigger the
+// CPMS to be recreated in an inactive state.
+func DeleteCPMS(ctx context.Context, kclient client.Client, cpms *machinev1.ControlPlaneMachineSet) error {
+	return kclient.Delete(ctx, cpms)
+}
+
+// SetCPMSActive will set a CPMS back to active.
+// This is required after calling DeleteCPMS, as it will recreate the CPMS in an inactive state.
+func SetCPMSActive(ctx context.Context, kclient client.Client, cpms *machinev1.ControlPlaneMachineSet) error {
+	patch := client.MergeFrom(cpms.DeepCopy())
+	cpms.Spec.State = machinev1.ControlPlaneMachineSetStateActive
+	return kclient.Patch(ctx, cpms, patch)
 }
 
 func ConvertFromRawExtension[T any](extension *runtime.RawExtension) (*T, error) {

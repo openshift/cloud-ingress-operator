@@ -98,7 +98,7 @@ func TestHealthcheck(t *testing.T) {
 
 }
 
-func TestCpmsBranching(t *testing.T) {
+func TestCpmsLbRemoval(t *testing.T) {
 	fakeAwsMachine := machinev1beta1.AWSMachineProviderConfig{
 		LoadBalancers: []machinev1beta1.LoadBalancerReference{
 			{
@@ -146,8 +146,7 @@ func TestCpmsBranching(t *testing.T) {
 	}
 	objs := []runtime.Object{&fakeCpms}
 	mocks := testutils.NewTestMock(t, objs)
-	f := getLoadBalancerRemovalFunc(context.TODO(), mocks.FakeKubeClient, nil, &fakeCpms)
-	err := f("removal-lb")
+	err := removeLoadBalancerCPMS(context.TODO(), mocks.FakeKubeClient, "removal-lb", &fakeCpms)
 	if err != nil {
 		t.Errorf("Removing load balancer from cluster failed: %v", err)
 	}
