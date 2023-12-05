@@ -7,11 +7,15 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elb/elbiface"
+	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cloud-ingress-operator/config"
 	"github.com/openshift/cloud-ingress-operator/pkg/testutils"
+	"github.com/openshift/cloud-ingress-operator/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNewClient(t *testing.T) {
@@ -92,4 +96,73 @@ func TestHealthcheck(t *testing.T) {
 		t.Error("err occured while performing healthcheck:", err)
 	}
 
+}
+
+func TestCpmsLbRemoval(t *testing.T) {
+	fakeAwsMachine := machinev1beta1.AWSMachineProviderConfig{
+		LoadBalancers: []machinev1beta1.LoadBalancerReference{
+			{
+				Name: "internal-lb",
+				Type: "NLB",
+			},
+			{
+				Name: "removal-lb",
+				Type: "NLB",
+			}},
+	}
+	bytes, _ := utils.ConvertToRawBytes(fakeAwsMachine)
+	fakeCpms := machinev1.ControlPlaneMachineSet{
+		TypeMeta:   v1.TypeMeta{},
+		ObjectMeta: v1.ObjectMeta{Name: "cluster", Namespace: "openshift-machine-api"},
+		Spec: machinev1.ControlPlaneMachineSetSpec{
+			State:    machinev1.ControlPlaneMachineSetStateActive,
+			Replicas: aws.Int32(3),
+			Strategy: machinev1.ControlPlaneMachineSetStrategy{Type: ""},
+			Selector: v1.LabelSelector{},
+			Template: machinev1.ControlPlaneMachineSetTemplate{
+				MachineType: machinev1.OpenShiftMachineV1Beta1MachineType,
+				OpenShiftMachineV1Beta1Machine: &machinev1.OpenShiftMachineV1Beta1MachineTemplate{
+					FailureDomains: machinev1.FailureDomains{
+						Platform: "aws",
+						AWS:      &[]machinev1.AWSFailureDomain{},
+					},
+					ObjectMeta: machinev1.ControlPlaneMachineSetTemplateObjectMeta{},
+					Spec: machinev1beta1.MachineSpec{
+						ObjectMeta: machinev1beta1.ObjectMeta{
+							Name:      "awsmachine",
+							Namespace: "openshift-machine-api",
+						},
+						ProviderSpec: machinev1beta1.ProviderSpec{
+							Value: &runtime.RawExtension{
+								Raw:    bytes,
+								Object: nil,
+							},
+						},
+						ProviderID: aws.String("aws"),
+					},
+				},
+			},
+		},
+	}
+	objs := []runtime.Object{&fakeCpms}
+	mocks := testutils.NewTestMock(t, objs)
+	err := removeLoadBalancerCPMS(context.TODO(), mocks.FakeKubeClient, "removal-lb", &fakeCpms)
+	if err != nil {
+		t.Errorf("Removing load balancer from cluster failed: %v", err)
+	}
+	updatedCpms := &machinev1.ControlPlaneMachineSet{}
+	err = mocks.FakeKubeClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: "openshift-machine-api",
+		Name:      "cluster",
+	}, updatedCpms)
+	if err != nil {
+		t.Errorf("Could not get cpms again.")
+	}
+	spec, err := utils.ConvertFromRawExtension[machinev1beta1.AWSMachineProviderConfig](updatedCpms.Spec.Template.OpenShiftMachineV1Beta1Machine.Spec.ProviderSpec.Value)
+	if err != nil {
+		t.Errorf("Could not convert cpms rawextension.")
+	}
+	if len(spec.LoadBalancers) != 1 {
+		t.Errorf("Removing load balancer from cluster did not leave only 1 lb behind: %v", spec.LoadBalancers)
+	}
 }

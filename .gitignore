@@ -92,3 +92,4 @@ build/_output
 # for Jenkins credentials to work
 .docker/
 saas-cloud-ingress-operator-bundle
+launch.json
