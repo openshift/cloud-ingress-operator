@@ -221,6 +221,18 @@ objects:
         - patch
         - update
       - apiGroups:
+        - machine.openshift.io
+        resources:
+        - controlplanemachinesets
+        verbs:
+        - create
+        - delete
+        - get
+        - list
+        - patch
+        - update
+        - watch
+      - apiGroups:
         - ""
         resources:
         - services
