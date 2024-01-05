@@ -34,13 +34,13 @@ func TestAWSProviderDecode(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 
-			objs := []runtime.Object{&test.m}
+			objs := []runtime.Object{&test.m} // #nosec G601
 			mocks := testutils.NewTestMock(t, objs)
 			machineInfo := types.NamespacedName{
 				Name:      test.m.GetName(),
 				Namespace: test.m.GetNamespace(),
 			}
-			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &test.m)
+			err := mocks.FakeKubeClient.Get(context.TODO(), machineInfo, &test.m) // #nosec G601
 			if err != nil {
 				t.Fatalf("Couldn't reload machine %s: %v", test.m.GetName(), err)
 			}
