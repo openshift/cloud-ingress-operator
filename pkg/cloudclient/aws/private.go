@@ -185,9 +185,9 @@ func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 	if err != nil {
 		return err
 	}
-	// TODO: Check for the expected name?
+
 	for _, networkLoadBalancer := range nlbs {
-		if networkLoadBalancer.scheme == "internet-facing" {
+		if networkLoadBalancer.scheme == "internet-facing" && strings.HasSuffix(networkLoadBalancer.loadBalancerName, "-ext") {
 			// nothing to do
 			return nil
 		}
@@ -838,6 +838,11 @@ func (ac *Client) ensureDNSRecordsRemoved(clusterDomain, DNSName, aliasDNSZoneID
 
 // removeLoadBalancerFromMasterNodes
 func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient k8s.Client) (string, string, error) {
+	clusterName, err := baseutils.GetClusterName(kclient)
+	if err != nil {
+		return "", "", err
+	}
+
 	nlbs, err := ac.listOwnedNLBs(kclient)
 	if err != nil {
 		return "", "", err
@@ -868,17 +873,29 @@ func (ac *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 	var intDNSName, intHostedZoneID, lbName string
 	for _, networkLoadBalancer := range nlbs {
 		if networkLoadBalancer.scheme == "internet-facing" {
-			lbName = networkLoadBalancer.loadBalancerName
-			err := ac.deleteExternalLoadBalancer(networkLoadBalancer.loadBalancerArn)
-			if err != nil {
-				return "", "", err
-			}
-			err = removalClosure(lbName)
-			if err != nil {
-				return "", "", err
-			}
-		}
 
+			lbName = networkLoadBalancer.loadBalancerName
+
+			canDelete, err := ac.canDeleteNlb(networkLoadBalancer, clusterName)
+			if err != nil {
+				log.Error(err, "Problem attempting to remove", "NLB", networkLoadBalancer.loadBalancerName)
+				return "", "", err
+			}
+
+			if canDelete {
+
+				log.Info("Removing from cluster", "NLB", networkLoadBalancer.loadBalancerName)
+				err = ac.deleteExternalLoadBalancer(networkLoadBalancer.loadBalancerArn)
+				if err != nil {
+					return "", "", err
+				}
+				err = removalClosure(lbName)
+				if err != nil {
+					return "", "", err
+				}
+			}
+
+		}
 	}
 
 	internalAPINLB, err := ac.getInteralAPINLB(kclient)
@@ -1218,4 +1235,56 @@ func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterL
 			return removeLoadBalancerMachineSet(ctx, kclient, lbName, masterList)
 		}
 	}
+}
+
+// getAllTagsFromLoadBalancer Gets all the tags from a load balancer and returns them on a map
+func (ac *Client) getAllTagsFromLoadBalancer(loadBalancerArn string) (map[string]string, error) {
+
+	// Input parameters for DescribeTags API call
+	ElbInput := &elbv2.DescribeTagsInput{
+		ResourceArns: []*string{aws.String(loadBalancerArn)},
+	}
+
+	// Make DescribeTags API call to get tags for the specified load balancer
+	resp, err := ac.elbv2Client.DescribeTags(ElbInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract tags from the response
+	tags := make(map[string]string)
+	for _, tagDescription := range resp.TagDescriptions {
+		for _, tag := range tagDescription.Tags {
+			tags[*tag.Key] = *tag.Value
+		}
+	}
+
+	return tags, nil
+}
+
+// canDeleteNlb is a function that checks if and nlb can be deleted by checking certain conditions (if certain tags are present)
+func (ac *Client) canDeleteNlb(networkLoadBalancer loadBalancerV2, clusterName string) (bool, error) {
+
+	var belongstoCluster, notServiceAttached, isExternal bool
+
+	nlbTagsMap, err := ac.getAllTagsFromLoadBalancer(networkLoadBalancer.loadBalancerArn)
+	if err != nil {
+		log.Error(err, "Problem getting tags", "NLB", networkLoadBalancer.loadBalancerArn)
+		return false, err
+	}
+
+	//check if the elb belongs to the right cluster (this is in case there are more than one cluster in the same region)
+	if _, ok := nlbTagsMap["kubernetes.io/cluster/"+clusterName]; ok {
+		belongstoCluster = true
+	}
+	//check the elb is not attached to a service
+	if _, ok := nlbTagsMap["kubernetes.io/service-name"]; !ok {
+		notServiceAttached = true
+	}
+	//check the elb has the external suffix
+	if strings.HasSuffix(nlbTagsMap["Name"], "-ext") {
+		isExternal = true
+	}
+
+	return (belongstoCluster && notServiceAttached && isExternal), nil
 }
