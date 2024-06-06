@@ -93,3 +93,7 @@ build/_output
 .docker/
 saas-cloud-ingress-operator-bundle
 launch.json
+
+
+# IDE
+.DS_Store
