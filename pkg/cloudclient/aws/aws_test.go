@@ -122,7 +122,7 @@ func TestCpmsLbRemoval(t *testing.T) {
 			Template: machinev1.ControlPlaneMachineSetTemplate{
 				MachineType: machinev1.OpenShiftMachineV1Beta1MachineType,
 				OpenShiftMachineV1Beta1Machine: &machinev1.OpenShiftMachineV1Beta1MachineTemplate{
-					FailureDomains: machinev1.FailureDomains{
+					FailureDomains: &machinev1.FailureDomains{
 						Platform: "aws",
 						AWS:      &[]machinev1.AWSFailureDomain{},
 					},
