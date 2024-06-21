@@ -1,6 +1,8 @@
 module github.com/openshift/cloud-ingress-operator
 
-go 1.19
+go 1.21
+
+toolchain go1.21.8
 
 require (
 	github.com/aws/aws-sdk-go v1.44.86
