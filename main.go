@@ -110,7 +110,6 @@ func main() {
 
 	if strings.Contains(watchNamespace, ",") {
 		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
-		options.Namespace = ""
 		// nolint:golint,all
 		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
 	}
