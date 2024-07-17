@@ -32,22 +32,36 @@ import (
 
 var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	var k8s *openshift.Client
+	var region string
+	var provider string
+	var sts bool
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
+
+		sts, err = k8s.IsSTS(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Could not determine STS config")
+
+		if sts {
+			ginkgo.Skip("Skipping sts clusters")
+		}
+
+		provider, err = k8s.GetProvider(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
+
+		region, err = k8s.GetRegion(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Could not determine region")
 	})
 
-	if os.Getenv("CLOUD_PROVIDER_ID") == "aws" {
+	if provider == "aws" {
 		ginkgo.It("manually deleted rh-api load balancer should be recreated in AWS", func(ctx context.Context) {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-			awsRegion := os.Getenv("CLOUD_PROVIDER_REGION")
 			Expect(awsAccessKey).NotTo(BeEmpty(), "awsAccessKey not found")
 			Expect(awsSecretKey).NotTo(BeEmpty(), "awsSecretKey not found")
-			Expect(awsRegion).NotTo(BeEmpty(), "awsRegion not found")
 
 			ginkgo.By("Getting old rh-api load balancer name")
 			oldLBName, err := getLBForService(ctx, k8s, "openshift-kube-apiserver", "rh-api")
@@ -55,7 +69,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			log.Printf("Old load balancer name %s ", oldLBName)
 
 			// delete the load balancer in aws
-			awsSession, err := session.NewSession(aws.NewConfig().WithCredentials(credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")).WithRegion(awsRegion))
+			awsSession, err := session.NewSession(aws.NewConfig().WithCredentials(credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")).WithRegion(region))
 			Expect(err).NotTo(HaveOccurred(), "Could not set up aws session")
 
 			ginkgo.By("Initializing AWS ELB service")
@@ -64,7 +78,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 				LoadBalancerName: aws.String(oldLBName),
 			}
 
-			// must store security groups associated with LB so we can delete them
+			// must store security groups associated with LB, so we can delete them
 			oldLBDesc, err := lb.DescribeLoadBalancersWithContext(ctx, &elb.DescribeLoadBalancersInput{
 				LoadBalancerNames: []*string{aws.String(oldLBName)},
 			})
@@ -118,7 +132,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		})
 	}
 
-	if os.Getenv("CLOUD_PROVIDER_ID") == "gcp" {
+	if provider == "gcp" {
 		ginkgo.It("manually deleted rh-api forwarding rule should be recreated in GCP", func(ctx context.Context) {
 			region := os.Getenv("CLOUD_PROVIDER_REGION")
 			Expect(region).NotTo(BeEmpty(), "No CLOUD_PROVIDER_REGION set")
