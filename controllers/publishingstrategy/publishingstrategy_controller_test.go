@@ -909,7 +909,7 @@ func TestReconcileGCP(t *testing.T) {
 			},
 		},
 		{
-			Name:          "Should requeue when succesfully creating missing ingresscontroller",
+			Name:          "Should requeue when successfully creating missing ingresscontroller",
 			Resp:          reconcile.Result{Requeue: true},
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
@@ -1146,14 +1146,14 @@ func TestReconcileAWS(t *testing.T) {
 		ClientErr     map[string]string // used to instruct the client to generate an error on k8sclient Update, Delete or Create
 		ErrorExpected bool
 		ErrorReason   string
-		Mocks            func(mockclient *MockCloudClient)
+		Mocks         func(mockclient *MockCloudClient)
 	}{
 		{
 			Name:          "Should complete without error when PublishingStrategy is NotFound",
 			Resp:          reconcile.Result{},
 			ErrorExpected: false,
 			ClientErr:     map[string]string{"on": "Get", "type": "IsNotFound"},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to retrieve PublishingStrategy",
@@ -1161,7 +1161,7 @@ func TestReconcileAWS(t *testing.T) {
 			ErrorExpected: true,
 			ErrorReason:   "InternalError",
 			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to list IngressControllerList",
@@ -1170,7 +1170,7 @@ func TestReconcileAWS(t *testing.T) {
 			ErrorReason:   "InternalError",
 			ClientObj:     []client.Object{defaultPublishingStrategy},
 			ClientErr:     map[string]string{"on": "List", "type": "InternalError"},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to retrieve ingresscontroller",
@@ -1180,7 +1180,7 @@ func TestReconcileAWS(t *testing.T) {
 			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
 			ClientErr:     map[string]string{"on": "Get", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to create missing ingresscontroller",
@@ -1190,15 +1190,15 @@ func TestReconcileAWS(t *testing.T) {
 			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
 			ClientErr:     map[string]string{"on": "Create", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
-			Name:          "Should requeue when succesfully creating missing ingresscontroller",
+			Name:          "Should requeue when successfully creating missing ingresscontroller",
 			Resp:          reconcile.Result{Requeue: true},
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, &ingresscontroller.IngressController{}},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should requeue with delay when ingresscontroller is marked as deleted",
@@ -1206,7 +1206,7 @@ func TestReconcileAWS(t *testing.T) {
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should requeue with error when failing to ensure static specs on ingresscontroller",
@@ -1216,7 +1216,7 @@ func TestReconcileAWS(t *testing.T) {
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "internal", []string{ClusterIngressFinalizer})},
 			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to ensure patchable specs on ingresscontroller",
@@ -1229,7 +1229,7 @@ func TestReconcileAWS(t *testing.T) {
 			},
 			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:      func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing delete punblished ingresscontroller",
@@ -1253,7 +1253,7 @@ func TestReconcileAWS(t *testing.T) {
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 	}
 
@@ -1332,7 +1332,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should requeue with error when failing to ensure static specs on ingresscontroller",
@@ -1342,7 +1342,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSNLBIC("default", "internal", []string{ClusterIngressFinalizer})},
 			ClientErr:     map[string]string{"on": "Update", "type": "InternalError"},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to ensure patchable specs on ingresscontroller",
@@ -1355,7 +1355,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			},
 			ClientErr:  map[string]string{"on": "Patch", "type": "InternalError"},
 			RuntimeObj: []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:      func(mockclient *MockCloudClient) {},
 		},
 		{
 			Name:          "Should error when failing to delete published ingresscontroller",
@@ -1379,7 +1379,7 @@ func TestReconcileAWSNLB(t *testing.T) {
 			ErrorExpected: false,
 			ClientObj:     []client.Object{defaultPublishingStrategy, makeAWSClassicIC("default", "external", []string{ClusterIngressFinalizer}, metav1.Now())},
 			RuntimeObj:    []runtime.Object{&ingresscontroller.IngressControllerList{}},
-			Mocks: func(mockclient *MockCloudClient) {},
+			Mocks:         func(mockclient *MockCloudClient) {},
 		},
 	}
 

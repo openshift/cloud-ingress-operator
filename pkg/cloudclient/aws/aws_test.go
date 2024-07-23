@@ -36,7 +36,7 @@ func TestNewClient(t *testing.T) {
 	cli, err := NewClient(mocks.FakeKubeClient)
 
 	if err != nil {
-		t.Error("err occured while creating cli:", err)
+		t.Error("err occurred while creating cli:", err)
 	}
 
 	if cli == nil {
@@ -93,7 +93,7 @@ func TestHealthcheck(t *testing.T) {
 	cli := Client{elbClient: &mockELBClient{}}
 	err := cli.Healthcheck(context.TODO(), mocks.FakeKubeClient)
 	if err != nil {
-		t.Error("err occured while performing healthcheck:", err)
+		t.Error("err occurred while performing healthcheck:", err)
 	}
 
 }
