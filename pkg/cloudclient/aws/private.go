@@ -316,7 +316,7 @@ func (ac *Client) getPublicSubnets(kclient k8s.Client) ([]string, error) {
 	// The instance ID should be the last element of the split
 	instanceID := split[len(split)-1]
 
-	// Ensure we acutally have an instnace ID by erroring if its missing
+	// Ensure we actually have an instnace ID by erroring if its missing
 	if instanceID == "" {
 		err = goError.New("Instance ID is blank")
 		return nil, err

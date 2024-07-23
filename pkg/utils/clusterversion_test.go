@@ -16,13 +16,13 @@ func TestIsVersionHigher(t *testing.T) {
 		{
 			Name:            "Compare Cluster Version 4.10.44-rc",
 			CompareExpected: true,
-			ErrorReason:     "Wrong Comparision, it should be higher than 4.10 ",
+			ErrorReason:     "Wrong Comparison, it should be higher than 4.10 ",
 			clusterversion:  "4.10.44-rc",
 		},
 		{
 			Name:            "Compare Cluster Version 4.9.nightly.44-rc",
 			CompareExpected: false,
-			ErrorReason:     "Wrong Comparision, it should be lower than 4.10",
+			ErrorReason:     "Wrong Comparison, it should be lower than 4.10",
 			clusterversion:  "4.9.nightly.44-rc",
 		},
 	}

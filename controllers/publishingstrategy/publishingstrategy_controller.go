@@ -132,7 +132,7 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	*/
 	ownedIngressExistingMap := make(map[string]bool, 1)
 	for _, ownedIngress := range ownedIngressControllers.Items {
-		// Initalize them all to false as they have not been verified against ApplicationIngress list
+		// Initialize them all to false as they have not been verified against ApplicationIngress list
 		ownedIngressExistingMap[ownedIngress.Name] = false
 	}
 
@@ -153,10 +153,10 @@ func (r *PublishingStrategyReconciler) Reconcile(ctx context.Context, request ct
 	then its created. If the IngressController does exist, the immutable fields are check.
 	If any immutable field differs between the desired and the generated spec, the IngressController
 	is deleted and should be created the next reconcile.
-	Once the immuatble fields are checked, then then mutable fields are. If any of the mutable fields
+	Once the immutable fields are checked, then then mutable fields are. If any of the mutable fields
 	differ, the IngressController is patched.
 	The default IngressController is special. When its first created, the spec is not filled out.
-	Instead, the relavent fields are set in the status. For each of the spec checks, the status
+	Instead, the relevant fields are set in the status. For each of the spec checks, the status
 	will also be checked if the ApplicationIngress references the default IngressController
 	*/
 	for _, ingressDefinition := range instance.Spec.ApplicationIngress {
@@ -414,11 +414,11 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 }
 
 /*
-	If entry exists in desired application ingress,
-    but NOT in owned ingress, and is not default,
-	conclude that the user is trying to create a new 'apps2' ingress.
-	Throw an error.
- */
+		If entry exists in desired application ingress,
+	    but NOT in owned ingress, and is not default,
+		conclude that the user is trying to create a new 'apps2' ingress.
+		Throw an error.
+*/
 func ensureNoNewSecondIngressCreated(reqLogger logr.Logger, ai []v1alpha1.ApplicationIngress, ownedIngressExistingMap map[string]bool) (result reconcile.Result, err error) {
 	for _, ingressDefinition := range ai {
 		if ingressDefinition.Default {
@@ -488,9 +488,9 @@ func validateAWSLoadBalancerType(ic ingresscontroller.IngressController, ai v1al
 /*
 	Compares the patchable desired Spec against the existing IngressController's status.
 
-The only patchable field that the ApplicationIngress controlls thats also stored in the IngressController's
+The only patchable field that the ApplicationIngress controls that's also stored in the IngressController's
 status is the RouteSelector. The default IngressController does not have those spec fields
-filled in at all when fisrt created. Instead, the default CRs status holds the correct values. This function
+filled in at all when first created. Instead, the default CRs status holds the correct values. This function
 is meant to be used when the default CRs spec is not filled in to see if the desired configuration is present in
 its status instead. Returns false if the RouteSelector in the status is empty or does not match the desired Spec.
 */
