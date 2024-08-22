@@ -184,8 +184,8 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Could not resolve rh-api endpoint")
 	})
 
-	if provider == "aws" {
-		ginkgo.It("manually deleted "+cioServiceName+" load balancer should be recreated in AWS", func(ctx context.Context) {
+	ginkgo.It("manually deleted "+cioServiceName+" load balancer should be recreated", func(ctx context.Context) {
+		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 			Expect(awsAccessKey).NotTo(BeEmpty(), "awsAccessKey not found")
@@ -257,11 +257,9 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 					log.Printf("Deleted orphaned security group %s", *orphanSecGroupId)
 				}
 			}
-		})
-	}
+		}
 
-	if provider == "gcp" {
-		ginkgo.It("manually deleted "+cioServiceName+" forwarding rule should be recreated in GCP", func(ctx context.Context) {
+		if provider == "gcp" {
 			region := os.Getenv("CLOUD_PROVIDER_REGION")
 			Expect(region).NotTo(BeEmpty(), "No CLOUD_PROVIDER_REGION set")
 
@@ -387,8 +385,8 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 				return false, nil
 			})
 			Expect(err).NotTo(HaveOccurred(), "New "+cioServiceName+" forwarding rule not created in GCP")
-		})
-	}
+		}
+	})
 
 	ginkgo.It("can be upgraded", func(ctx context.Context) {
 		ginkgo.By("forcing operator upgrade")
