@@ -219,7 +219,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			log.Printf("Old " + cioServiceName + " load balancer delete initiated")
 
 			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, 15*time.Second, 5*time.Minute, false, func(ctx2 context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, 15*time.Second, 10*time.Minute, false, func(ctx2 context.Context) (bool, error) {
 				newLBName, err := getLBForService(ctx2, k8s, rhApiSvcNamespace, cioServiceName, false)
 				log.Printf("Looking for new load balancer")
 
