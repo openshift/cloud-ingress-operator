@@ -54,4 +54,6 @@ const (
 
 	// OperatorNamespace
 	OperatorNamespace string = "openshift-cloud-ingress-operator"
+
+	EnableOLMSkipRange = "true"
 )
