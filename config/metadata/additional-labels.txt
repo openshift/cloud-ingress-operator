@@ -1,0 +1,1 @@
+LABEL com.redhat.component="openshift-cloud-ingress-operator"       io.k8s.description="..."       description="..."       distribution-scope="public"       name="openshift/cloud-ingress-operator"       url="https://github.com/openshift/cloud-ingress-operator"       vendor="Red Hat, Inc."       release="v0.0.0"       version="v0.0.0"
