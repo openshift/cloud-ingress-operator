@@ -123,7 +123,7 @@ GOLANGCI_LINT_CACHE ?= /tmp/golangci-cache
 GOLANGCI_OPTIONAL_CONFIG ?=
 
 ifeq ($(origin TESTTARGETS), undefined)
-TESTTARGETS := $(shell ${GOENV} go list -e ./... | grep -E -v "/(vendor)/" | grep -E -v "/(osde2e)/")
+TESTTARGETS := $(shell ${GOENV} go list -e ./... | grep -E -v "/(vendor)/" | grep -E -v "/(test/e2e)/")
 endif
 # ex, -v
 TESTOPTS :=
@@ -328,7 +328,7 @@ build-push:
 	${CONVENTION_DIR}/app-sre-build-deploy.sh ${REGISTRY_IMAGE} ${CURRENT_COMMIT} "$$IMAGES_TO_BUILD"
 
 .PHONY: opm-build-push
-opm-build-push: docker-push
+opm-build-push: python-venv docker-push
 	OLM_BUNDLE_IMAGE="${OLM_BUNDLE_IMAGE}" \
 	OLM_CATALOG_IMAGE="${OLM_CATALOG_IMAGE}" \
 	CONTAINER_ENGINE="${CONTAINER_ENGINE}" \
