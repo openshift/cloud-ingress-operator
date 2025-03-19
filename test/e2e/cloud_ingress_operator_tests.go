@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"slices"
 	"time"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
@@ -102,22 +103,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		cidrBlock := apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
 		updatedApiScheme := apiScheme.DeepCopy()
 
-		//reset cidrblock after test is done
-		defer func() {
-			updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
-			err = k8s.Update(ctx, updatedApiScheme)
-			Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
-		}()
-
-		// Remove last IP from the cidrBlock:
-		var updatedCidrBlock []string
-		for _, t := range cidrBlock {
-			temp := t[:]
-			updatedCidrBlock = append(updatedCidrBlock, temp)
-		}
-
-		updatedCidrBlock[len(updatedCidrBlock)-1] = ""                // Erase last element (write zero value)
-		updatedCidrBlock = updatedCidrBlock[:len(updatedCidrBlock)-1] // Truncate slice
+		updatedCidrBlock := cidrBlock[:len(cidrBlock)-1]
 
 		// Put the new CIRDBlock ranges into the APIScheme
 		updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = updatedCidrBlock
@@ -125,9 +111,14 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		// Update the APIScheme
 		err = k8s.Update(ctx, updatedApiScheme)
 		Expect(err).NotTo(HaveOccurred(), "Could not update APIScheme CR instance")
-
-		// Wait 30 secs for apiserver to reconcile
-		time.Sleep(30 * time.Second)
+		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
+			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, updatedCidrBlock) {
+				log.Println("Updated cidrblock in rh-api service.")
+				return true, nil
+			}
+			return false, nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "Updated cidrblock not able to be set in rh-api service.")
 
 		// Get rh-api svc
 		// Create a service Object
@@ -138,6 +129,21 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		// Make sure both the New cidrBlock and the Service LoadBalancerSourceRanges are equal
 		// If they are then the APIScheme update also updated the service.
 		Expect(updatedCidrBlock).To(BeEquivalentTo(rhAPIService.Spec.LoadBalancerSourceRanges), "Updated cidrblock from apischeme did not reflect in rh-api service")
+
+		// Finally, restore the CIDR blocks back to the original state.
+		updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
+		err = k8s.Update(ctx, updatedApiScheme)
+		Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
+
+		ginkgo.By("Restoring the CIDR block to its original state.")
+		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
+			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrBlock) {
+				log.Println("Original cidrblock from apischeme successfully restored in rh-api service.")
+				return true, nil
+			}
+			return false, nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "Original cidrblock not restored in APIScheme.")
 	})
 
 	ginkgo.It("ensures apischemes CR instance are present on cluster", func(ctx context.Context) {
@@ -202,9 +208,6 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 
 			ginkgo.By("Initializing AWS ELB service")
 			lb := elb.New(awsSession)
-			input := &elb.DeleteLoadBalancerInput{
-				LoadBalancerName: aws.String(oldLBName),
-			}
 
 			// must store security groups associated with LB, so we can delete them
 			oldLBDesc, err := lb.DescribeLoadBalancersWithContext(ctx, &elb.DescribeLoadBalancersInput{
@@ -214,7 +217,9 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			orphanSecGroupIds := oldLBDesc.LoadBalancerDescriptions[0].SecurityGroups
 
 			ginkgo.By("Deleting old " + cioServiceName + " load balancer")
-			_, err = lb.DeleteLoadBalancer(input)
+			_, err = lb.DeleteLoadBalancer(&elb.DeleteLoadBalancerInput{
+				LoadBalancerName: aws.String(oldLBName),
+			})
 			Expect(err).NotTo(HaveOccurred(), "Could not delete "+cioServiceName+" lb")
 			log.Printf("Old " + cioServiceName + " load balancer delete initiated")
 
