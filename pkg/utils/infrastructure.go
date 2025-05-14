@@ -50,7 +50,7 @@ func GetClusterBaseDomain(kclient client.Client) (string, error) {
 	}
 	serverURL, err := url.Parse(infra.Status.APIServerURL)
 	if err != nil {
-		return "", fmt.Errorf("Couldn't parse the API server URL from %s: %s", infra.Status.APIServerURL, err)
+		return "", fmt.Errorf("couldn't parse the API server URL from %s: %s", infra.Status.APIServerURL, err)
 	}
 	// Trim the leading "api." from the hostname.
 	return serverURL.Hostname()[4:], nil
