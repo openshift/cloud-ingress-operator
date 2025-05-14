@@ -50,7 +50,7 @@ func (gc *Client) deleteAdminAPIDNS(ctx context.Context, kclient k8s.Client, ins
 func (gc *Client) setDefaultAPIPrivate(ctx context.Context, kclient k8s.Client, _ *cloudingressv1alpha1.PublishingStrategy) error {
 	intIPAddress, err := gc.removeLoadBalancerFromMasterNodes(ctx, kclient)
 	if err != nil {
-		return fmt.Errorf("Failed to remove load balancer from master nodes: %v", err)
+		return fmt.Errorf("failed to remove load balancer from master nodes: %v", err)
 	}
 	apiDNSName := fmt.Sprintf("api.%s.", gc.baseDomain)
 	oldIP, err := gc.updateAPIARecord(kclient, apiDNSName, intIPAddress)
@@ -207,7 +207,7 @@ func (gc *Client) ensureGCPForwardingRuleForExtIP(rhapiLbIP string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("Forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
+	return fmt.Errorf("forwarding rule not found in GCP for given service IP %s", rhapiLbIP)
 
 }
 
@@ -313,7 +313,7 @@ func (gc *Client) removeLoadBalancerFromMasterNodes(ctx context.Context, kclient
 			lbName = lb.Name
 			_, err := gc.computeService.ForwardingRules.Delete(gc.projectID, gc.region, lbName).Do()
 			if err != nil {
-				return "", fmt.Errorf("Failed to delete ForwardingRule for external load balancer %v: %v", lb.Name, err)
+				return "", fmt.Errorf("failed to delete ForwardingRule for external load balancer %v: %v", lb.Name, err)
 			}
 			err = removalClosure(lbName)
 			if err != nil {
@@ -405,7 +405,7 @@ func (gc *Client) createExternalIP(name string, scheme string) (ipAddress string
 	// Check if an external IP with the correct name already exists
 	addyList, err := gc.computeService.Addresses.List(gc.projectID, gc.region).Do()
 	if err != nil {
-		return "", fmt.Errorf("Failed to retrieve list of GCP project's IP addresses: %v", err)
+		return "", fmt.Errorf("failed to retrieve list of GCP project's IP addresses: %v", err)
 	}
 	for _, ip := range addyList.Items {
 		if ip.Name == name {
@@ -421,14 +421,14 @@ func (gc *Client) createExternalIP(name string, scheme string) (ipAddress string
 	insertCall := gc.computeService.Addresses.Insert(gc.projectID, gc.region, eip)
 	eipResp, err := insertCall.Do()
 	if err != nil {
-		return "", fmt.Errorf("Request to reserve a new static IP failed: %v", err)
+		return "", fmt.Errorf("request to reserve a new static IP failed: %v", err)
 	}
 
 	waitResp, err := gc.computeService.RegionOperations.Wait(gc.projectID, gc.region, eipResp.Name).Do()
 
 	// Fail if we couldn't reserve a static IP within 2 minutes.
 	if waitResp.Status != "DONE" {
-		return "", fmt.Errorf("Failed to reserve a static IP after waiting 120s: %v", err)
+		return "", fmt.Errorf("failed to reserve a static IP after waiting 120s: %v", err)
 	}
 
 	getCall := gc.computeService.Addresses.Get(gc.projectID, gc.region, name)
@@ -443,7 +443,7 @@ func (gc *Client) createExternalIP(name string, scheme string) (ipAddress string
 func (gc *Client) releaseExternalIP(addressName string) error {
 	_, err := gc.computeService.Addresses.Delete(gc.projectID, gc.region, addressName).Do()
 	if err != nil {
-		return fmt.Errorf("Failed to release External IP %v: %v", addressName, err)
+		return fmt.Errorf("failed to release External IP %v: %v", addressName, err)
 	}
 	return nil
 }
@@ -452,7 +452,7 @@ func (gc *Client) createNetworkLoadBalancer(name string, scheme string, targetPo
 	//Confirm the target pool is present and get its selflink URL
 	tpResp, err := gc.computeService.TargetPools.Get(gc.projectID, gc.region, targetPool).Do()
 	if err != nil {
-		return fmt.Errorf("Unable to find expected targetPool %v: %v", targetPool, err)
+		return fmt.Errorf("unable to find expected targetPool %v: %v", targetPool, err)
 	}
 	tpURL := tpResp.SelfLink
 	i := &compute.ForwardingRule{
@@ -466,7 +466,7 @@ func (gc *Client) createNetworkLoadBalancer(name string, scheme string, targetPo
 	}
 	_, err = gc.computeService.ForwardingRules.Insert(gc.projectID, gc.region, i).Do()
 	if err != nil {
-		return fmt.Errorf("Failed to create new ForwardingRule for %v: %v", name, err)
+		return fmt.Errorf("failed to create new ForwardingRule for %v: %v", name, err)
 	}
 	log.Info("Successfully created new ForwardingRule", "Name", name)
 	return nil
@@ -479,7 +479,7 @@ func (gc *Client) updateAPIARecord(kclient k8s.Client, recordName string, newIP 
 	}
 	pubZoneRecords, err := gc.dnsService.ResourceRecordSets.List(gc.projectID, clusterDNS.Spec.PublicZone.ID).Do()
 	if err != nil {
-		return "", fmt.Errorf("Failed to retrieve list of ResourceRecordSets from public zone %v : %v", clusterDNS.Spec.PublicZone.ID, err)
+		return "", fmt.Errorf("failed to retrieve list of ResourceRecordSets from public zone %v : %v", clusterDNS.Spec.PublicZone.ID, err)
 	}
 	apiRRSets := []*gdnsv1.ResourceRecordSet{}
 	for _, rrset := range pubZoneRecords.Rrsets {
@@ -488,7 +488,7 @@ func (gc *Client) updateAPIARecord(kclient k8s.Client, recordName string, newIP 
 		}
 	}
 	if len(apiRRSets) != 1 {
-		return "", fmt.Errorf("Expected to find 1 A record for API, found %d", len(apiRRSets))
+		return "", fmt.Errorf("expected to find 1 A record for API, found %d", len(apiRRSets))
 	}
 	oldIP = apiRRSets[0].Rrdatas[0]
 	if oldIP == newIP {

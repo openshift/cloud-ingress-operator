@@ -204,7 +204,7 @@ func (ac *Client) setDefaultAPIPublic(ctx context.Context, kclient k8s.Client, i
 		return err
 	}
 	if len(subnetIDs) == 0 {
-		err = goError.New("No public subnets, can't change API to public")
+		err = goError.New("no public subnets, can't change API to public")
 		return err
 	}
 
@@ -273,7 +273,7 @@ func getMasterNodeSubnets(kclient k8s.Client) (map[string]string, error) {
 		return subnets, err
 	}
 	if len(machineList.Items) == 0 {
-		return subnets, fmt.Errorf("Did not find any master Machine objects")
+		return subnets, fmt.Errorf("did not find any master Machine objects")
 	}
 
 	// Obtain the availability zone
@@ -318,7 +318,7 @@ func (ac *Client) getPublicSubnets(kclient k8s.Client) ([]string, error) {
 
 	// Ensure we actually have an instnace ID by erroring if its missing
 	if instanceID == "" {
-		err = goError.New("Instance ID is blank")
+		err = goError.New("instance ID is blank")
 		return nil, err
 	}
 
@@ -490,11 +490,11 @@ func parseClusterRegionFromConfigMap(cm *corev1.ConfigMap) (string, error) {
 	}
 	data, ok := cm.Data["install-config"]
 	if !ok {
-		return "", fmt.Errorf("Missing install-config in configmap")
+		return "", fmt.Errorf("missing install-config in configmap")
 	}
 	var ic installConfig
 	if err := yaml.Unmarshal([]byte(data), &ic); err != nil {
-		return "", fmt.Errorf("Invalid install-config: %v\njson:%s", err, data)
+		return "", fmt.Errorf("invalid install-config: %v\njson:%s", err, data)
 	}
 	return ic.Platform.AWS.Region, nil
 }
@@ -528,7 +528,7 @@ func (ac *Client) doesELBExist(elbName string) (*awsLoadBalancer, error) {
 
 func (ac *Client) ensureDNSForService(ctx context.Context, kclient k8s.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	// Get the ELB name from the Service's UID. Truncate to 32 characters for AWS
-	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")
+	elbName := strings.ReplaceAll("a"+string(svc.UID), "-", "")
 	if len(elbName) > 32 {
 		// Truncate to 32 characters
 		elbName = elbName[0:32]
@@ -554,7 +554,7 @@ func (ac *Client) ensureDNSForService(ctx context.Context, kclient k8s.Client, s
 // removeDNSForService will remove a DNS entry for a particular Service
 func (ac *Client) removeDNSForService(ctx context.Context, kclient k8s.Client, svc *corev1.Service, dnsName, dnsComment string) error {
 	// Get the ELB name from the Service's UID. Truncate to 32 characters for AWS
-	elbName := strings.ReplaceAll("a"+string(svc.ObjectMeta.UID), "-", "")[0:32]
+	elbName := strings.ReplaceAll("a"+string(svc.UID), "-", "")[0:32]
 	awsELB, err := ac.doesELBExist(elbName)
 	// Primarily checking to see if this exists. It is an error if it does not,
 	// likely because AWS is still creating it and the Reconcile should be retried
@@ -713,7 +713,7 @@ func (ac *Client) getPublicHostedZoneID(clusterDomain string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("Route53 Zone not found for %s", clusterDomain)
+	return "", fmt.Errorf("route53 Zone not found for %s", clusterDomain)
 
 }
 

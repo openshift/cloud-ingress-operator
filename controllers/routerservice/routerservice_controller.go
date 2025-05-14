@@ -83,7 +83,7 @@ func (r *RouterServiceReconciler) Reconcile(ctx context.Context, request ctrl.Re
 	// Only set timeout annotations on services for < OCP 4.11. In 4.11+, the cluster-ingress-operator maintains this annotation
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && !baseutils.IsVersionHigherThan("4.11") {
 		if !metav1.HasAnnotation(svc.ObjectMeta, ELBAnnotationKey) ||
-			svc.ObjectMeta.Annotations[ELBAnnotationKey] != ELBAnnotationValue {
+			svc.Annotations[ELBAnnotationKey] != ELBAnnotationValue {
 			reqLogger.Info("Updating annotation for " + svc.Name)
 			metav1.SetMetaDataAnnotation(&svc.ObjectMeta, ELBAnnotationKey, ELBAnnotationValue)
 			err = r.Client.Update(context.TODO(), svc)
