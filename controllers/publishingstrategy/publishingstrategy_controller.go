@@ -371,7 +371,7 @@ its status instead. Returns false if at least one of the existing fields don't m
 */
 func validateStaticStatus(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) bool {
 
-	if !(desiredSpec.Domain == ingressController.Status.Domain) {
+	if desiredSpec.Domain != ingressController.Status.Domain {
 		return false
 	}
 	if !baseutils.IsVersionHigherThan("4.10") {
@@ -380,7 +380,7 @@ func validateStaticStatus(ingressController ingresscontroller.IngressController,
 			return false
 		}
 
-		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		if desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope != ingressController.Status.EndpointPublishingStrategy.LoadBalancer.Scope {
 			return false
 		}
 	}
@@ -395,7 +395,7 @@ Domain and EndpointPublishingStrategy filled in. Returns false if at least one o
 */
 
 func validateStaticSpec(ingressController ingresscontroller.IngressController, desiredSpec ingresscontroller.IngressControllerSpec) bool {
-	if !(desiredSpec.Domain == ingressController.Spec.Domain) {
+	if desiredSpec.Domain != ingressController.Spec.Domain {
 		return false
 	}
 
@@ -405,7 +405,7 @@ func validateStaticSpec(ingressController ingresscontroller.IngressController, d
 			return false
 		}
 
-		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		if desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope != ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope {
 			return false
 		}
 	}
@@ -428,7 +428,7 @@ func ensureNoNewSecondIngressCreated(reqLogger logr.Logger, ai []v1alpha1.Applic
 		_, existsOnCluster := ownedIngressExistingMap[getIngressName(ingressDefinition.DNSName)]
 
 		if !existsOnCluster {
-			err := errors.New("Reconciling second ingress controllers using PublishingStrategy is no longer supported. If you have existing second ingress controllers, these can still be updated and deleted as normal. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.")
+			err := errors.New("reconciling second ingress controllers using PublishingStrategy is no longer supported. If you have existing second ingress controllers, these can still be updated and deleted as normal. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information")
 			reqLogger.Error(err, fmt.Sprintf("Request to create second ingress %s denied, as customer using new native OCP ingress feature. See https://github.com/openshift/cloud-ingress-operator/README.md#publishingstrategyapplicationingress-deprecation for further information.", getIngressName(ingressDefinition.DNSName)))
 			return reconcile.Result{}, err
 		}
@@ -531,7 +531,7 @@ func validatePatchableSpec(ingressController ingresscontroller.IngressController
 		return false, IngressControllerCertificate
 	}
 
-	if !(desiredSpec.DefaultCertificate.Name == ingressController.Spec.DefaultCertificate.Name) {
+	if desiredSpec.DefaultCertificate.Name != ingressController.Spec.DefaultCertificate.Name {
 		return false, IngressControllerCertificate
 	}
 
@@ -549,7 +549,7 @@ func validatePatchableSpec(ingressController ingresscontroller.IngressController
 			return false, IngressControllerEndPoint
 		}
 
-		if !(desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope == ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope) {
+		if desiredSpec.EndpointPublishingStrategy.LoadBalancer.Scope != ingressController.Spec.EndpointPublishingStrategy.LoadBalancer.Scope {
 			return false, IngressControllerEndPoint
 		}
 	}
@@ -674,16 +674,17 @@ func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger
 			reqLogger.Info(fmt.Sprintf("Patchable Spec does not match for IngressController %s, patching field %s", desiredIngressController.Name, field))
 			// Any other IngressController that is not default needs to be patched if the spec doesn't match
 			// Only patch the field that doesn't match
-			if field == IngressControllerSelector {
+			switch field {
+			case IngressControllerSelector:
 				// If the RouteSelector doesn't match, replace the existing spec with the desired Spec
 				ingressController.Spec.RouteSelector = desiredIngressController.Spec.RouteSelector
-			} else if field == IngressControllerCertificate {
+			case IngressControllerCertificate:
 				// If the DefaultCertificate doesn't match, replace the existing spec with the desired Spec
 				ingressController.Spec.DefaultCertificate = desiredIngressController.Spec.DefaultCertificate
-			} else if field == IngressControllerNodePlacement {
+			case IngressControllerNodePlacement:
 				// If the NodePlacement doesn't match, replace the existing spec with the desired Spec
 				ingressController.Spec.NodePlacement = desiredIngressController.Spec.NodePlacement
-			} else if field == IngressControllerEndPoint {
+			case IngressControllerEndPoint:
 				// If the EndpointPublishingStrategy doesn't match, replace the existing spec with the desired Spec
 				ingressController.Spec.EndpointPublishingStrategy = desiredIngressController.Spec.EndpointPublishingStrategy
 			}
@@ -706,7 +707,7 @@ func (r *PublishingStrategyReconciler) ensurePatchableSpec(reqLogger logr.Logger
 // Also assume that we return the 'auto-delete-lb' annotation to the cluster ingress operator, too
 func (r *PublishingStrategyReconciler) ensureDefaultICOwnedByClusterIngressOperator(reqLogger logr.Logger) (result reconcile.Result, err error) {
 	if !baseutils.IsVersionHigherThan("4.13") {
-		err := errors.New("Cannot disown default ingress controller for versions <4.13")
+		err := errors.New("cannot disown default ingress controller for versions <4.13")
 		return reconcile.Result{}, err
 	}
 
