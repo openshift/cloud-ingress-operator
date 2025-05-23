@@ -55,6 +55,8 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		apiSchemeResourceName  = "rh-api"
 		cioServiceName         = "rh-api"
 		rhApiSvcNamespace      = "openshift-kube-apiserver"
+		pollingDuration        = time.Minute * 2
+		pollingInterval        = time.Second * 15
 	)
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
@@ -111,7 +113,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		// Update the APIScheme
 		err = k8s.Update(ctx, updatedApiScheme)
 		Expect(err).NotTo(HaveOccurred(), "Could not update APIScheme CR instance")
-		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
+		err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
 			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, updatedCidrBlock) {
 				log.Println("Updated cidrblock in rh-api service.")
 				return true, nil
@@ -136,7 +138,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
 
 		ginkgo.By("Restoring the CIDR block to its original state.")
-		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
+		err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
 			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrBlock) {
 				log.Println("Original cidrblock from apischeme successfully restored in rh-api service.")
 				return true, nil
@@ -178,7 +180,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 
 	ginkgo.It("should resolve rh-api endpoint hostname", func(ctx context.Context) {
 		var err error
-		wait.PollUntilContextTimeout(ctx, 30*time.Second, 15*time.Minute, true, func(ctx context.Context) (bool, error) {
+		wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, true, func(ctx context.Context) (bool, error) {
 			rhApiHostname, err := getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, true)
 			Expect(err).NotTo(HaveOccurred(), "Could not get rh-api lb")
 			_, err = net.LookupHost(rhApiHostname)
@@ -225,7 +227,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			log.Printf("Old " + cioServiceName + " load balancer delete initiated")
 
 			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, 15*time.Second, 10*time.Minute, false, func(ctx2 context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx2 context.Context) (bool, error) {
 				newLBName, err := getLBForService(ctx2, k8s, rhApiSvcNamespace, cioServiceName, false)
 				log.Printf("Looking for new load balancer")
 
@@ -353,7 +355,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 
 			newLBIP := ""
 			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, 15*time.Second, 10*time.Minute, true, func(ctx context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, true, func(ctx context.Context) (bool, error) {
 				// Getting the newly created IP from rh-api service
 				ginkgo.By("Getting new " + cioServiceName + " IP from " + cioServiceName + " service")
 				newLBIP, err = getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
@@ -372,7 +374,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), cioServiceName+" service did not reconcile")
 
 			ginkgo.By("Waiting for new " + cioServiceName + " forwarding rule")
-			err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
 				ginkgo.By("Polling GCP to get new forwarding rule for " + cioServiceName)
 				newLB, err := getGCPForwardingRuleForIP(computeService, newLBIP, project, region)
 				if err != nil || newLB == nil {
