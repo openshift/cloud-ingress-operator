@@ -149,7 +149,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("ensures apischemes CR instance are present on cluster", func(ctx context.Context) {
-		err := wait.PollImmediate(2*time.Second, 2*time.Minute, func() (bool, error) {
+		err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
 			if err := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &apiScheme); err != nil {
 				return false, nil
 			}
