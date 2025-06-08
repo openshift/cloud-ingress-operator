@@ -52,6 +52,7 @@ objects:
         values:
         - "true"
     resourceApplyMode: Sync
+    applyBehavior: CreateOrUpdate
     resources:
     - kind: Namespace
       apiVersion: v1
@@ -169,6 +170,7 @@ objects:
       spec:
         targetNamespaces:
         - openshift-${REPO_NAME}
+        upgradeStrategy: TechPreviewUnsafeFailForward
     - apiVersion: operators.coreos.com/v1alpha1
       kind: Subscription
       metadata:

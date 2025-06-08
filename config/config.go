@@ -54,4 +54,7 @@ const (
 
 	// OperatorNamespace
 	OperatorNamespace string = "openshift-cloud-ingress-operator"
+
+	// olm.skipRange annotation added to CSV --SREP-96
+	EnableOLMSkipRange string = "true"
 )
