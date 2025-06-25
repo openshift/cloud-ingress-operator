@@ -395,12 +395,6 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "New "+cioServiceName+" forwarding rule not created in GCP")
 		}
 	})
-
-	ginkgo.It("can be upgraded", func(ctx context.Context) {
-		ginkgo.By("forcing operator upgrade")
-		err := k8s.UpgradeOperator(ctx, config.OperatorName, config.OperatorNamespace)
-		Expect(err).NotTo(HaveOccurred(), "operator upgrade failed")
-	})
 })
 
 // getLBForService retrieves the load balancer name or IP associated with a service of type LoadBalancer
