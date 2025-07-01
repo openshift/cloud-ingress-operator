@@ -17,22 +17,22 @@ aliases:
     - rojasreinold
     - fsferraz-rh
   srep-functional-team-hulk:
-    - a7vicky
     - ravitri
-    - shitaljante
     - devppratik
     - Tafhim
     - tkong-redhat
     - TheUndeadKing
     - vaidehi411
     - chamalabey
+    - charlesgong
+    - rbhilare
   srep-functional-team-orange:
     - bergmannf
     - Makdaam
     - Nikokolas3270
     - RaphaelBut
     - MateSaary
-    - rolandmkunkel 
+    - rolandmkunkel
     - petrkotas
     - zmird-r
     - evlin-rh
@@ -54,13 +54,15 @@ aliases:
     - casey-williams-rh
     - boranx
   srep-functional-team-thor:
-    - bmeng
+    - a7vicky
+    - diakovnec
     - MitaliBhalla
     - feichashao
     - samanthajayasinghe
     - xiaoyu74
     - Dee-6777
     - Tessg22
+    - smarthall
   srep-infra-cicd:
     - mmazur
     - mrsantamaria
@@ -70,7 +72,7 @@ aliases:
   srep-functional-leads:
     - abyrne55
     - clcollins
-    - Nikokolas3270
+    - bergmannf
     - theautoroboto
     - smarthall
     - sam-nguyen7
