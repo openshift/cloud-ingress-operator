@@ -66,7 +66,7 @@ e2e-binary-build:
 
 # push e2e image tagged as latest and as repo commit hash
 .PHONY: e2e-image-build-push
-e2e-image-build-push:
+e2e-image-build-push: container-engine-login
 	${CONTAINER_ENGINE} build --pull -f test/e2e/Dockerfile -t $(E2E_IMAGE_REGISTRY)/$(E2E_IMAGE_REPOSITORY)/$(E2E_IMAGE_NAME):$(E2E_IMAGE_TAG) .
 	${CONTAINER_ENGINE} tag $(E2E_IMAGE_REGISTRY)/$(E2E_IMAGE_REPOSITORY)/$(E2E_IMAGE_NAME):$(E2E_IMAGE_TAG) $(E2E_IMAGE_REGISTRY)/$(E2E_IMAGE_REPOSITORY)/$(E2E_IMAGE_NAME):latest
 	${CONTAINER_ENGINE} push $(E2E_IMAGE_REGISTRY)/$(E2E_IMAGE_REPOSITORY)/$(E2E_IMAGE_NAME):$(E2E_IMAGE_TAG)
