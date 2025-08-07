@@ -109,9 +109,15 @@ func main() {
 	}
 
 	if strings.Contains(watchNamespace, ",") {
-		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
-		// nolint:golint,all
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
+		nsList := strings.Split(watchNamespace, ",")
+		options.Namespace = map[string]cache.Config{}
+		for _, ns := range nsList {
+			ns = strings.TrimSpace(ns)
+			if ns != "" {
+				options.Cache.DefaultNamespaces[ns] = cache.Config{}
+			}
+		}
+		setupLog.Info("manager set up with multiple namespaces", "namespaces", nsList)
 	}
 
 	ctx := context.TODO()
