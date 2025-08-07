@@ -94,7 +94,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	watchNamespace, err := getWatchNamespace()
+	watchNamespaces, err := getWatchNamespaces()
 	if err != nil {
 		setupLog.Error(err, "unable to get WatchNamespace,"+"the manager will watch and manage resources in all namespaces")
 	}
@@ -105,19 +105,9 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		Namespace:              watchNamespace,
-	}
-
-	if strings.Contains(watchNamespace, ",") {
-		nsList := strings.Split(watchNamespace, ",")
-		options.Namespace = map[string]cache.Config{}
-		for _, ns := range nsList {
-			ns = strings.TrimSpace(ns)
-			if ns != "" {
-				options.Cache.DefaultNamespaces[ns] = cache.Config{}
-			}
-		}
-		setupLog.Info("manager set up with multiple namespaces", "namespaces", nsList)
+		Cache: cache.Options{
+			Namespaces: watchNamespaces,
+		},
 	}
 
 	ctx := context.TODO()
@@ -216,15 +206,19 @@ func addMetrics(ctx context.Context) {
 	}
 }
 
-func getWatchNamespace() (string, error) {
+func getWatchNamespaces() ([]string, error) {
 	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
 	// which specifies the Namespace to watch.
 	// An empty value means the operator is running with cluster scope.
 	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
-
-	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	namespaces, found := os.LookupEnv(watchNamespaceEnvVar)
 	if !found {
-		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+		return nil, fmt.Errorf("%s must be set", watchNamespaceEnvVar)
 	}
-	return ns, nil
+	var l []string
+	for _, namespace := range strings.Split(namespaces, ",") {
+		l = append(l, strings.TrimSpace(namespace))
+	}
+	//		setupLog.Info("manager set up with multiple namespaces", "namespaces", nsList)
+	return l, nil
 }
