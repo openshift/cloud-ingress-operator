@@ -40,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1"
@@ -100,18 +102,33 @@ func main() {
 	}
 
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		Namespace:              watchNamespace,
 	}
 
 	if strings.Contains(watchNamespace, ",") {
+		nsList := strings.Split(watchNamespace, ",")
+		options.Cache.DefaultNamespaces = map[string]cache.Config{}
+		for _, ns := range nsList {
+			ns = strings.TrimSpace(ns)
+			if ns != "" {
+				options.Cache.DefaultNamespaces[ns] = cache.Config{}
+			}
+		}
+
 		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
-		// nolint:golint,all
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
+	} else {
+		options.Cache.DefaultNamespaces = map[string]cache.Config{
+			watchNamespace: {},
+		}
+		setupLog.Info("manager set up with single namespace", "namespace", watchNamespace)
 	}
 
 	ctx := context.TODO()
