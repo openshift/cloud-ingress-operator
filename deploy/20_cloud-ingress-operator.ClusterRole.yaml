@@ -22,3 +22,28 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - cloudingress.managed.openshift.io
+  resources:
+  - publishingstrategies
+  - apischemes
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
