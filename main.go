@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -38,8 +37,11 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1"
@@ -48,6 +50,7 @@ import (
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
 	publishingstrategycontroller "github.com/openshift/cloud-ingress-operator/controllers/publishingstrategy"
 	routerservicecontroller "github.com/openshift/cloud-ingress-operator/controllers/routerservice"
+	corev1 "k8s.io/api/core/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -94,26 +97,40 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	watchNamespaces, err := getWatchNamespaces()
-	if err != nil {
-		setupLog.Error(err, "unable to get WatchNamespace,"+"the manager will watch and manage resources in all namespaces")
-	}
+	namespaces := getWatchNamespaces()
 
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		Cache: cache.Options{
-			Namespaces: watchNamespaces,
+			ByObject: map[client.Object]cache.ByObject{
+				&ingresscontroller.IngressController{}: {
+					Namespaces: namespaces,
+				},
+				&apiv1alpha1.PublishingStrategy{}: {
+					Namespaces: namespaces,
+				},
+				&apiv1alpha1.APIScheme{}: {
+					Namespaces: namespaces,
+				},
+				&corev1.Service{}: {
+					Namespaces: namespaces,
+				},
+			},
 		},
 	}
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
 	if options.LeaderElection {
-		err = leader.Become(ctx, "cloud-ingress-operator-lock")
+		err := leader.Become(ctx, "cloud-ingress-operator-lock")
 		if err != nil {
 			setupLog.Error(err, "failed to setup leader lock")
 			os.Exit(1)
@@ -206,20 +223,22 @@ func addMetrics(ctx context.Context) {
 	}
 }
 
-func getWatchNamespaces() ([]string, error) {
-	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
-	// which specifies the Namespace to watch.
+func getWatchNamespaces() map[string]cache.Config {
+	// The env variable WATCH_NAMESPACE specifies the namespace(s) to watch.
 	// An empty value means the operator is running with cluster scope.
-	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
+	var namespaces = strings.TrimSpace(os.Getenv("WATCH_NAMESPACE"))
+	if namespaces == "" {
+		setupLog.Info("manager set up with cluster scope")
+		return nil
+	}
+	nsCacheConfig := make(map[string]cache.Config)
 
-	namespaces, found := os.LookupEnv(watchNamespaceEnvVar)
-	if !found {
-		return nil, fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	for _, ns := range strings.Split(namespaces, ",") {
+		if v := strings.TrimSpace(ns); v != "" {
+			nsCacheConfig[v] = cache.Config{}
+		}
 	}
-	var nsList []string
-	for _, namespace := range strings.Split(namespaces, ",") {
-		nsList = append(nsList, strings.TrimSpace(namespace))
-	}
-	setupLog.Info("manager set up with multiple namespaces", "namespaces", nsList)
-	return nsList, nil
+	setupLog.Info("manager set up with multiple namespaces", "namespaces", namespaces)
+
+	return nsCacheConfig
 }
