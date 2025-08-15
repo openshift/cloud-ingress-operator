@@ -43,7 +43,7 @@ spec:
       containers:
         - name: cloud-ingress-operator
           # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: quay.io/app-sre/cloud-ingress-operator:latest
           command:
           - cloud-ingress-operator
           imagePullPolicy: Always
