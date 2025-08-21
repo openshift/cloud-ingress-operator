@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v7.4.0 AS builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.1.0 AS builder
 
 RUN mkdir -p /workdir
 WORKDIR /workdir
@@ -8,7 +8,7 @@ COPY . .
 RUN make go-build
 
 ####
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.10-1295.1749680713
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.6-1755695350
 
 ENV USER_UID=1001 \
     USER_NAME=cloud-ingress-operator
