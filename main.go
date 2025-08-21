@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -60,8 +61,9 @@ var (
 )
 
 var (
-	osdMetricsPort = "8181"
-	osdMetricsPath = "/metrics"
+	osdMetricsPort       = "8181"
+	osdMetricsPath       = "/metrics"
+	watchNamespaceEnvVar = "WATCH_NAMESPACE"
 )
 
 func init() {
@@ -97,7 +99,10 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	namespaces := getWatchNamespaces()
+	namespaces, err := getWatchNamespaces()
+	if err != nil {
+		setupLog.Error(err, "unable to get WatchNamespace,"+"the manager will watch and manage resources in all namespaces")
+	}
 
 	options := ctrl.Options{
 		Scheme: scheme,
@@ -130,7 +135,7 @@ func main() {
 	ctx := context.TODO()
 	// Become the leader before proceeding
 	if options.LeaderElection {
-		err := leader.Become(ctx, "cloud-ingress-operator-lock")
+		err = leader.Become(ctx, "cloud-ingress-operator-lock")
 		if err != nil {
 			setupLog.Error(err, "failed to setup leader lock")
 			os.Exit(1)
@@ -223,13 +228,13 @@ func addMetrics(ctx context.Context) {
 	}
 }
 
-func getWatchNamespaces() map[string]cache.Config {
+func getWatchNamespaces() (map[string]cache.Config, error) {
 	// The env variable WATCH_NAMESPACE specifies the namespace(s) to watch.
 	// An empty value means the operator is running with cluster scope.
-	var namespaces = strings.TrimSpace(os.Getenv("WATCH_NAMESPACE"))
+	var namespaces = strings.TrimSpace(os.Getenv(watchNamespaceEnvVar))
 	if namespaces == "" {
 		setupLog.Info("manager set up with cluster scope")
-		return nil
+		return nil, fmt.Errorf("%s must be set", watchNamespaceEnvVar)
 	}
 	nsCacheConfig := make(map[string]cache.Config)
 
@@ -240,5 +245,5 @@ func getWatchNamespaces() map[string]cache.Config {
 	}
 	setupLog.Info("manager set up with multiple namespaces", "namespaces", namespaces)
 
-	return nsCacheConfig
+	return nsCacheConfig, nil
 }
