@@ -38,8 +38,11 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1"
@@ -48,6 +51,7 @@ import (
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
 	publishingstrategycontroller "github.com/openshift/cloud-ingress-operator/controllers/publishingstrategy"
 	routerservicecontroller "github.com/openshift/cloud-ingress-operator/controllers/routerservice"
+	corev1 "k8s.io/api/core/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,8 +61,9 @@ var (
 )
 
 var (
-	osdMetricsPort = "8181"
-	osdMetricsPath = "/metrics"
+	osdMetricsPort       = "8181"
+	osdMetricsPath       = "/metrics"
+	watchNamespaceEnvVar = "WATCH_NAMESPACE"
 )
 
 func init() {
@@ -94,24 +99,37 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	watchNamespace, err := getWatchNamespace()
+	namespaces, err := getWatchNamespaces()
 	if err != nil {
 		setupLog.Error(err, "unable to get WatchNamespace,"+"the manager will watch and manage resources in all namespaces")
 	}
 
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		Namespace:              watchNamespace,
-	}
-
-	if strings.Contains(watchNamespace, ",") {
-		setupLog.Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
-		// nolint:golint,all
-		options.NewCache = cache.MultiNamespacedCacheBuilder(strings.Split(watchNamespace, ","))
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&ingresscontroller.IngressController{}: {
+					Namespaces: namespaces,
+				},
+				&apiv1alpha1.PublishingStrategy{}: {
+					Namespaces: namespaces,
+				},
+				&apiv1alpha1.APIScheme{}: {
+					Namespaces: namespaces,
+				},
+				&corev1.Service{}: {
+					Namespaces: namespaces,
+				},
+			},
+		},
 	}
 
 	ctx := context.TODO()
@@ -210,15 +228,22 @@ func addMetrics(ctx context.Context) {
 	}
 }
 
-func getWatchNamespace() (string, error) {
-	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
-	// which specifies the Namespace to watch.
+func getWatchNamespaces() (map[string]cache.Config, error) {
+	// The env variable WATCH_NAMESPACE specifies the namespace(s) to watch.
 	// An empty value means the operator is running with cluster scope.
-	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
-
-	ns, found := os.LookupEnv(watchNamespaceEnvVar)
-	if !found {
-		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	var namespaces = strings.TrimSpace(os.Getenv(watchNamespaceEnvVar))
+	if namespaces == "" {
+		setupLog.Info("manager set up with cluster scope")
+		return nil, fmt.Errorf("%s must be set", watchNamespaceEnvVar)
 	}
-	return ns, nil
+	nsCacheConfig := make(map[string]cache.Config)
+
+	for _, ns := range strings.Split(namespaces, ",") {
+		if v := strings.TrimSpace(ns); v != "" {
+			nsCacheConfig[v] = cache.Config{}
+		}
+	}
+	setupLog.Info("manager set up with multiple namespaces", "namespaces", namespaces)
+
+	return nsCacheConfig, nil
 }
