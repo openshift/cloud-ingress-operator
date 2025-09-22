@@ -1,6 +1,5 @@
 reviewers:
 - sam-nguyen7
-- fahlmant
 - boranx
 - bng0y
 - robotmaxtron
@@ -13,10 +12,7 @@ reviewers:
 - rafael-azevedo
 approvers:
 - sam-nguyen7
-- fahlmant
 - boranx
 - abyrne55
 - luis-falcon
 - joshbranham
-maintainers:
-- fahlmant
