@@ -231,13 +231,19 @@ func addMetrics(ctx context.Context) {
 func getWatchNamespaces() (map[string]cache.Config, error) {
 	// The env variable WATCH_NAMESPACE specifies the namespace(s) to watch.
 	// An empty value means the operator is running with cluster scope.
-	var namespaces = strings.TrimSpace(os.Getenv(watchNamespaceEnvVar))
-	if namespaces == "" {
-		setupLog.Info("manager set up with cluster scope")
+	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	if !found {
 		return nil, fmt.Errorf("%s must be set", watchNamespaceEnvVar)
 	}
-	nsCacheConfig := make(map[string]cache.Config)
 
+	var namespaces = strings.TrimSpace(ns)
+	if namespaces == "" {
+		setupLog.Info("manager set up with cluster scope")
+		// Return nil map (cluster-wide scope) with no error
+		return nil, nil
+	}
+
+	nsCacheConfig := make(map[string]cache.Config)
 	for _, ns := range strings.Split(namespaces, ",") {
 		if v := strings.TrimSpace(ns); v != "" {
 			nsCacheConfig[v] = cache.Config{}
