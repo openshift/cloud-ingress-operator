@@ -128,6 +128,9 @@ func main() {
 				&corev1.Service{}: {
 					Namespaces: namespaces,
 				},
+				&corev1.Secret{}: {
+					Namespaces: namespaces,
+				},
 			},
 		},
 	}
