@@ -146,3 +146,16 @@ Located in `deploy/20_cloud-ingress-operator.Role.yaml` and `resources/*.Role.ya
 - Full CRUD operations within scoped namespaces
 
 **Key Principle:** The operator is designed to work with namespace-scoped access to sensitive resources. Avoid granting cluster-wide permissions for resources like Secrets.
+
+## Cache Configuration
+
+When adding code that accesses new Kubernetes resource types via `client.Get()` or `client.List()`, add them to the cache configuration in `main.go` (ByObject map) to avoid "is forbidden...at the cluster scope" RBAC errors.
+
+**Pattern:**
+```go
+&ResourceType{}: {
+    Namespaces: namespaces,
+},
+```
+
+**Currently configured:** IngressController, PublishingStrategy, APIScheme, Service, Secret, Machine, MachineSet, ControlPlaneMachineSet, Deployment
