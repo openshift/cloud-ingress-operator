@@ -51,6 +51,7 @@ import (
 	apischemecontroller "github.com/openshift/cloud-ingress-operator/controllers/apischeme"
 	publishingstrategycontroller "github.com/openshift/cloud-ingress-operator/controllers/publishingstrategy"
 	routerservicecontroller "github.com/openshift/cloud-ingress-operator/controllers/routerservice"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	//+kubebuilder:scaffold:imports
 )
@@ -129,6 +130,18 @@ func main() {
 					Namespaces: namespaces,
 				},
 				&corev1.Secret{}: {
+					Namespaces: namespaces,
+				},
+				&machinev1beta1.Machine{}: {
+					Namespaces: namespaces,
+				},
+				&machinev1beta1.MachineSet{}: {
+					Namespaces: namespaces,
+				},
+				&machinev1.ControlPlaneMachineSet{}: {
+					Namespaces: namespaces,
+				},
+				&appsv1.Deployment{}: {
 					Namespaces: namespaces,
 				},
 			},
