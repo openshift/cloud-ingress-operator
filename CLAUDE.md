@@ -93,3 +93,56 @@ make yaml-validate
 - Testing requires careful setup due to dependencies on cloud infrastructure and OpenShift-specific resources
 - Manual testing instructions are provided in README.md for fleet deployments
 - The project uses generated includes from boilerplate conventions for consistent build processes
+
+## Code Generation and Tooling
+
+### Controller-Gen Version
+
+Ensure your local `controller-gen` version matches the version used to generate existing CRDs. Check the version annotation in `deploy/crds/*.yaml` files:
+```yaml
+annotations:
+  controller-gen.kubebuilder.io/version: v0.x.y
+```
+
+**Installing the correct version:**
+```bash
+go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.x.y
+controller-gen --version  # Verify installation
+```
+
+### Boilerplate and Container Tools
+
+The project uses OpenShift boilerplate for standardized builds:
+- `make boilerplate-update` - Sync with latest boilerplate changes
+- `make container-generate` - Run code generation in containerized environment
+- `make container-validate` - Full validation in containerized environment
+
+Container-based commands ensure consistency with CI/CD pipelines.
+
+### Testing Workflow
+
+**Before committing changes:**
+```bash
+make generate          # Generate CRDs and code
+make generate-check    # Verify no unintended changes
+make go-test           # Run unit tests
+make validate          # Full validation (boilerplate + generated files)
+make yaml-validate     # Validate YAML configurations
+```
+
+## RBAC Model
+
+The operator uses a **split RBAC model**:
+
+### ClusterRole (cluster-scoped resources)
+Located in `deploy/20_cloud-ingress-operator.ClusterRole.yaml`:
+- Cluster-level resources: `clusterversions`, `infrastructures`, `apiservers`, `dnses`
+- Read-only or limited write access
+
+### Namespace-scoped Roles
+Located in `deploy/20_cloud-ingress-operator.Role.yaml` and `resources/*.Role.yaml`:
+- Secrets (only in `openshift-cloud-ingress-operator` namespace for cloud credentials)
+- Services, ConfigMaps, Pods in specific namespaces
+- Full CRUD operations within scoped namespaces
+
+**Key Principle:** The operator is designed to work with namespace-scoped access to sensitive resources. Avoid granting cluster-wide permissions for resources like Secrets.
