@@ -156,3 +156,16 @@ func TestGCPProviderDecodeEncode(t *testing.T) {
 	}
 
 }
+
+func Test_sanitizeZoneID(t *testing.T) {
+	zoneIdSanitized := "cs-ci-jsm5n-7zbzx-private-zone"
+	zoneIdUnsanitized := "projects/sda-ccs-3/managedZones/cs-ci-jsm5n-7zbzx-private-zone"
+
+	if sanitizeZoneID(zoneIdSanitized) != zoneIdSanitized {
+		t.Fatalf("sanitizeZoneId() sanitized an already sanitized zone ID")
+	}
+
+	if sanitizeZoneID(zoneIdUnsanitized) != zoneIdSanitized {
+		t.Fatalf("sanitizeZoneId() did not return a sanitized zone ID")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -231,6 +232,8 @@ func (gc *Client) removeDNSForService(kclient k8s.Client, svc *corev1.Service, d
 
 	for _, zone := range zones {
 		dnsChange := &gdnsv1.Change{}
+
+		zone.ID = sanitizeZoneID(zone.ID)
 
 		// Look for an existing resource record set in the zone.
 		listCall := gc.dnsService.ResourceRecordSets.List(gc.projectID, zone.ID)
@@ -618,4 +621,14 @@ func getLoadBalancerRemovalFunc(ctx context.Context, kclient k8s.Client, masterL
 			return removeGCPLBFromMasterMachines(kclient, lbName, masterList)
 		}
 	}
+}
+
+// sanitizeZoneId returns the zone name for a zoneID that is formatted like projects/project/managedZones/zone
+func sanitizeZoneID(zoneID string) string {
+	if strings.HasPrefix(zoneID, "projects/") {
+		splitZone := strings.Split(zoneID, "/")
+		return splitZone[len(splitZone)-1]
+	}
+
+	return zoneID
 }
