@@ -164,6 +164,8 @@ func (gc *Client) ensureDNSForService(kclient k8s.Client, svc *corev1.Service, d
 			Additions: []*gdnsv1.ResourceRecordSet{newRRSet},
 		}
 
+		zone.ID = sanitizeZoneID(zone.ID)
+
 		// Look for an existing resource record set in the zone.
 		listCall := gc.dnsService.ResourceRecordSets.List(gc.projectID, zone.ID)
 		response, err := listCall.Name(FQDN).Do()
