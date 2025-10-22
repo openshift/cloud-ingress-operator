@@ -482,6 +482,9 @@ func (gc *Client) updateAPIARecord(kclient k8s.Client, recordName string, newIP 
 	if err != nil {
 		return "", err
 	}
+
+	clusterDNS.Spec.PublicZone.ID = sanitizeZoneID(clusterDNS.Spec.PublicZone.ID)
+
 	pubZoneRecords, err := gc.dnsService.ResourceRecordSets.List(gc.projectID, clusterDNS.Spec.PublicZone.ID).Do()
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve list of ResourceRecordSets from public zone %v : %v", clusterDNS.Spec.PublicZone.ID, err)
