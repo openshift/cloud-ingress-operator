@@ -12,7 +12,7 @@ import (
 )
 
 // CloudClient defines the interface for a cloud agnostic implementation
-// For mocking: mockgen -source=pkg/cloudclient/cloudclient.go -destination=pkg/cloudclient/mock_cloudclient/mock_cloudclient.go
+// For mocking: go run go.uber.org/mock/mockgen@latest -source=pkg/cloudclient/cloudclient.go -destination=pkg/cloudclient/mock_cloudclient/mock_cloudclient.go
 type CloudClient interface {
 
 	/* APIScheme */
