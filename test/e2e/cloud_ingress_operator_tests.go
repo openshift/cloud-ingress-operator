@@ -57,6 +57,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		rhApiSvcNamespace      = "openshift-kube-apiserver"
 		pollingDuration        = time.Minute * 2
 		pollingInterval        = time.Second * 15
+		lbReconcileTimeout     = time.Minute * 10
 	)
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
@@ -193,7 +194,6 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("manually deleted "+cioServiceName+" load balancer should be recreated", func(ctx context.Context) {
-		ginkgo.Skip("skip test pending OSD-29874")
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
@@ -227,7 +227,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			log.Printf("Old " + cioServiceName + " load balancer delete initiated")
 
 			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx2 context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, lbReconcileTimeout, false, func(ctx2 context.Context) (bool, error) {
 				newLBName, err := getLBForService(ctx2, k8s, rhApiSvcNamespace, cioServiceName, false)
 				log.Printf("Looking for new load balancer")
 
@@ -355,7 +355,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 
 			newLBIP := ""
 			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, true, func(ctx context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, lbReconcileTimeout, true, func(ctx context.Context) (bool, error) {
 				// Getting the newly created IP from rh-api service
 				ginkgo.By("Getting new " + cioServiceName + " IP from " + cioServiceName + " service")
 				newLBIP, err = getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
@@ -374,7 +374,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), cioServiceName+" service did not reconcile")
 
 			ginkgo.By("Waiting for new " + cioServiceName + " forwarding rule")
-			err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
+			err = wait.PollUntilContextTimeout(ctx, pollingInterval, lbReconcileTimeout, false, func(ctx context.Context) (bool, error) {
 				ginkgo.By("Polling GCP to get new forwarding rule for " + cioServiceName)
 				newLB, err := getGCPForwardingRuleForIP(computeService, newLBIP, project, region)
 				if err != nil || newLB == nil {
@@ -384,7 +384,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 				}
 				log.Printf("New lb name: %s ", newLB.Name)
 
-				if newLB.Name != oldLB.Name {
+				if oldLB == nil || newLB.Name != oldLB.Name {
 					// A new LB was successfully recreated in GCP
 					return true, nil
 				}
