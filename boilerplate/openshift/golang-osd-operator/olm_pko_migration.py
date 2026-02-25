@@ -238,6 +238,8 @@ objects:
               package-operator.run/collision-protection: IfNoController
           spec:
             image: ${{PKO_IMAGE}}:${{IMAGE_TAG}}
+            config:
+              image: ${{OPERATOR_IMAGE}}:${{IMAGE_TAG}}
 """
 
 def get_remotes() -> list[str]:
