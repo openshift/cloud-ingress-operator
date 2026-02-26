@@ -58,13 +58,12 @@ subjects:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: olm-cleanup
+  name: olm-cleanup-pko
   namespace: openshift-cloud-ingress-operator
   annotations:
     package-operator.run/phase: cleanup-deploy
     package-operator.run/collision-protection: IfNoController
 spec:
-  ttlSecondsAfterFinished: 100
   template:
     metadata:
       annotations:
