@@ -194,6 +194,9 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("manually deleted "+cioServiceName+" load balancer should be recreated", func(ctx context.Context) {
+		if os.Getenv("OCM_CCS") != "true" {
+			ginkgo.Skip("Skipping on non-CCS cluster - no cloud credentials available")
+		}
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
