@@ -7,6 +7,8 @@ parameters:
     required: true
   - name: IMAGE_TAG
     required: true
+  - name: OPERATOR_IMAGE
+    required: true
   - name: IMAGE_DIGEST
     required: true
   - name: NAMESPACE
