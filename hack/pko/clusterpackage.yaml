@@ -26,7 +26,7 @@ objects:
         managed.openshift.io/gitHash: ${IMAGE_TAG}
         managed.openshift.io/gitRepoName: ${REPO_NAME}
         managed.openshift.io/osd: "true"
-      name: cloud-ingress-operator-stage
+      name: cloud-ingress-operator-pko
     spec:
       clusterDeploymentSelector:
         matchLabels:
@@ -50,6 +50,12 @@ objects:
           - "true"
       resourceApplyMode: Sync
       resources:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            labels:
+              openshift.io/cluster-monitoring: 'true'
+            name: ${NAMESPACE}
         - apiVersion: package-operator.run/v1alpha1
           kind: ClusterPackage
           metadata:
