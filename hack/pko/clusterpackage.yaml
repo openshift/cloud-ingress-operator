@@ -66,9 +66,3 @@ objects:
             image: ${PKO_IMAGE}:${IMAGE_TAG}
             config:
               image: ${OPERATOR_IMAGE}:${IMAGE_TAG}
-        - apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: ${NAMESPACE}
-            labels:
-              openshift.io/cluster-monitoring: 'true'
