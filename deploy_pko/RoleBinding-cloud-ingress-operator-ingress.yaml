@@ -1,11 +1,8 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: cloud-ingress-operator-cluster-config-v1-reader
-  namespace: kube-system
-  labels:
-    owner: cloud-ingress-operator
-    owner.namespace: openshift-cloud-ingress-operator
+  name: cloud-ingress-operator
+  namespace: openshift-ingress
   annotations:
     package-operator.run/phase: rbac
     package-operator.run/collision-protection: IfNoController
@@ -14,6 +11,7 @@ subjects:
   name: cloud-ingress-operator
   namespace: openshift-cloud-ingress-operator
 roleRef:
-  apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: cluster-config-v1-reader-cio
+  name: cloud-ingress-operator
+  namespace: openshift-ingress
+  apiGroup: rbac.authorization.k8s.io

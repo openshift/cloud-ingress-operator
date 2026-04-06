@@ -45,7 +45,7 @@ spec:
               audience: openshift
       containers:
       - name: cloud-ingress-operator
-        image: '{{ .config.image }}'
+        image: {{ .config.image }}
         command:
         - cloud-ingress-operator
         imagePullPolicy: Always
