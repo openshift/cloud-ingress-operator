@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"slices"
 	"time"
 
 	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
@@ -103,50 +102,48 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	ginkgo.It("reconciles cidr block changes in apischeme with rh-api service", func(ctx context.Context) {
 		err := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &apiScheme)
 		Expect(err).NotTo(HaveOccurred(), "Could not get apischeme CR instance")
-		cidrBlock := apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
+		originalCidrBlock := make([]string, len(apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
+		copy(originalCidrBlock, apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks)
 		updatedApiScheme := apiScheme.DeepCopy()
 
-		updatedCidrBlock := cidrBlock[:len(cidrBlock)-1]
+		// Restore CIDR blocks when the test completes, regardless of outcome
+		defer func() {
+			updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = originalCidrBlock
+			err = k8s.Update(ctx, updatedApiScheme)
+			Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
+		}()
 
-		// Put the new CIRDBlock ranges into the APIScheme
+		updatedCidrBlock := make([]string, len(originalCidrBlock)-1)
+		copy(updatedCidrBlock, originalCidrBlock[:len(originalCidrBlock)-1])
+
+		// Put the new CIDRBlock ranges into the APIScheme
 		updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = updatedCidrBlock
 
 		// Update the APIScheme
 		err = k8s.Update(ctx, updatedApiScheme)
 		Expect(err).NotTo(HaveOccurred(), "Could not update APIScheme CR instance")
+
+		// Wait for the operator to reconcile the change into the rh-api service
+		ginkgo.By("Waiting for updated CIDR blocks to appear on rh-api service")
 		err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
-			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, updatedCidrBlock) {
-				log.Println("Updated cidrblock in rh-api service.")
+			rhAPIService := new(corev1.Service)
+			if err := k8s.Get(ctx, cioServiceName, rhApiSvcNamespace, rhAPIService); err != nil {
+				return false, nil
+			}
+			if len(rhAPIService.Spec.LoadBalancerSourceRanges) == len(updatedCidrBlock) {
+				log.Println("Updated cidrblock reflected in rh-api service.")
 				return true, nil
 			}
+			log.Println("Waiting for rh-api service to reflect updated CIDR blocks...")
 			return false, nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "Updated cidrblock not able to be set in rh-api service.")
+		Expect(err).NotTo(HaveOccurred(), "Updated cidrblock not reflected in rh-api service")
 
-		// Get rh-api svc
-		// Create a service Object
+		// Verify the service has the expected CIDR blocks
 		rhAPIService := new(corev1.Service)
 		err = k8s.Get(ctx, cioServiceName, rhApiSvcNamespace, rhAPIService)
 		Expect(err).NotTo(HaveOccurred(), "Could not get rh-api service")
-
-		// Make sure both the New cidrBlock and the Service LoadBalancerSourceRanges are equal
-		// If they are then the APIScheme update also updated the service.
 		Expect(updatedCidrBlock).To(BeEquivalentTo(rhAPIService.Spec.LoadBalancerSourceRanges), "Updated cidrblock from apischeme did not reflect in rh-api service")
-
-		// Finally, restore the CIDR blocks back to the original state.
-		updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks
-		err = k8s.Update(ctx, updatedApiScheme)
-		Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
-
-		ginkgo.By("Restoring the CIDR block to its original state.")
-		err = wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, false, func(ctx context.Context) (bool, error) {
-			if slices.Equal(updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks, cidrBlock) {
-				log.Println("Original cidrblock from apischeme successfully restored in rh-api service.")
-				return true, nil
-			}
-			return false, nil
-		})
-		Expect(err).NotTo(HaveOccurred(), "Original cidrblock not restored in APIScheme.")
 	})
 
 	ginkgo.It("ensures apischemes CR instance are present on cluster", func(ctx context.Context) {
@@ -292,68 +289,58 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			oldLB, err := getGCPForwardingRuleForIP(computeService, oldLBIP, project, region)
 			Expect(err).NotTo(HaveOccurred(), "Could not get forwarding rule for "+cioServiceName)
 
-			// There's no single command to delete a load balancer in GCP
-			// Deletion of any related cloud resources may delete in misconfiguration.
-			// Delete all GCP resources related to rh-api LB setup
-			ginkgo.By("Deleting GCP forwarding rule for " + cioServiceName)
+			// There's no single command to delete a load balancer in GCP.
+			// Resources have dependencies, so we must delete in order and
+			// wait for each operation to complete before proceeding.
 			if oldLB == nil {
-				log.Printf("GCP forwarding rule for " + cioServiceName + " does not exist; Skipping deletion ")
+				log.Printf("GCP forwarding rule for " + cioServiceName + " does not exist; Skipping deletion")
 			} else {
-				log.Printf("Old forwarding rule name:  %s ", oldLB.Name)
-				_, err = computeService.ForwardingRules.Get(project, region, oldLB.Name).Do()
-				if err != nil {
-					log.Printf("GCP forwarding rule for " + cioServiceName + " not found")
+				log.Printf("Old forwarding rule name: %s", oldLB.Name)
+
+				ginkgo.By("Deleting GCP forwarding rule for " + cioServiceName)
+				if op, err := computeService.ForwardingRules.Delete(project, region, oldLB.Name).Do(); err != nil {
+					log.Printf("Forwarding rule already deleted or not found: %v", err)
 				} else {
-					ginkgo.By("Deleting GCP forwarding rule for " + cioServiceName)
-					_, err = computeService.ForwardingRules.Delete(project, region, oldLB.Name).Do()
-					if err != nil {
-						log.Printf("Error deleting forwarding rule")
-					}
+					_, err = computeService.RegionOperations.Wait(project, region, op.Name).Do()
+					Expect(err).NotTo(HaveOccurred(), "Timed out waiting for forwarding rule deletion")
+					log.Printf("Forwarding rule deleted")
 				}
 
-				ginkgo.By("Deleting GCP backend service rule for " + cioServiceName)
-				_, err = computeService.BackendServices.Get(project, oldLB.Name).Do()
-				if err != nil {
-					log.Printf("GCP backend service already deleted. ")
+				ginkgo.By("Deleting GCP backend service for " + cioServiceName)
+				if op, err := computeService.BackendServices.Delete(project, oldLB.Name).Do(); err != nil {
+					log.Printf("Backend service already deleted or not found: %v", err)
 				} else {
-					_, err = computeService.BackendServices.Delete(project, oldLB.Name).Do()
-					if err != nil {
-						log.Printf("Error deleting backend service ")
-					}
+					_, err = computeService.GlobalOperations.Wait(project, op.Name).Do()
+					Expect(err).NotTo(HaveOccurred(), "Timed out waiting for backend service deletion")
+					log.Printf("Backend service deleted")
 				}
 
-				ginkgo.By("Deleting GCP health check for " + cioServiceName + " ")
-				_, err = computeService.HealthChecks.Get(project, oldLB.Name).Do()
-				if err != nil {
-					log.Printf("GCP health check already deleted ")
+				ginkgo.By("Deleting GCP health check for " + cioServiceName)
+				if op, err := computeService.HealthChecks.Delete(project, oldLB.Name).Do(); err != nil {
+					log.Printf("Health check already deleted or not found: %v", err)
 				} else {
-					_, err = computeService.HealthChecks.Delete(project, oldLB.Name).Do()
-					if err != nil {
-						log.Printf("Error deleting health check ")
-					}
+					_, err = computeService.GlobalOperations.Wait(project, op.Name).Do()
+					Expect(err).NotTo(HaveOccurred(), "Timed out waiting for health check deletion")
+					log.Printf("Health check deleted")
 				}
 
 				ginkgo.By("Deleting GCP target pool for " + cioServiceName)
-				_, err = computeService.TargetPools.Get(project, region, oldLB.Name).Do()
-				if err != nil {
-					log.Printf("GCP target pool already deleted")
+				if op, err := computeService.TargetPools.Delete(project, region, oldLB.Name).Do(); err != nil {
+					log.Printf("Target pool already deleted or not found: %v", err)
 				} else {
-					_, err = computeService.TargetPools.Delete(project, region, oldLB.Name).Do()
-					if err != nil {
-						log.Printf("Error deleting target pool")
-					}
+					_, err = computeService.RegionOperations.Wait(project, region, op.Name).Do()
+					Expect(err).NotTo(HaveOccurred(), "Timed out waiting for target pool deletion")
+					log.Printf("Target pool deleted")
 				}
 			}
 
 			ginkgo.By("Deleting GCP address for " + cioServiceName)
-			_, err = computeService.Addresses.Get(project, region, oldLBIP).Do()
-			if err != nil {
-				log.Printf("GCP IP address already deleted")
+			if op, err := computeService.Addresses.Delete(project, region, oldLBIP).Do(); err != nil {
+				log.Printf("Address already deleted or not found: %v", err)
 			} else {
-				_, err = computeService.Addresses.Delete(project, region, oldLBIP).Do()
-				if err != nil {
-					log.Printf("Error deleting address")
-				}
+				_, err = computeService.RegionOperations.Wait(project, region, op.Name).Do()
+				Expect(err).NotTo(HaveOccurred(), "Timed out waiting for address deletion")
+				log.Printf("Address deleted")
 			}
 
 			newLBIP := ""
