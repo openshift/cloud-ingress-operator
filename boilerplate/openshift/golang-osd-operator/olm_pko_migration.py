@@ -446,8 +446,8 @@ def get_pko_manifest(operator_name: str) -> dict[str, Any]:
                             "type": "string",
                             "default": "None",
                         },
+                    },
                     "type": "object",
-                    }
                 }
             },
         },
@@ -562,6 +562,8 @@ def annotate_manifests(manifests: list[str]) -> list[dict[str, Any]]:
                     manifest = set_image_template(manifest)
                     annotated.append(manifest)
                 elif kind == "ServiceMonitor":
+                    annotated.append(annotate(manifest, PHASE_DEPLOY))
+                elif kind == "ConfigMap":
                     annotated.append(annotate(manifest, PHASE_DEPLOY))
                 else:
                     print(f"Unhandled type: {kind}")
