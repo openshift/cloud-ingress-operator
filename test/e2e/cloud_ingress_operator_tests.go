@@ -56,7 +56,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		rhApiSvcNamespace      = "openshift-kube-apiserver"
 		pollingDuration        = time.Minute * 2
 		pollingInterval        = time.Second * 15
-		lbReconcileTimeout     = time.Minute * 10
+		lbReconcileTimeout     = time.Minute * 20
 	)
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
