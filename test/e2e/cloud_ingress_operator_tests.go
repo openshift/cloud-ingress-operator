@@ -353,46 +353,34 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 				}
 			}
 
-			newLBIP := ""
-			ginkgo.By("Waiting for " + cioServiceName + " service reconcile")
-			err = wait.PollUntilContextTimeout(ctx, pollingInterval, lbReconcileTimeout, true, func(ctx context.Context) (bool, error) {
-				// Getting the newly created IP from rh-api service
-				ginkgo.By("Getting new " + cioServiceName + " IP from " + cioServiceName + " service")
-				newLBIP, err = getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
-				if (err != nil) || (newLBIP == "") {
-					log.Printf("New " + cioServiceName + " svc not created yet...")
-					return false, nil
-				} else if newLBIP == oldLBIP {
-					log.Printf("Old " + cioServiceName + " svc not deleted yet...")
-					return false, nil
-				} else {
-					log.Printf("Found new " + cioServiceName + " svc!")
-					log.Printf("Reconciliation succeeded. New loadbalancer IP: %s ", newLBIP)
-					return true, nil
-				}
-			})
-			Expect(err).NotTo(HaveOccurred(), cioServiceName+" service did not reconcile")
-
-			ginkgo.By("Waiting for new " + cioServiceName + " forwarding rule")
+			// The operator doesn't delete/recreate the K8s Service — it
+			// only ensures it exists. The CCM recreates the backing GCP
+			// LB, which may reuse the same IP. So instead of waiting for
+			// a new IP, poll GCP directly for a new forwarding rule.
+			ginkgo.By("Waiting for new " + cioServiceName + " forwarding rule in GCP")
 			err = wait.PollUntilContextTimeout(ctx, pollingInterval, lbReconcileTimeout, false, func(ctx context.Context) (bool, error) {
-				ginkgo.By("Polling GCP to get new forwarding rule for " + cioServiceName)
-				newLB, err := getGCPForwardingRuleForIP(computeService, newLBIP, project, region)
-				if err != nil || newLB == nil {
-					// Either we couldn't retrieve the LB, or it wasn't created yet
-					log.Printf("New forwarding rule not found yet...")
+				// Get the current IP from the service (may change or stay the same)
+				currentIP, svcErr := getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
+				if svcErr != nil || currentIP == "" {
+					log.Printf("Service not ready yet...")
 					return false, nil
 				}
-				log.Printf("New lb name: %s ", newLB.Name)
+
+				newLB, err := getGCPForwardingRuleForIP(computeService, currentIP, project, region)
+				if err != nil || newLB == nil {
+					log.Printf("Forwarding rule not found yet for IP %s...", currentIP)
+					return false, nil
+				}
+				log.Printf("Found forwarding rule %s for IP %s", newLB.Name, currentIP)
 
 				if oldLB == nil || newLB.Name != oldLB.Name {
-					// A new LB was successfully recreated in GCP
+					log.Printf("Reconciliation succeeded. New forwarding rule: %s", newLB.Name)
 					return true, nil
 				}
-				// rh-api lb hasn't been deleted yet
-				log.Printf("Old forwarding rule not deleted yet...")
+				log.Printf("Old forwarding rule %s still present...", oldLB.Name)
 				return false, nil
 			})
-			Expect(err).NotTo(HaveOccurred(), "New "+cioServiceName+" forwarding rule not created in GCP")
+			Expect(err).NotTo(HaveOccurred(), cioServiceName+" forwarding rule was not recreated in GCP")
 		}
 	})
 })
