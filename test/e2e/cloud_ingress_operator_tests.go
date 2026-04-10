@@ -335,12 +335,22 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			}
 
 			ginkgo.By("Deleting GCP address for " + cioServiceName)
-			if op, err := computeService.Addresses.Delete(project, region, oldLBIP).Do(); err != nil {
-				log.Printf("Address already deleted or not found: %v", err)
-			} else {
-				_, err = computeService.RegionOperations.Wait(project, region, op.Name).Do()
-				Expect(err).NotTo(HaveOccurred(), "Timed out waiting for address deletion")
-				log.Printf("Address deleted")
+			// Addresses.Delete expects a resource name, not an IP.
+			// Look up the address resource whose .Address matches oldLBIP.
+			addressList, err := computeService.Addresses.List(project, region).Do()
+			Expect(err).NotTo(HaveOccurred(), "Could not list GCP addresses")
+			for _, addr := range addressList.Items {
+				if addr.Address == oldLBIP {
+					log.Printf("Found address resource %s for IP %s", addr.Name, oldLBIP)
+					if op, err := computeService.Addresses.Delete(project, region, addr.Name).Do(); err != nil {
+						log.Printf("Address already deleted or not found: %v", err)
+					} else {
+						_, err = computeService.RegionOperations.Wait(project, region, op.Name).Do()
+						Expect(err).NotTo(HaveOccurred(), "Timed out waiting for address deletion")
+						log.Printf("Address %s deleted", addr.Name)
+					}
+					break
+				}
 			}
 
 			newLBIP := ""
