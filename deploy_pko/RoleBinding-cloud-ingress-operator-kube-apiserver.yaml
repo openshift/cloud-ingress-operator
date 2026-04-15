@@ -13,5 +13,4 @@ subjects:
 roleRef:
   kind: Role
   name: cloud-ingress-operator
-  namespace: openshift-kube-apiserver
   apiGroup: rbac.authorization.k8s.io
