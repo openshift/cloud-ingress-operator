@@ -315,12 +315,7 @@ prow-config:
 .PHONY: validate-pko-fixtures
 validate-pko-fixtures:
 	@if [ -d deploy_pko ] && grep -q '^test:' deploy_pko/manifest.yaml 2>/dev/null; then \
-		if ! command -v kubectl-package >/dev/null 2>&1; then \
-			echo "ERROR: kubectl-package is not installed." >&2; \
-			echo "Install it from: https://github.com/package-operator/package-operator/releases" >&2; \
-			echo "Example: curl -L -o /usr/local/bin/kubectl-package https://github.com/package-operator/package-operator/releases/download/v1.18.6/kubectl-package_linux_amd64 && chmod +x /usr/local/bin/kubectl-package" >&2; \
-			exit 1; \
-		fi; \
+		${CONVENTION_DIR}/ensure.sh kubectl-package; \
 		echo "Validating PKO package fixtures..."; \
 		kubectl-package validate deploy_pko/ || \
 			(echo "ERROR: PKO fixture validation failed. Rendered templates do not match committed fixtures." >&2; \
@@ -357,12 +352,7 @@ validate-pko-fixtures:
 .PHONY: generate-pko-fixtures
 generate-pko-fixtures:
 	@if [ -d deploy_pko ] && grep -q '^test:' deploy_pko/manifest.yaml 2>/dev/null; then \
-		if ! command -v kubectl-package >/dev/null 2>&1; then \
-			echo "ERROR: kubectl-package is not installed." >&2; \
-			echo "Install it from: https://github.com/package-operator/package-operator/releases" >&2; \
-			echo "Example: curl -L -o /usr/local/bin/kubectl-package https://github.com/package-operator/package-operator/releases/download/v1.18.6/kubectl-package_linux_amd64 && chmod +x /usr/local/bin/kubectl-package" >&2; \
-			exit 1; \
-		fi; \
+		${CONVENTION_DIR}/ensure.sh kubectl-package; \
 		echo "Regenerating PKO test fixtures..."; \
 		rm -rf deploy_pko/.test-fixtures; \
 		kubectl-package validate deploy_pko/ && \
