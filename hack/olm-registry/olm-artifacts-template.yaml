@@ -51,7 +51,7 @@ objects:
         operator: NotIn
         values:
         - "true"
-    resourceApplyMode: Sync
+    resourceApplyMode: Upsert
     applyBehavior: CreateOrUpdate
     resources:
     - kind: Namespace
