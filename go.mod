@@ -1,6 +1,6 @@
 module github.com/openshift/cloud-ingress-operator
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/aws/aws-sdk-go v1.44.86
@@ -68,7 +68,7 @@ require (
 	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.2.4 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.16 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
