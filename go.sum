@@ -203,8 +203,8 @@ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7J
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/onsi/gomega v1.39.1 h1:1IJLAad4zjPn2PsnhH70V4DKRFlrCzGBNrNaru+Vf28=
 github.com/onsi/gomega v1.39.1/go.mod h1:hL6yVALoTOxeWudERyfppUcZXjMwIMLnuSfruD2lcfg=
-github.com/openshift/api v0.0.0-20260521125114-09730f85d883 h1:So9yxVJRY+F1aVBjcDw6N3M4h30wyH/GpkazK8xT4TI=
-github.com/openshift/api v0.0.0-20260521125114-09730f85d883/go.mod h1:pyVjK0nZ4sRs4fuQVQ4rubsJdahI1PB94LnQ8sGdvxo=
+github.com/openshift/api v0.0.0-20260527180537-d6ce07951593 h1:rkyDKi6/XSFd/jRtwoYVUyojfRIB6cuAuhDyNtz4TiI=
+github.com/openshift/api v0.0.0-20260527180537-d6ce07951593/go.mod h1:pyVjK0nZ4sRs4fuQVQ4rubsJdahI1PB94LnQ8sGdvxo=
 github.com/openshift/operator-custom-metrics v0.5.1 h1:1pk4YMUV+cmqfV0f2fyxY62cl7Gc76kwudJT+EdcfYM=
 github.com/openshift/operator-custom-metrics v0.5.1/go.mod h1:0dYDHi/ubKRWzsC9MmW6bRMdBgo1QSOuAh3GupTe0Sw=
 github.com/openshift/osde2e-common v0.0.0-20260514215146-b07512784467 h1:VJt5ls1RUhLTa7XYQRyM7coC0ANyp2nzcoSyUXVxl0c=
