@@ -9,7 +9,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.42.0
 	// go get -u github.com/openshift/api@release-4.13
-	github.com/openshift/api v0.0.0-20260619095050-5346161d1bf2
+	github.com/openshift/api v0.0.0-20260623101811-c5eb460d04e3
 	github.com/openshift/operator-custom-metrics v0.5.1
 	github.com/operator-framework/operator-lib v0.19.0
 	github.com/prometheus/client_golang v1.23.2
