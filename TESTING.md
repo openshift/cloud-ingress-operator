@@ -261,16 +261,10 @@ boilerplate/_lib/container-make go-test
 - Avoid hardcoded delays
 - Ensure test isolation (clean up resources)
 
-## Pre-commit Integration
+## Prek Integration
 
-Tests run automatically in pre-commit when Go files change:
-```yaml
-- id: go-test
-  entry: make go-test
-  files: '\.go$'
-```
+Tests can be run via prek hooks when Go files change, but this is NOT in current prek config (too slow for pre-commit hooks).
 
-This is NOT in current pre-commit config (too slow for pre-commit).
 Run manually before pushing: `make go-test`
 
 ## Further Reading

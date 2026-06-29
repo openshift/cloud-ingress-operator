@@ -5,8 +5,8 @@
 [[repos]]
 repo = "builtin"
 hooks = [
-  { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"], exclude = "^(boilerplate/|test/e2e/|\\.pre-commit-config\\.yaml)" },
-  { id = "end-of-file-fixer", exclude = "^(boilerplate/|test/e2e/|\\.pre-commit-config\\.yaml)" },
+  { id = "trailing-whitespace", args = ["--markdown-linebreak-ext=md"], exclude = "^(boilerplate/|test/e2e/)" },
+  { id = "end-of-file-fixer", exclude = "^(boilerplate/|test/e2e/)" },
   { id = "check-added-large-files", args = ["--maxkb=1024"] },
   { id = "check-case-conflict" },
   { id = "check-merge-conflict" },

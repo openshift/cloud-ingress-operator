@@ -16,10 +16,10 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed setup instructions.
 
 All contributions must pass:
 
-1. **Formatting & linting**: `pre-commit run --all-files`
+1. **Formatting & linting**: `prek run --all-files`
 2. **Unit tests**: `make go-test`
 3. **Build verification**: `make go-build`
-4. **Security scan**: Automatic via pre-commit (gitleaks)
+4. **Security scan**: Automatic via prek hooks (gitleaks)
 
 ## Development Workflow
 
@@ -33,7 +33,7 @@ git checkout -b feature/my-change
 # Add/update tests for your changes
 
 # Run validation locally
-pre-commit run --all-files
+prek run --all-files
 make go-test
 
 # Commit with descriptive message
@@ -48,7 +48,7 @@ git push origin feature/my-change
 When using AI coding agents (Claude Code, GitHub Copilot, Cursor, etc.):
 
 **Agents MUST:**
-- Run `pre-commit run` on changed files before committing
+- Run `prek run` on changed files before committing
 - Execute relevant tests after code changes: `make go-test`
 - Preserve existing code style and patterns
 - Avoid editing generated files (`**/zz_generated.*.go`, `go.sum` without `go.mod`)
@@ -59,13 +59,13 @@ When using AI coding agents (Claude Code, GitHub Copilot, Cursor, etc.):
 
 **Validation expectations:**
 1. Format check: `go fmt ./...`
-2. Lint: `make go-check` (or `pre-commit run golangci-lint`)
-3. Type safety: Verified by `go build ./...` in pre-commit
+2. Lint: `make go-check` (or `prek run golangci-lint`)
+3. Type safety: Verified by `go build ./...` via prek hooks
 4. Tests: `make go-test` for affected packages
-5. Secret scan: Automatic via pre-commit gitleaks hook
+5. Secret scan: Automatic via prek gitleaks hook
 
 **Required checks before PR:**
-- [ ] All pre-commit hooks pass
+- [ ] All prek hooks pass
 - [ ] Unit tests pass for modified packages
 - [ ] No new linter warnings introduced
 - [ ] No secrets or credentials in diff

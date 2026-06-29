@@ -7,7 +7,7 @@ Quick reference for developing the Cloud Ingress Operator.
 - **Go**: 1.22.7 or later
 - **operator-sdk**: v1.21.0
 - **kubectl**: For cluster interaction
-- **pre-commit**: `pip install pre-commit`
+- **prek**: `uv tool install prek` (pre-commit hook manager)
 
 ## Initial Setup
 
@@ -43,8 +43,8 @@ ginkgo -r ./controllers/      # Run controller tests with Ginkgo
 ### Lint
 ```bash
 make go-check                 # Full linting (golangci-lint)
-pre-commit run --all-files    # Run all pre-commit hooks
-pre-commit run golangci-lint  # Lint only
+prek run --all-files          # Run all prek hooks
+prek run golangci-lint        # Lint only
 ```
 
 ### Code Generation
@@ -88,12 +88,12 @@ boilerplate/_lib/container-make generate
 # After code changes
 go build ./...                # Fast compile check (~5s)
 go test ./pkg/mypackage       # Run affected tests
-pre-commit run                # Lint staged files
+prek run                      # Lint staged files
 ```
 
 **Full validation (pre-PR):**
 ```bash
-pre-commit run --all-files    # All hooks (~15-30s)
+prek run --all-files          # All hooks (~15-30s)
 make go-test                  # Full test suite
 ```
 
@@ -139,7 +139,7 @@ go mod tidy
 go mod verify
 ```
 
-**Note**: `go.sum` changes automatically trigger validation in pre-commit.
+**Note**: `go.sum` changes automatically trigger validation via prek hooks.
 
 ## Architecture Pointers
 
@@ -152,13 +152,13 @@ go mod verify
 
 ## CI Parity
 
-Local pre-commit hooks mirror Tekton CI checks:
+Local prek hooks mirror Tekton CI checks:
 - **go-check** ↔ Tekton lint job
 - **go-build** ↔ Compilation in CI
 - **go-test** ↔ Unit test job
 - **gitleaks** ↔ Security scanning
 
-Run `pre-commit run --all-files` before pushing to catch CI failures early.
+Run `prek run --all-files` before pushing to catch CI failures early.
 
 ## Boilerplate Integration
 

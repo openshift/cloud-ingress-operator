@@ -98,7 +98,7 @@ Escalate to human when:
 
 ## Integration Points
 
-- Runs as part of `pre-commit run golangci-lint`
+- Runs as part of `prek run golangci-lint`
 - Mirrors Tekton CI lint job
 - Should complete in <30s on typical changeset
 - Uses same config as CI (no drift)

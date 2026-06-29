@@ -22,8 +22,8 @@ Security scanning and policy enforcement for this operator.
 
 #### 1. Secret Scanning
 ```bash
-# Gitleaks (runs in pre-commit)
-pre-commit run gitleaks
+# Gitleaks (runs via prek hooks)
+prek run gitleaks
 
 # Manual scan
 gitleaks detect --source . --verbose
@@ -101,7 +101,7 @@ Invoke when:
 
 ```bash
 # Full security scan
-pre-commit run gitleaks --all-files
+prek run gitleaks --all-files
 make rbac-wildcard-check
 make go-check  # includes gosec
 
@@ -205,7 +205,7 @@ Escalate for review when:
 
 ## Integration Points
 
-- **Pre-commit**: gitleaks runs automatically
+- **Prek hooks**: gitleaks runs automatically
 - **CI**: Tekton runs gitleaks and gosec
 - **RBAC check**: Custom make target
 - **Manual**: Run before modifying security-critical code
