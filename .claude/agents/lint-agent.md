@@ -20,7 +20,7 @@ Automated linting and code quality enforcement for this operator.
 
 ### Validation Flow
 1. Check if Go files have changed
-2. Run `go fmt -l .` to detect formatting issues
+2. Run `gofmt -l .` to detect formatting issues
 3. Auto-fix formatting: `go fmt ./...`
 4. Run `make go-check` (golangci-lint)
 5. Attempt auto-fixes: `golangci-lint run --fix`
@@ -52,7 +52,7 @@ Invoke when:
 
 ```bash
 # Format check only
-go fmt -l . | grep -v "^$"
+gofmt -l .
 
 # Format and fix
 go fmt ./...

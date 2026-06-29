@@ -175,14 +175,15 @@ Escalate to human when:
 ## Validation Commands
 
 ```bash
-# Check all markdown files
-find . -name "*.md" -not -path "./vendor/*" -not -path "./.git/*"
+# Check all markdown files (including nested docs)
+find . -name "*.md" -not -path "./vendor/*" -not -path "./.git/*" -not -path "./boilerplate/*"
 
-# Verify make targets exist
-grep '```bash' *.md | grep 'make ' | sed 's/.*make \([a-z-]*\).*/\1/' | sort -u
+# Verify make targets exist by extracting from code blocks
+find . -name "*.md" -not -path "./vendor/*" -not -path "./.git/*" -not -path "./boilerplate/*" \
+  -exec grep -h "^make " {} \; | sed 's/make \([a-z0-9-]*\).*/\1/' | sort -u
 
 # Check for dead links (manual review)
-grep -r '\[.*\](' *.md .claude/*.md test/e2e/README.md
+grep -r '\[.*\](' *.md .claude/**/*.md test/e2e/README.md
 ```
 
 ## Output Format

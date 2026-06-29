@@ -1,7 +1,7 @@
 ---
 name: ci-agent
 description: CI/CD validation and workflow integrity. Use when validating Tekton pipelines, checking local/CI parity, debugging CI failures, or ensuring prek hooks mirror CI checks.
-tools: Bash, Read, Grep, WebFetch, WebSearch
+tools: Bash, Read, Grep
 model: sonnet
 ---
 

@@ -19,14 +19,15 @@ fi
 # This ensures patterns like vendor/* work regardless of whether the input is absolute or relative
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 
+# Anchor relative paths to REPO_ROOT to prevent CWD-dependent resolution
+if [[ "$FILE" != /* ]]; then
+  FILE="$REPO_ROOT/$FILE"
+fi
+
 # Reject absolute paths outside the repo
-if [[ "$FILE" = /* ]]; then
-  if [[ ! "$FILE" == "$REPO_ROOT"/* ]]; then
-    echo "❌ ERROR: File path is outside repository: $FILE"
-    exit 1
-  fi
-  # Convert absolute path to repo-relative
-  FILE="${FILE#"$REPO_ROOT"/}"
+if [[ ! "$FILE" == "$REPO_ROOT"/* ]]; then
+  echo "❌ ERROR: File path is outside repository: $FILE"
+  exit 1
 fi
 
 # Canonicalize and reject traversal segments
