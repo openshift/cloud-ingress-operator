@@ -175,15 +175,23 @@ Escalate to human when:
 ## Validation Commands
 
 ```bash
-# Check all markdown files (including nested docs)
+# Check all markdown files (including nested docs in .claude/ and test/)
 find . -name "*.md" -not -path "./vendor/*" -not -path "./.git/*" -not -path "./boilerplate/*"
 
-# Verify make targets exist by extracting from code blocks
-find . -name "*.md" -not -path "./vendor/*" -not -path "./.git/*" -not -path "./boilerplate/*" \
-  -exec grep -h "^make " {} \; | sed 's/make \([a-z0-9-]*\).*/\1/' | sort -u
+# Verify documented make targets exist
+# Extract targets: match "make target-name" (not flags like -n)
+grep -rh 'make [a-z][a-z0-9-]*' *.md .claude/ test/ 2>/dev/null | \
+  grep -o 'make [a-z][a-z0-9-]*' | awk '{print $2}' | sort -u > /tmp/doc-targets.txt
 
-# Check for dead links (manual review)
-grep -r '\[.*\](' *.md .claude/**/*.md test/e2e/README.md
+# Get actual targets from Makefile  
+make -qp 2>/dev/null | awk -F':' '/^[a-z][a-z0-9-]*:/ {print $1}' | \
+  sort -u > /tmp/makefile-targets.txt
+
+# Show targets in docs but not in Makefile
+comm -23 /tmp/doc-targets.txt /tmp/makefile-targets.txt
+
+# Check for broken internal links
+grep -rh '\[.*\](.*\.md)' *.md .claude/ test/ 2>/dev/null
 ```
 
 ## Output Format
