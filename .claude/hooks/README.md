@@ -163,6 +163,10 @@ The CI-compatible config allows Claude Code and external CI systems to run quali
 
 ### Prerequisites
 ```bash
+# Install jq (required for stop hook)
+brew install jq           # macOS
+sudo dnf install jq       # Fedora/RHEL
+
 # Install prek (choose one)
 uv tool install prek      # recommended
 pipx install prek         # alternative
