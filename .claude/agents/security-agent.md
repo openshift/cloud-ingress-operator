@@ -108,7 +108,7 @@ make go-check  # includes gosec
 # Individual checks
 gitleaks detect --source . --verbose
 golangci-lint run --enable gosec
-grep -r "password\s*:=\s*\"" --include="*.go" .
+grep -rE 'password[[:space:]]*:=[[:space:]]*"' --include="*.go" .
 ```
 
 ## High-Risk File Detection
