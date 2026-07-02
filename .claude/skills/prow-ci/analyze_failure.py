@@ -198,6 +198,10 @@ def main():
 
     # Write output
     if args.output:
+        # Create parent directory if it doesn't exist
+        output_dir = os.path.dirname(args.output)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         with open(args.output, 'w') as f:
             f.write(output)
         print(f"Analysis saved to: {args.output}")
