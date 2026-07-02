@@ -148,6 +148,9 @@ HIGH_RISK_PATTERNS=(
   "*[Cc]luster[Rr]ole*.yaml"
   ".tekton/*.yaml"
   "build/Dockerfile"
+  ".claude/settings.json"
+  ".claude/hooks/*.sh"
+  ".claude/agents/*.md"
 )
 
 for pattern in "${HIGH_RISK_PATTERNS[@]}"; do
