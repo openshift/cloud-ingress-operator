@@ -26,7 +26,7 @@ def analyze_build_log(log_file):
     # Common failure patterns (compiled for efficiency)
     patterns = {
         'compilation_error': re.compile(r'(?:compilation failed|build failed|cannot find package)', re.IGNORECASE),
-        'test_failure': re.compile(r'(?:FAIL:|Test failed:|tests failed)', re.IGNORECASE),
+        'test_failure': re.compile(r'(?:FAIL(?:ED|URE)?:|Test (?:fail(?:ed|ure)|FAIL)|(?:test|Test)s? (?:fail(?:ed|ure)s?)|failure)', re.IGNORECASE),
         'lint_error': re.compile(r'(?:golangci-lint|gofmt|go vet) .* failed', re.IGNORECASE),
         'timeout': re.compile(r'(?:timeout|timed out|deadline exceeded)', re.IGNORECASE),
         'oom': re.compile(r'(?:out of memory|OOMKilled|killed by signal)', re.IGNORECASE),
