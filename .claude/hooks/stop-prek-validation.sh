@@ -77,14 +77,15 @@ fi
 
 # Run prek validation (using CI config to skip network-dependent hooks)
 # Validate changed files (staged + unstaged + untracked)
-CHANGED_FILES=$(git diff --name-only --diff-filter=d HEAD; git ls-files --others --exclude-standard)
-if [[ -z "$CHANGED_FILES" ]]; then
+# Use NUL-delimited paths to handle filenames with spaces/newlines safely
+mapfile -d '' CHANGED_FILES < <(git diff -z --name-only --diff-filter=d HEAD; git ls-files -z --others --exclude-standard)
+if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
   # No files changed, but we're here because git status showed changes
   # Fall back to --all-files to catch any edge cases
   PREK_OUTPUT=$(prek run --all-files --config hack/prek.ci.toml 2>&1)
 else
-  # Pass changed files explicitly to prek
-  PREK_OUTPUT=$(echo "$CHANGED_FILES" | xargs prek run --config hack/prek.ci.toml --files 2>&1)
+  # Pass changed files explicitly to prek (safe even with spaces/newlines)
+  PREK_OUTPUT=$(prek run --config hack/prek.ci.toml --files "${CHANGED_FILES[@]}" 2>&1)
 fi
 PREK_EXIT=$?
 
