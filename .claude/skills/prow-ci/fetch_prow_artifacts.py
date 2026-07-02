@@ -68,10 +68,18 @@ def download_from_gcs(gcs_path, local_path):
             local_path,
             '--no-user-output-enabled'
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        # 60s timeout per file (large logs can take time)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
         return True
+    except FileNotFoundError:
+        print(f"Error: gcloud command not found. Install Google Cloud SDK.", file=sys.stderr)
+        return False
+    except subprocess.TimeoutExpired:
+        print(f"Error: Download timed out after 60s: {gcs_path}", file=sys.stderr)
+        return False
     except subprocess.CalledProcessError as e:
-        print(f"Warning: Could not download {gcs_path}: {e.stderr.decode()}", file=sys.stderr)
+        stderr = e.stderr.decode() if e.stderr else "unknown error"
+        print(f"Warning: Could not download {gcs_path}: {stderr}", file=sys.stderr)
         return False
 
 
