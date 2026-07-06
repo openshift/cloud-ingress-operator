@@ -1,6 +1,9 @@
 # Temporary Build Files
 build/_output
 build/_test
+
+# Pre-commit config (using prek instead)
+.pre-commit-config.yaml
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Emacs ###
 # -*- mode: gitignore; -*-
@@ -97,3 +100,4 @@ launch.json
 
 # IDE
 .DS_Store
+.work/
