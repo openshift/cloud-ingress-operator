@@ -9,8 +9,10 @@ reviewers:
 - dakotalongRH
 - luis-falcon
 - rafael-azevedo
+- srep-functional-team-aurora
 approvers:
 - sam-nguyen7
 - boranx
 - luis-falcon
 - joshbranham
+- srep-functional-team-aurora
