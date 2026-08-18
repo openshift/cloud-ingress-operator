@@ -78,6 +78,7 @@ objects:
             action:
             - elasticloadbalancing:DescribeLoadBalancers
             - elasticloadbalancing:DescribeTags
+            - elasticloadbalancing:AddTags
             - elasticloadbalancing:DeleteLoadBalancer
             - elasticloadbalancing:CreateLoadBalancer
             - elasticloadbalancing:CreateListener
