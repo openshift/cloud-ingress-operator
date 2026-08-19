@@ -1,4 +1,4 @@
-// DO NOT REMOVE TAGS BELOW. IF ANY NEW TEST FILES ARE CREATED UNDER /osde2e, PLEASE ADD THESE TAGS TO THEM IN ORDER TO BE EXCLUDED FROM UNIT TESTS. //go:build osde2e
+// DO NOT REMOVE TAGS BELOW. IF ANY NEW TEST FILES ARE CREATED UNDER /osde2e, PLEASE ADD THESE TAGS TO THEM IN ORDER TO BE EXCLUDED FROM UNIT TESTS.
 //go:build osde2e
 // +build osde2e
 
@@ -12,12 +12,10 @@ import (
 	"os"
 	"time"
 
-	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
-
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	cloudingressv1alpha1 "github.com/openshift/cloud-ingress-operator/api/v1alpha1"
 	"github.com/openshift/cloud-ingress-operator/config"
-	"github.com/openshift/osde2e-common/pkg/clients/openshift"
 
 	"golang.org/x/oauth2/google"
 	computev1 "google.golang.org/api/compute/v1"
@@ -40,16 +38,12 @@ import (
 
 var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	var (
-		k8s               *openshift.Client
-		dedicatedAdmink8s *openshift.Client
-		region            string
-		provider          string
-		sts               bool
+		k8s               *e2eClient
+		dedicatedAdmink8s *e2eClient
 		apiScheme         cloudingressv1alpha1.APIScheme
 		testApiScheme     *cloudingressv1alpha1.APIScheme
 	)
 	const (
-		TestPrefix             = "CloudIngressOperator"
 		defaultDesiredReplicas = 1
 		apiSchemeResourceName  = "rh-api"
 		cioServiceName         = "rh-api"
@@ -62,26 +56,17 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	ginkgo.BeforeAll(func(ctx context.Context) {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
-		k8s, err = openshift.New(ginkgo.GinkgoLogr)
+		k8s, err = newE2EClient(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
-		Expect(cloudingressv1alpha1.AddToScheme(k8s.GetScheme())).Should(Succeed(), "Unable to register cloudingressv1alpha1 api scheme")
 
 		dedicatedAdmink8s, err = k8s.Impersonate("test-user@redhat.com", "dedicated-admins")
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup impersonated k8s client")
-		Expect(cloudingressv1alpha1.AddToScheme(dedicatedAdmink8s.GetScheme())).Should(Succeed(), "Unable to register cloudingressv1alpha1 api scheme")
 
-		sts, err = k8s.IsSTS(ctx)
+		sts, err := k8s.IsSTS(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine STS config")
-
 		if sts {
-			ginkgo.Skip("Skipping sts clusters")
+			ginkgo.Skip("CIO is not deployed on STS clusters")
 		}
-
-		provider, err = k8s.GetProvider(ctx)
-		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
-
-		region, err = k8s.GetRegion(ctx)
-		Expect(err).NotTo(HaveOccurred(), "Could not determine region")
 	})
 
 	ginkgo.It("is installed", func(ctx context.Context) {
@@ -191,15 +176,23 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("manually deleted "+cioServiceName+" load balancer should be recreated", func(ctx context.Context) {
-		if os.Getenv("OCM_CCS") != "true" {
-			ginkgo.Skip("Skipping on non-CCS cluster - no cloud credentials available")
-		}
-		if provider == "aws" {
-			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-			Expect(awsAccessKey).NotTo(BeEmpty(), "awsAccessKey not found")
-			Expect(awsSecretKey).NotTo(BeEmpty(), "awsSecretKey not found")
+		provider, err := k8s.GetProvider(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
 
+		region, err := k8s.GetRegion(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Could not determine region")
+
+		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+		gcpCredsJSON := os.Getenv("GCP_CREDS_JSON")
+
+		hasCloudCreds := (provider == "aws" && awsAccessKey != "" && awsSecretKey != "") ||
+			(provider == "gcp" && gcpCredsJSON != "")
+		if !hasCloudCreds {
+			ginkgo.Skip("Skipping LB recreation test: no cloud credentials available for provider " + provider)
+		}
+
+		if provider == "aws" {
 			ginkgo.By("Getting old " + cioServiceName + " load balancer name")
 			oldLBName, err := getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
 			Expect(err).NotTo(HaveOccurred(), "No existing "+cioServiceName+" service found")
@@ -268,8 +261,6 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		}
 
 		if provider == "gcp" {
-			region := os.Getenv("CLOUD_PROVIDER_REGION")
-			Expect(region).NotTo(BeEmpty(), "No CLOUD_PROVIDER_REGION set")
 
 			ginkgo.By("Getting current " + cioServiceName + " ip")
 			oldLBIP, err := getLBForService(ctx, k8s, rhApiSvcNamespace, cioServiceName, false)
@@ -277,7 +268,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 			log.Printf("Old forwarding rule IP:  %s ", oldLBIP)
 
 			ginkgo.By("Getting GCP creds")
-			gcpCreds, status := getGCPCreds(ctx, k8s)
+			gcpCreds, status := getGCPCreds(ctx)
 			Expect(status).To(BeTrue(), "GCP creds not created")
 			project := gcpCreds.ProjectID
 
@@ -386,7 +377,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 })
 
 // getLBForService retrieves the load balancer name or IP associated with a service of type LoadBalancer
-func getLBForService(ctx context.Context, k8s *openshift.Client, namespace string, service string, fullHostName bool) (string, error) {
+func getLBForService(ctx context.Context, k8s *e2eClient, namespace string, service string, fullHostName bool) (string, error) {
 	svc := new(corev1.Service)
 	err := k8s.Get(ctx, service, namespace, svc)
 	if err != nil {
@@ -466,7 +457,7 @@ func deleteSecGroupReferencesToOrphans(ec2Svc *ec2.EC2, orphanSecGroupIds []*str
 }
 
 // get credential object to use in service initialization
-func getGCPCreds(ctx context.Context, k8s *openshift.Client) (*google.Credentials, bool) {
+func getGCPCreds(ctx context.Context) (*google.Credentials, bool) {
 	serviceAccountJSON := []byte(os.Getenv("GCP_CREDS_JSON"))
 	credentials, err := google.CredentialsFromJSON(
 		ctx, serviceAccountJSON,
