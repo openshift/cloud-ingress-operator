@@ -85,8 +85,14 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	})
 
 	ginkgo.It("reconciles cidr block changes in apischeme with rh-api service", func(ctx context.Context) {
-		err := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &apiScheme)
-		Expect(err).NotTo(HaveOccurred(), "Could not get apischeme CR instance")
+		ginkgo.By("Waiting for apischeme CR to be available")
+		err := wait.PollUntilContextTimeout(ctx, pollingInterval, pollingDuration, true, func(ctx context.Context) (bool, error) {
+			if err := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &apiScheme); err != nil {
+				return false, nil
+			}
+			return true, nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "Could not get apischeme CR instance after polling")
 		originalCidrBlock := make([]string, len(apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
 		copy(originalCidrBlock, apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks)
 		updatedApiScheme := apiScheme.DeepCopy()
