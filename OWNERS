@@ -1,18 +1,14 @@
 reviewers:
 - sam-nguyen7
-- boranx
-- bng0y
-- robotmaxtron
-- ritmun
-- bdematte
-- reedcort
-- dakotalongRH
 - luis-falcon
 - rafael-azevedo
+- joshbranham
+- dustman9000
 - srep-functional-team-aurora
 approvers:
 - sam-nguyen7
-- boranx
 - luis-falcon
+- rafael-azevedo
 - joshbranham
+- dustman9000
 - srep-functional-team-aurora
