@@ -151,11 +151,25 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		copy(originalCidrBlock, apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks)
 		updatedApiScheme := apiScheme.DeepCopy()
 
-		// Restore CIDR blocks when the test completes, regardless of outcome
+		// Restore CIDR blocks when the test completes, regardless of outcome.
+		// Re-fetch before update to avoid conflict errors from concurrent
+		// operator reconciliation.
 		defer func() {
-			updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = originalCidrBlock
-			err = k8s.Update(ctx, updatedApiScheme)
-			Expect(err).NotTo(HaveOccurred(), "Could not revert APIScheme CR instance")
+			for attempt := 0; attempt < 5; attempt++ {
+				var fresh cloudingressv1alpha1.APIScheme
+				if getErr := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &fresh); getErr != nil {
+					log.Printf("Warning: could not re-fetch APIScheme for revert: %v", getErr)
+					return
+				}
+				fresh.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = originalCidrBlock
+				if updateErr := k8s.Update(ctx, &fresh); updateErr == nil {
+					return
+				} else if !apierrors.IsConflict(updateErr) {
+					log.Printf("Warning: could not revert APIScheme CR: %v", updateErr)
+					return
+				}
+				log.Printf("Conflict reverting APIScheme, retrying (attempt %d)", attempt+1)
+			}
 		}()
 
 		updatedCidrBlock := make([]string, len(originalCidrBlock)-1)
