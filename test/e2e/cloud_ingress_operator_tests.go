@@ -93,7 +93,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 					ManagementAPIServerIngress: cloudingressv1alpha1.ManagementAPIServerIngress{
 						Enabled:           true,
 						DNSName:           "rh-api",
-						AllowedCIDRBlocks: []string{"10.0.0.0/8"},
+						AllowedCIDRBlocks: []string{"10.0.0.0/8", "172.16.0.0/12"},
 					},
 				},
 			}
