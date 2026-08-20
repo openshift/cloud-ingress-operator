@@ -42,6 +42,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		dedicatedAdmink8s *e2eClient
 		apiScheme         cloudingressv1alpha1.APIScheme
 		testApiScheme     *cloudingressv1alpha1.APIScheme
+		seededAPIScheme   bool // tracks whether we created the rh-api fixture
 	)
 	const (
 		defaultDesiredReplicas = 1
@@ -66,6 +67,59 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Could not determine STS config")
 		if sts {
 			ginkgo.Skip("CIO is not deployed on STS clusters")
+		}
+
+		// On CI lease clusters, the rh-api APIScheme CR may not exist because
+		// it's normally created by a SelectorSyncSet on production managed
+		// clusters. Seed a minimal rh-api CR so the CIDR block test has
+		// something to reconcile against.
+		var existing cloudingressv1alpha1.APIScheme
+		getErr := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &existing)
+		if getErr != nil && !apierrors.IsNotFound(getErr) {
+			Expect(getErr).NotTo(HaveOccurred(), "Unexpected error checking for rh-api APIScheme")
+		}
+		if apierrors.IsNotFound(getErr) {
+			ginkgo.GinkgoLogr.Info("rh-api APIScheme not found, seeding test fixture")
+			seedCR := &cloudingressv1alpha1.APIScheme{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "APIScheme",
+					APIVersion: cloudingressv1alpha1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      apiSchemeResourceName,
+					Namespace: config.OperatorNamespace,
+				},
+				Spec: cloudingressv1alpha1.APISchemeSpec{
+					ManagementAPIServerIngress: cloudingressv1alpha1.ManagementAPIServerIngress{
+						Enabled:           true,
+						DNSName:           "rh-api",
+						AllowedCIDRBlocks: []string{"10.0.0.0/8"},
+					},
+				},
+			}
+			createErr := k8s.Create(ctx, seedCR)
+			if apierrors.IsAlreadyExists(createErr) {
+				// Another process (SSS, concurrent test) created it; safe to continue
+				ginkgo.GinkgoLogr.Info("rh-api APIScheme created by another process, continuing")
+			} else {
+				Expect(createErr).NotTo(HaveOccurred(), "Failed to seed rh-api APIScheme fixture")
+			}
+			seededAPIScheme = true
+		}
+	})
+
+	ginkgo.AfterAll(func(ctx context.Context) {
+		// Clean up the seeded fixture so lease clusters aren't left with
+		// a test-created APIScheme after the run.
+		if seededAPIScheme && k8s != nil {
+			ginkgo.GinkgoLogr.Info("Cleaning up seeded rh-api APIScheme fixture")
+			fixture := &cloudingressv1alpha1.APIScheme{}
+			fixture.Name = apiSchemeResourceName
+			fixture.Namespace = config.OperatorNamespace
+			deleteErr := k8s.Delete(ctx, fixture)
+			if deleteErr != nil && !apierrors.IsNotFound(deleteErr) {
+				Expect(deleteErr).NotTo(HaveOccurred(), "Failed to delete seeded rh-api APIScheme fixture")
+			}
 		}
 	})
 
