@@ -54,6 +54,12 @@ objects:
                   [[ "${POLL_INTERVAL}" =~ ^[1-9][0-9]*$ ]] || { log "ERROR: POLL_INTERVAL must be a positive integer"; exit 1; }
                   [[ "${MAX_RETRIES}" =~ ^[0-9]+$ ]] || { log "ERROR: MAX_RETRIES must be a non-negative integer"; exit 1; }
 
+                  REQUIRED_DEADLINE=$(( (MAX_RETRIES + 1) * TIMEOUT + (MAX_RETRIES * 30) ))
+                  if [[ "${ACTIVE_DEADLINE}" -lt "${REQUIRED_DEADLINE}" ]]; then
+                    log "ERROR: ACTIVE_DEADLINE (${ACTIVE_DEADLINE}s) is less than the minimum required for ${MAX_RETRIES} retries with TIMEOUT=${TIMEOUT}s (need at least ${REQUIRED_DEADLINE}s)"
+                    exit 1
+                  fi
+
                   BODY='{"job_execution_type":"1"}'
                   if [[ -n "${JOB_ENVS:-}" ]]; then
                     ENVS=$(echo "${JOB_ENVS}" | jq -Rn '[inputs // input | split(",")[] | split("=") | {(.[0]): .[1:] | join("=")}] | add' <<< "${JOB_ENVS}")
@@ -61,8 +67,14 @@ objects:
                   fi
 
                   trigger_and_poll() {
-                    RESP=$(curl -sfSL --retry 3 --retry-delay 10 -X POST -H "Authorization: Bearer ${GANGWAY_TOKEN}" -H "Content-Type: application/json" -d "${BODY}" "${GW}/${JOB_NAME}")
-                    ID=$(echo "$RESP" | jq -re .id)
+                    if ! RESP=$(curl -sfSL --max-time 60 --retry 3 --retry-delay 10 -X POST -H "Authorization: Bearer ${GANGWAY_TOKEN}" -H "Content-Type: application/json" -d "${BODY}" "${GW}/${JOB_NAME}"); then
+                      log "Failed to trigger ${JOB_NAME}"
+                      return 1
+                    fi
+                    if ! ID=$(echo "$RESP" | jq -re .id); then
+                      log "Gangway did not return a valid execution ID"
+                      return 1
+                    fi
                     PROW_URL="https://prow.ci.openshift.org/view/gs/test-platform-results/logs/${JOB_NAME}/${ID}"
                     log "Triggered ${JOB_NAME} -> ${ID}"
                     log "Prow logs: ${PROW_URL}"
@@ -70,7 +82,7 @@ objects:
                     END=$((SECONDS + ${TIMEOUT}))
                     while [[ $SECONDS -lt $END ]]; do
                       sleep "${POLL_INTERVAL}"
-                      S=$(curl -sfSL -H "Authorization: Bearer ${GANGWAY_TOKEN}" "${GW}/${ID}" | jq -r .job_status) || S=UNKNOWN
+                      S=$(curl -sfSL --max-time 30 -H "Authorization: Bearer ${GANGWAY_TOKEN}" "${GW}/${ID}" | jq -r .job_status) || S=UNKNOWN
                       log "${S} ($((SECONDS))s)"
                       case $S in
                         SUCCESS) log "Prow logs: ${PROW_URL}"; return 0;;
@@ -111,6 +123,8 @@ objects:
                   value: ${JOB_ENVS}
                 - name: MAX_RETRIES
                   value: ${MAX_RETRIES}
+                - name: ACTIVE_DEADLINE
+                  value: ${ACTIVE_DEADLINE}
               resources:
                 requests:
                   cpu: "50m"
