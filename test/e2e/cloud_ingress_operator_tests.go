@@ -149,8 +149,6 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Could not get apischeme CR instance after polling")
 		originalCidrBlock := make([]string, len(apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks))
 		copy(originalCidrBlock, apiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks)
-		updatedApiScheme := apiScheme.DeepCopy()
-
 		// Restore CIDR blocks when the test completes, regardless of outcome.
 		// Re-fetch before update to avoid conflict errors from concurrent
 		// operator reconciliation.
@@ -179,12 +177,31 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		updatedCidrBlock := make([]string, len(originalCidrBlock)-1)
 		copy(updatedCidrBlock, originalCidrBlock[:len(originalCidrBlock)-1])
 
-		// Put the new CIDRBlock ranges into the APIScheme
-		updatedApiScheme.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = updatedCidrBlock
-
-		// Update the APIScheme
-		err = k8s.Update(ctx, updatedApiScheme)
-		Expect(err).NotTo(HaveOccurred(), "Could not update APIScheme CR instance")
+		// Update the APIScheme with retry-on-conflict to handle concurrent
+		// operator reconciliation modifying the CR between fetch and update.
+		{
+			const maxAttempts = 5
+			var updateErr error
+			for attempt := 1; attempt <= maxAttempts; attempt++ {
+				var fresh cloudingressv1alpha1.APIScheme
+				if getErr := k8s.Get(ctx, apiSchemeResourceName, config.OperatorNamespace, &fresh); getErr != nil {
+					updateErr = getErr
+					break
+				}
+				fresh.Spec.ManagementAPIServerIngress.AllowedCIDRBlocks = updatedCidrBlock
+				updateErr = k8s.Update(ctx, &fresh)
+				if updateErr == nil {
+					break
+				}
+				if !apierrors.IsConflict(updateErr) {
+					break
+				}
+				if attempt < maxAttempts {
+					log.Printf("Conflict updating APIScheme CIDR blocks, retrying (attempt %d/%d)", attempt, maxAttempts)
+				}
+			}
+			Expect(updateErr).NotTo(HaveOccurred(), "Could not update APIScheme CR instance")
+		}
 
 		// Wait for the operator to reconcile the change into the rh-api service
 		ginkgo.By("Waiting for updated CIDR blocks to appear on rh-api service")
