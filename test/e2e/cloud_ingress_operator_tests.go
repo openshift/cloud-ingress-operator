@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
@@ -68,6 +69,22 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 		if sts {
 			ginkgo.Skip("CIO is not deployed on STS clusters")
 		}
+
+		// Wait for APIScheme CRD to be registered in the API server's REST
+		// mapper. When PKO reconciles a new ClusterPackage the deployment can
+		// become ready before the CRDs are served, causing NoKindMatchError.
+		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true,
+			func(ctx context.Context) (bool, error) {
+				var probe cloudingressv1alpha1.APISchemeList
+				if listErr := k8s.List(ctx, &probe); listErr != nil {
+					if apimeta.IsNoMatchError(listErr) {
+						return false, nil // CRD not yet registered, retry
+					}
+					return false, listErr
+				}
+				return true, nil
+			})
+		Expect(err).NotTo(HaveOccurred(), "APIScheme CRD not registered after 60s")
 
 		// On CI lease clusters, the rh-api APIScheme CR may not exist because
 		// it's normally created by a SelectorSyncSet on production managed
