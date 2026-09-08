@@ -1,12 +1,13 @@
 module github.com/openshift/cloud-ingress-operator
 
-go 1.26.0
+go 1.27
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/go-logr/logr v1.4.3
 	github.com/hashicorp/go-version v1.9.0
 	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	// go get -u github.com/openshift/api@release-4.13
 	github.com/openshift/api v0.0.0-20260624175654-50c3975e874f
@@ -26,8 +27,6 @@ require (
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd
 	sigs.k8s.io/controller-runtime v0.24.1
 )
-
-require github.com/onsi/ginkgo/v2 v2.32.0
 
 require (
 	cloud.google.com/go/auth v0.20.0 // indirect
