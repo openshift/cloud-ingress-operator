@@ -39,8 +39,8 @@ import (
 
 var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	var (
-		k8s               *e2eClient
-		dedicatedAdmink8s *e2eClient
+		k8s               *E2EClient
+		dedicatedAdmink8s *E2EClient
 		apiScheme         cloudingressv1alpha1.APIScheme
 		testApiScheme     *cloudingressv1alpha1.APIScheme
 		seededAPIScheme   bool // tracks whether we created the rh-api fixture
@@ -58,7 +58,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 	ginkgo.BeforeAll(func(ctx context.Context) {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
-		k8s, err = newE2EClient(ginkgo.GinkgoLogr)
+		k8s, err = NewE2EClient(ginkgo.GinkgoLogr, WithScheme(cloudingressv1alpha1.AddToScheme))
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
 
 		dedicatedAdmink8s, err = k8s.Impersonate("test-user@redhat.com", "dedicated-admins")
@@ -489,7 +489,7 @@ var _ = ginkgo.Describe("cloud-ingress-operator", ginkgo.Ordered, func() {
 })
 
 // getLBForService retrieves the load balancer name or IP associated with a service of type LoadBalancer
-func getLBForService(ctx context.Context, k8s *e2eClient, namespace string, service string, fullHostName bool) (string, error) {
+func getLBForService(ctx context.Context, k8s *E2EClient, namespace string, service string, fullHostName bool) (string, error) {
 	svc := new(corev1.Service)
 	err := k8s.Get(ctx, service, namespace, svc)
 	if err != nil {
