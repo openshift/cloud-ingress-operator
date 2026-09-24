@@ -51,6 +51,7 @@ type E2EClient struct {
 	client.Client
 	config *rest.Config
 	log    logr.Logger
+	opts   []E2EClientOption
 }
 
 // NewE2EClient creates an E2EClient by loading kubeconfig from the
@@ -100,7 +101,7 @@ func NewE2EClientFromConfig(cfg *rest.Config, log logr.Logger, opts ...E2EClient
 	if err != nil {
 		return nil, fmt.Errorf("failed to create controller-runtime client: %w", err)
 	}
-	return &E2EClient{Client: c, config: cfg, log: log}, nil
+	return &E2EClient{Client: c, config: cfg, log: log, opts: opts}, nil
 }
 
 // Get wraps client.Get with positional name/namespace args for API
@@ -128,7 +129,7 @@ func (c *E2EClient) Impersonate(user string, groups ...string) (*E2EClient, erro
 	}
 	impersonatedCfg := rest.CopyConfig(c.config)
 	impersonatedCfg.Impersonate = rest.ImpersonationConfig{UserName: user, Groups: groups}
-	return NewE2EClientFromConfig(impersonatedCfg, c.log)
+	return NewE2EClientFromConfig(impersonatedCfg, c.log, c.opts...)
 }
 
 const (
