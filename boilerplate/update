@@ -160,10 +160,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
   exit 1
 fi
 
-# The most recent build image tag. Export this for individual `update` scripts.
-if [[ -z "$LATEST_IMAGE_TAG" ]]; then
-    export LATEST_IMAGE_TAG=$(cd $BP_CLONE; git describe --tags --abbrev=0 --match image-v*)
-fi
+# Consuming repositories use the stable `latest` tag for the boilerplate
+# backing image. Keep an explicit value for local testing or pinning, but do
+# not infer a tag from the consumer's old backing-image-tag file or from Git
+# release tags. This also migrates existing consumers to `latest` below.
+export LATEST_IMAGE_TAG="${LATEST_IMAGE_TAG:-latest}"
 
 # The boilerplate commit hash. Export for convention `update` scripts.
 export BOILERPLATE_COMMIT=$(cd ${BP_CLONE} && git rev-parse HEAD)
