@@ -4,7 +4,7 @@ reviewers:
 - rafael-azevedo
 - joshbranham
 - dustman9000
-- rosa-trust-engineering-access-tooling:
+- rosa-trust-engineering-access-tooling
 - rosa-trust-engineering-observability
 approvers:
 - sam-nguyen7
@@ -12,5 +12,5 @@ approvers:
 - rafael-azevedo
 - joshbranham
 - dustman9000
-- rosa-trust-engineering-access-tooling:
+- rosa-trust-engineering-access-tooling
 - rosa-trust-engineering-observability
