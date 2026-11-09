@@ -4,11 +4,13 @@ reviewers:
 - rafael-azevedo
 - joshbranham
 - dustman9000
-- srep-functional-team-aurora
+- rosa-trust-engineering-access-tooling
+- rosa-trust-engineering-observability
 approvers:
 - sam-nguyen7
 - luis-falcon
 - rafael-azevedo
 - joshbranham
 - dustman9000
-- srep-functional-team-aurora
+- rosa-trust-engineering-access-tooling
+- rosa-trust-engineering-observability
